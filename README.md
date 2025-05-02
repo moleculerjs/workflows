@@ -6,7 +6,7 @@
 [![NPM version](https://badgen.net/npm/v/@moleculer/workflow)](https://www.npmjs.com/package/@moleculer/workflow)
 
 # @moleculer/workflow 
-Advanced Database Access Service for Moleculer microservices framework. Use it to persist your data in a database.
+Reliable & scalable workflow feature (like Temporal.io or Restate) for Moleculer framework.
 
 **This project is in work-in-progress. Be careful using it in production.**
 
