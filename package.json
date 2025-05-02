@@ -1,6 +1,6 @@
 {
-  "name": "@moleculer/workflow",
-  "version": "0.2.1",
+  "name": "@moleculer/workflows",
+  "version": "0.0.0",
   "description": "Advanced Workflow feature for Moleculer microservices framework",
   "main": "index.js",
   "scripts": {
@@ -27,7 +27,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/moleculerjs/workflow.git"
+    "url": "https://github.com/moleculerjs/workflows.git"
   },
   "author": "MoleculerJS",
   "license": "MIT",
@@ -40,7 +40,7 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-prettier": "^5.2.6",
+    "eslint-plugin-prettier": "^5.2.3",
     "eslint-plugin-promise": "^6.6.0",
     "eslint-plugin-security": "^2.1.1",
     "fakerator": "^0.3.6",

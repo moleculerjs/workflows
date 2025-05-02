@@ -1,11 +1,11 @@
 ![Moleculer logo](http://moleculer.services/images/banner.png)
 
-![Integration Test](https://github.com/moleculerjs/workflow/workflows/Integration%20Test/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/moleculerjs/workflow/badge.svg?branch=master)](https://coveralls.io/github/moleculerjs/workflow?branch=master)
-[![Known Vulnerabilities](https://snyk.io/test/github/moleculerjs/workflow/badge.svg)](https://snyk.io/test/github/moleculerjs/workflow)
-[![NPM version](https://badgen.net/npm/v/@moleculer/workflow)](https://www.npmjs.com/package/@moleculer/workflow)
+![Integration Test](https://github.com/moleculerjs/workflows/workflows/Integration%20Test/badge.svg)
+[![Coverage Status](https://coveralls.io/repos/github/moleculerjs/workflows/badge.svg?branch=master)](https://coveralls.io/github/moleculerjs/workflows?branch=master)
+[![Known Vulnerabilities](https://snyk.io/test/github/moleculerjs/workflows/badge.svg)](https://snyk.io/test/github/moleculerjs/workflows)
+[![NPM version](https://badgen.net/npm/v/@moleculer/workflows)](https://www.npmjs.com/package/@moleculer/workflows)
 
-# @moleculer/workflow 
+# @moleculer/workflows 
 Reliable & scalable workflow feature (like Temporal.io or Restate) for Moleculer framework.
 
 **This project is in work-in-progress. Be careful using it in production.**
@@ -14,7 +14,7 @@ Reliable & scalable workflow feature (like Temporal.io or Restate) for Moleculer
 
 ## Install
 ```
-npm i @moleculer/workflow
+npm i @moleculer/workflows
 ```
 
 ## Usage
