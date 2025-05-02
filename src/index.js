@@ -116,7 +116,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 					{ workflow: workflowName },
 					1
 				);
-				return adapter.run(workflowName, payload, opts);
+				return adapter.createJob(workflowName, payload, opts);
 			};
 
 			/**

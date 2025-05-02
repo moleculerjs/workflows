@@ -162,6 +162,11 @@ class BaseAdapter {
 		throw new Error("This method is not implemented.");
 	}
 
+	async createJob(workflowName, payload, opts) {
+		/* istanbul ignore next */
+		throw new Error("This method is not implemented.");
+	}
+
 	async callWorkflowHandler(workflow, job, events) {
 		await this.addJobEvent(workflow, job.id, {
 			type: "started",
@@ -225,6 +230,21 @@ class BaseAdapter {
 	 * @returns
 	 */
 	async getState(/*workflowName, workflowId*/) {
+		/* istanbul ignore next */
+		throw new Error("This method is not implemented.");
+	}
+
+	/**
+	 * Clean up the adapter store. Workflowname and jobId are optional.
+	 * If both are provided, the adapter should clean up only the job with the given ID.
+	 * If only the workflow name is provided, the adapter should clean up all jobs
+	 * related to that workflow.
+	 * If neither is provided, the adapter should clean up all jobs.
+	 *
+	 * @param {string?} workflowName
+	 * @param {string?} jobId
+	 */
+	async cleanUp(workflowName, jobId) {
 		/* istanbul ignore next */
 		throw new Error("This method is not implemented.");
 	}

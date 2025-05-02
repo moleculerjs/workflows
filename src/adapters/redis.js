@@ -90,6 +90,12 @@ class RedisAdapter extends BaseAdapter {
 		this.logger.info("Workflows Redis adapter prefix:", this.prefix);
 	}
 
+	log(level, workflowName, jobId, msg, ...args) {
+		if (this.logger) {
+			this.logger[level](`[${workflowName}:${jobId}] ${msg}`, ...args);
+		}
+	}
+
 	/**
 	 * Connect to Redis.
 	 */
@@ -208,14 +214,14 @@ class RedisAdapter extends BaseAdapter {
 	async runJobProcessor(workflow) {
 		const client = await this.isClientReady(workflow);
 		if (client.stopped) {
-			this.logger.warn(`Job processor is stopped for workflow '${workflow.name}'`);
+			this.log("warn", workflow.name, null, "Job processor is stopped");
 			return;
 		}
 		try {
-			this.logger.debug(
-				`Waiting for job in workflow '${workflow.name}'...`,
-				this.getKey(workflow.name, C.QUEUE_WAITING)
-			);
+			// this.logger.debug(
+			// 	`Waiting for job in workflow '${workflow.name}'...`,
+			// 	this.getKey(workflow.name, C.QUEUE_WAITING)
+			// );
 			client.blocked = true;
 			const jobId = await client.brpoplpush(
 				this.getKey(workflow.name, C.QUEUE_WAITING),
@@ -225,15 +231,15 @@ class RedisAdapter extends BaseAdapter {
 			client.blocked = false;
 
 			if (jobId) {
-				this.logger.debug(`Executing '${jobId}' job in workflow '${workflow.name}'...`);
+				this.log("debug", workflow.name, jobId, "Job is found");
 				await this.processJob(workflow, jobId);
 			} else {
-				this.logger.debug(`No job for workflow '${workflow.name}'...`);
+				// this.logger.debug(`No job for workflow '${workflow.name}'...`);
 			}
 		} catch (err) {
 			// Swallow error if disconnecting
 			if (!this.disconnecting) {
-				this.logger.error(`Unable to watch job for workflow '${workflow.name}'...`, err);
+				this.log("error", workflow.name, null, "Unable to watch job", err);
 			}
 		}
 		setImmediate(() => this.runJobProcessor(workflow));
@@ -255,11 +261,12 @@ class RedisAdapter extends BaseAdapter {
 			this.opts.lockDuration,
 			"NX"
 		);
-		this.logger.debug(`Lock result for job ${jobId}: ${lockRes}`);
+		this.log("debug", workflow.name, jobId, "Lock result", lockRes);
+
 		if (!lockRes) throw new Error(`Job ${jobId} is already locked.`);
 
 		const lockExtender = async () => {
-			this.logger.debug(`Extending lock for job ${jobId}...`);
+			this.log("debug", workflow.name, jobId, "Extending lock");
 			const lockRes = await this.commandClient.set(
 				this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
 				this.broker.instanceID,
@@ -268,7 +275,7 @@ class RedisAdapter extends BaseAdapter {
 				"XX"
 			);
 			if (!lockRes) {
-				this.logger.warn(`Job ${jobId} lock expired.`);
+				this.log("debug", workflow.name, jobId, "Job lock is expired");
 				return;
 			}
 		};
@@ -281,7 +288,7 @@ class RedisAdapter extends BaseAdapter {
 			const unlockRes = await this.commandClient.del(
 				this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId)
 			);
-			this.logger.debug(`Unlock result for job ${jobId}`, unlockRes);
+			this.log("debug", workflow.name, jobId, "Unlock result", unlockRes);
 		};
 	}
 
@@ -294,7 +301,7 @@ class RedisAdapter extends BaseAdapter {
 	async processJob(workflow, jobId) {
 		const job = await this.getJob(workflow, jobId);
 		if (!job) {
-			this.logger.warn(`Job ${jobId} not found.`);
+			this.log("warn", workflow.name, jobId, "Job not found");
 			// Remove from active queue
 			await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, jobId);
 			return;
@@ -304,15 +311,15 @@ class RedisAdapter extends BaseAdapter {
 
 		const unlock = await this.lock(workflow, jobId);
 		try {
-			this.logger.debug(`Running job ${jobId}...`, job);
+			this.log("debug", workflow.name, jobId, "Running job...", job);
 
 			const result = await this.callWorkflowHandler(workflow, job, jobEvents);
 
-			this.logger.info(`Job ${jobId} finished.`, result);
+			this.log("info", workflow.name, jobId, "Job finished.", result);
 			await unlock();
 			await this.moveToCompleted(workflow, jobId, result);
 		} catch (err) {
-			this.logger.error(`Job ${jobId} processing is failed.`, err);
+			this.log("error", workflow.name, jobId, "Job processing is failed.", err);
 			await unlock();
 			await this.moveToFailed(workflow, jobId, err);
 		}
@@ -352,7 +359,7 @@ class RedisAdapter extends BaseAdapter {
 			-1
 		);
 
-		this.logger.debug(`Job events for ${jobId}:`, jobEvents);
+		this.log("debug", workflow.name, jobId, "Job events:", jobEvents);
 		return jobEvents;
 	}
 
@@ -433,6 +440,123 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
+	 * Create a new job and push it to the waiting queue.
+	 *
+	 * @param {*} workflowName
+	 * @param {*} payload
+	 * @param {*} opts
+	 * @returns
+	 */
+	async createJob(workflowName, payload, opts) {
+		opts = opts || {};
+
+		const jobId = opts.jobId ?? this.broker.generateUid();
+
+		const job = {
+			id: jobId,
+			payload: JSON.stringify(payload),
+			createdAt: Date.now()
+		};
+
+		// if (opts.retries) {
+		// 	job.retries = opts.retries;
+		// }
+		// if (opts.timeout) {
+		// 	job.timeout = opts.timeout;
+		// }
+		// if (opts.delay) {
+		// 	job.delay = opts.delay;
+		// }
+
+		await this.commandClient.hmset(this.getKey(workflowName, C.QUEUE_JOB, jobId), job);
+		this.log("debug", workflowName, job.id, "Job created.", job);
+
+		await this.commandClient.rpush(this.getKey(workflowName, C.QUEUE_WAITING), jobId);
+
+		return job;
+	}
+
+	/**
+	 * Clean up the adapter store. Workflowname and jobId are optional.
+	 * If both are provided, the adapter should clean up only the job with the given ID.
+	 * If only the workflow name is provided, the adapter should clean up all jobs
+	 * related to that workflow.
+	 * If neither is provided, the adapter should clean up all jobs.
+	 *
+	 * @param {string?} workflowName
+	 * @param {string?} jobId
+	 */
+	async cleanUp(workflowName, jobId) {
+		if (workflowName && jobId) {
+			await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB, jobId));
+			await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_LOCK, jobId));
+			await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId));
+			this.log("info", workflowName, jobId, "Cleaned up job store.");
+		} else if (workflowName) {
+			await this.cleanDb(this.getKey(workflowName) + ":*");
+			this.log("info", workflowName, null, "Cleaned up workflow store.");
+			this.logger.info(`Cleaned up Redis adapter store for workflow '${workflowName}'`);
+		} else {
+			await this.cleanDb(this.prefix + ":*");
+			this.logger.info(`Cleaned up entire store.`);
+		}
+	}
+
+	async cleanDb(pattern) {
+		if (this.commandClient instanceof Redis.Cluster) {
+			return this.clusterCleanDb(pattern);
+		} else {
+			return this.nodeCleanDb(this.commandClient, pattern);
+		}
+	}
+
+	async clusterCleanDb(pattern) {
+		// get only master nodes to scan for deletion,
+		// if we get slave nodes, it would be failed for deletion.
+		return this.commandClient
+			.nodes("master")
+			.map(async node => this.nodeScanDel(node, pattern));
+	}
+
+	async nodeCleanDb(node, pattern) {
+		return new Promise((resolve, reject) => {
+			const stream = node.scanStream({
+				match: pattern,
+				count: 100
+			});
+
+			stream.on("data", (keys = []) => {
+				if (!keys.length) {
+					return;
+				}
+
+				stream.pause();
+				node.del(keys)
+					.then(() => {
+						stream.resume();
+					})
+					.catch(err => {
+						err.pattern = pattern;
+						return reject(err);
+					});
+			});
+
+			stream.on("error", err => {
+				this.logger.error(
+					`Error occured while deleting keys '${pattern}' from Redis node.`,
+					err
+				);
+				reject(err);
+			});
+
+			stream.on("end", () => {
+				// End deleting keys from node
+				resolve();
+			});
+		});
+	}
+
+	/**
 	 * Create Redis standalone or cluster client.
 	 *
 	 * @returns
@@ -469,8 +593,10 @@ class RedisAdapter extends BaseAdapter {
 	getKey(name, type, id) {
 		if (id) {
 			return `${this.prefix}${name}:${type}:${id}`;
-		} else {
+		} else if (type) {
 			return `${this.prefix}${name}:${type}`;
+		} else {
+			return `${this.prefix}${name}`;
 		}
 	}
 }
