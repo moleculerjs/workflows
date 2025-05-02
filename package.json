@@ -15,7 +15,7 @@
     "lint": "eslint --ext=.js src examples test",
     "bench": "node benchmark/index.js",
     "bench:watch": "nodemon benchmark/index.js",
-    "deps": "npm-check -u && npm audit fix",
+    "deps": "ncu -i && npm audit fix",
     "ci-update-deps": "ncu -u --target minor",
     "coverall": "cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js",
     "release": "npm publish --access public && git push --tags"
@@ -35,26 +35,25 @@
     "moleculer": "^0.14.12 || ^0.15.0-0"
   },
   "devDependencies": {
-    "axios": "^1.8.1",
+    "axios": "^1.9.0",
     "benchmarkify": "^4.0.0",
-    "coveralls": "^3.1.1",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-prettier": "^5.2.3",
+    "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-promise": "^6.6.0",
     "eslint-plugin-security": "^2.1.1",
     "fakerator": "^0.3.6",
-    "globby": "^13.2.2",
+    "globby": "^14.1.0",
     "jest": "^29.7.0",
     "jest-cli": "^29.7.0",
     "kleur": "^4.1.5",
     "moleculer": "^0.14.35",
     "moleculer-repl": "^0.7.4",
-    "moleculer-web": "^0.10.7",
-    "nodemon": "^3.1.9",
-    "npm-check-updates": "^16.14.20",
-    "prettier": "^3.5.2"
+    "moleculer-web": "^0.10.8",
+    "nodemon": "^3.1.10",
+    "npm-check-updates": "^18.0.1",
+    "prettier": "^3.5.3"
   },
   "jest": {
     "testEnvironment": "node",
@@ -72,8 +71,8 @@
     "node": ">= 20.x.x"
   },
   "dependencies": {
-    "fastest-validator": "^1.19.0",
-    "lodash": "^4.17.21",
-    "semver": "^7.7.1"
+    "fastest-validator": "^1.19.1",
+    "ioredis": "^5.6.1",
+    "lodash": "^4.17.21"
   }
 }
