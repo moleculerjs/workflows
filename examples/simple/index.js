@@ -38,15 +38,25 @@ const broker = new ServiceBroker({
 		{
 			command: "run",
 			alias: ["r"],
+			options: [
+				{
+					option: "-j, --jobId <jobId>",
+					description: "Job ID to run the workflow with"
+				}
+			],
 			async action(broker, args) {
-				// const { options } = args;
-				//console.log(options);
-				broker.wf.run("test.wf1", {
-					c: c++,
-					name: "John",
-					pid: process.pid,
-					nodeID: broker.nodeID
-				});
+				const { options } = args;
+				console.log(options);
+				broker.wf.run(
+					"test.wf1",
+					{
+						c: c++,
+						name: "John",
+						pid: process.pid,
+						nodeID: broker.nodeID
+					},
+					{ jobId: options.jobId }
+				);
 			}
 		},
 
@@ -72,11 +82,13 @@ broker.createService({
 		wf1: {
 			// Workflow handler
 			async handler(ctx) {
-				this.logger.info("Workflow start", ctx.params, ctx.jobId);
+				this.logger.info("WF handler start", ctx.params, ctx.wf.jobId);
 
 				const res = await ctx.call("test.list");
 
-				this.logger.info("Workflow end", ctx.params, ctx.jobId);
+				await ctx.wf.sleep(5000);
+
+				this.logger.info("WF handler end", ctx.wf.jobId);
 
 				return res;
 			}
@@ -104,7 +116,7 @@ broker.createService({
 broker
 	.start()
 	.then(async () => {
-		broker.wf.run("test.wf1", { name: "John Doe" }, {});
+		// broker.wf.run("test.wf1", { name: "John Doe" }, { jobId: "1111" });
 	})
 	.then(() => broker.repl())
 	.catch(err => {

@@ -138,6 +138,9 @@ class BaseAdapter {
 		throw new Error("This method is not implemented.");
 	}
 
+	/**
+	 * Called after the adapter is connected.
+	 */
 	async afterConnected() {
 		this.workflows.forEach(workflow => {
 			this.startJobProcessor(workflow);
@@ -152,35 +155,126 @@ class BaseAdapter {
 		throw new Error("This method is not implemented.");
 	}
 
-	startJobProcessor(workflow) {
+	startJobProcessor(/*workflow*/) {
 		/* istanbul ignore next */
 		throw new Error("This method is not implemented.");
 	}
 
-	stopJobProcessor(workflow) {
+	stopJobProcessor(/*workflow*/) {
 		/* istanbul ignore next */
 		throw new Error("This method is not implemented.");
 	}
 
-	async createJob(workflowName, payload, opts) {
+	async createJob(/*workflowName, payload, opts*/) {
 		/* istanbul ignore next */
 		throw new Error("This method is not implemented.");
 	}
 
 	async callWorkflowHandler(workflow, job, events) {
 		await this.addJobEvent(workflow, job.id, {
-			type: "started",
-			ts: new Date()
+			type: "started"
 		});
 
-		await new Promise(resolve => setTimeout(resolve, 5 * 1000));
+		try {
+			const ctxOpts = {};
+			const ctx = this.broker.ContextFactory.create(this.broker, null, job.payload, ctxOpts);
+			ctx.wf = {
+				name: workflow.name,
+				jobId: job.id
+			};
 
-		await this.addJobEvent(workflow, job.id, {
-			type: "finished",
-			ts: new Date()
-		});
+			let taskId = 0;
 
-		return { a: 5 };
+			ctx.wf.sleep = async ms => {
+				taskId++;
+
+				const event = events?.find(e => e.taskId === taskId);
+				if (event) {
+					if (event.type == "task" && event.taskType == "sleep") {
+						this.logger.info("Task skipped.", taskId, event);
+						return;
+					}
+				}
+
+				await new Promise(resolve => setTimeout(resolve, ms));
+
+				await this.addJobEvent(workflow, job.id, {
+					type: "task",
+					taskId,
+					taskType: "sleep",
+					duration: ms
+				});
+			};
+
+			const originalCall = ctx.call;
+			ctx.call = async (...args) => {
+				try {
+					taskId++;
+
+					const event = events?.find(e => e.taskId === taskId);
+					if (event) {
+						if (event.type == "task" && event.taskType == "actionCall") {
+							this.logger.info("Task skipped.", taskId, event);
+							if (event.error) {
+								const err = new Error(event.error.message);
+								err.name = event.error.name;
+								err.stack = event.error.stack;
+								err.code = event.error.code;
+								err.type = event.error.type;
+
+								throw err;
+							}
+
+							return event.result;
+						}
+					}
+
+					const res = await originalCall.apply(ctx, args);
+					await this.addJobEvent(workflow, job.id, {
+						type: "task",
+						taskId,
+						taskType: "actionCall",
+						action: args[0],
+						//params: args[1],
+						result: res
+					});
+					return res;
+				} catch (err) {
+					await this.addJobEvent(workflow, job.id, {
+						taskId,
+						type: "task",
+						taskType: "actionCall",
+						action: args[0],
+						//params: args[1],
+						error: err
+							? {
+									name: err.name,
+									message: err.message,
+									stack: err.stack,
+									code: err.code,
+									type: err.type
+								}
+							: true
+					});
+					throw err;
+				}
+			};
+
+			const result = await workflow.handler(ctx);
+
+			await this.addJobEvent(workflow, job.id, {
+				type: "finished"
+			});
+
+			return result;
+		} catch (err) {
+			await this.addJobEvent(workflow, job.id, {
+				type: "failed",
+				error: err
+			});
+
+			throw err;
+		}
 	}
 
 	/**
@@ -211,6 +305,7 @@ class BaseAdapter {
 
 	/**
 	 * Trigger a named signal.
+	 * TODO:
 	 *
 	 * @param {string} signalName
 	 * @param {unknown} key
@@ -224,6 +319,7 @@ class BaseAdapter {
 
 	/**
 	 * Get state of a workflow run.
+	 * TODO:
 	 *
 	 * @param {string} workflowName
 	 * @param {string} workflowId

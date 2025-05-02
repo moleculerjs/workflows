@@ -92,7 +92,8 @@ class RedisAdapter extends BaseAdapter {
 
 	log(level, workflowName, jobId, msg, ...args) {
 		if (this.logger) {
-			this.logger[level](`[${workflowName}:${jobId}] ${msg}`, ...args);
+			const wfJobName = jobId ? `${workflowName}:${jobId}` : workflowName;
+			this.logger[level](`[${wfJobName}] ${msg}`, ...args);
 		}
 	}
 
@@ -360,7 +361,7 @@ class RedisAdapter extends BaseAdapter {
 		);
 
 		this.log("debug", workflow.name, jobId, "Job events:", jobEvents);
-		return jobEvents;
+		return jobEvents.map(e => JSON.parse(e));
 	}
 
 	/**
@@ -374,7 +375,11 @@ class RedisAdapter extends BaseAdapter {
 	async addJobEvent(workflow, jobId, event) {
 		await this.commandClient.rpush(
 			this.getKey(workflow.name, C.QUEUE_EVENTS, jobId),
-			JSON.stringify(event)
+			JSON.stringify({
+				...event,
+				ts: Date.now(),
+				nodeID: this.broker.nodeID
+			})
 		);
 	}
 
@@ -495,7 +500,6 @@ class RedisAdapter extends BaseAdapter {
 		} else if (workflowName) {
 			await this.cleanDb(this.getKey(workflowName) + ":*");
 			this.log("info", workflowName, null, "Cleaned up workflow store.");
-			this.logger.info(`Cleaned up Redis adapter store for workflow '${workflowName}'`);
 		} else {
 			await this.cleanDb(this.prefix + ":*");
 			this.logger.info(`Cleaned up entire store.`);
