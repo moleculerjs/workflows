@@ -8,10 +8,10 @@
 
 const _ = require("lodash");
 const BaseAdapter = require("./base");
-const { MoleculerError, MoleculerRetryableError } = require("moleculer").Errors;
+const { MoleculerError } = require("moleculer").Errors;
 const C = require("../constants");
 const Redis = require("ioredis");
-const { parseDuration } = require("../utils");
+const { parseDuration, humanize } = require("../utils");
 
 /**
  * @typedef {import("ioredis").Cluster} Cluster Redis cluster instance. More info: https://github.com/luin/ioredis/blob/master/API.md#Cluster
@@ -349,17 +349,25 @@ class RedisAdapter extends BaseAdapter {
 
 		const unlock = await this.lock(workflow, jobId);
 		try {
+			const now = Date.now();
 			await this.commandClient.hset(
 				this.getKey(workflow.name, C.QUEUE_JOB, jobId),
 				"startedAt",
-				Date.now()
+				now
 			);
 
 			this.log("debug", workflow.name, jobId, "Running job...", job);
 
 			const result = await this.callWorkflowHandler(workflow, job, jobEvents);
 
-			this.log("info", workflow.name, jobId, "Job finished.", result);
+			const duration = Date.now() - now;
+			this.log(
+				"info",
+				workflow.name,
+				jobId,
+				`Job finished in ${humanize(duration)}.`,
+				result
+			);
 			await this.moveToCompleted(workflow, jobId, result);
 		} catch (err) {
 			this.log("error", workflow.name, jobId, "Job processing is failed.", err);
@@ -377,9 +385,9 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns
 	 */
 	async getJob(workflow, jobId) {
-		const payload = await this.commandClient.hget(
+		const [payload] = await this.commandClient.hmget(
 			this.getKey(workflow.name, C.QUEUE_JOB, jobId),
-			"payload"
+			["payload"]
 		);
 
 		return {

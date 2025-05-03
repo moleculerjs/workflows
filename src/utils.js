@@ -65,7 +65,22 @@ function circa(x) {
 	return x - x / 4 + y;
 }
 
+const units = ["h", "m", "s", "ms", "μs", "ns"];
+const divisors = [60 * 60 * 1000, 60 * 1000, 1000, 1, 1e-3, 1e-6];
+
+function humanize(milli) {
+	if (milli == null) return "?";
+
+	for (let i = 0; i < divisors.length; i++) {
+		const val = milli / divisors[i];
+		if (val >= 1.0) return "" + Math.floor(val) + units[i];
+	}
+
+	return "now";
+}
+
 module.exports = {
 	parseDuration,
-	circa
+	circa,
+	humanize
 };
