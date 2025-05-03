@@ -82,6 +82,24 @@ const broker = new ServiceBroker({
 		},
 
 		{
+			command: "signal [signalName]",
+			alias: ["s"],
+			options: [
+				{
+					option: "-k, --key <key>",
+					description: "Signal key"
+				}
+			],
+			async action(broker, args) {
+				const { options } = args;
+				console.log(args);
+				const signalName = options.signalName ?? "test.signal";
+				const key = !Number.isNaN(Number(options.key)) ? Number(options.key) : options.key;
+				broker.wf.adapter.triggerSignal(signalName, key, { user: "John Doe" });
+			}
+		},
+
+		{
 			command: "cleanup",
 			alias: ["c"],
 			async action(broker, args) {
@@ -111,6 +129,7 @@ broker.createService({
 				await ctx.emit("test.event");
 				await ctx.wf.setState("afterEvent");
 
+				/*
 				const post = await ctx.wf.run("fetch", async () => {
 					const res = await fetch("https://jsonplaceholder.typicode.com/posts/1");
 					return await res.json();
@@ -124,7 +143,11 @@ broker.createService({
 				}
 				await ctx.wf.setState("afterSleep");
 
-				await ctx.call("test.danger", { name: "John Doe" });
+				//await ctx.call("test.danger", { name: "John Doe" });
+				*/
+
+				const signalRes = await ctx.wf.waitForSignal("test.signal", 123);
+				this.logger.info("Signal result", signalRes);
 
 				this.logger.info("WF handler end", ctx.wf.jobId);
 

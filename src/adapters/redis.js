@@ -65,6 +65,9 @@ class RedisAdapter extends BaseAdapter {
 
 		this.jobClients = new Map();
 		this.commandClient = null;
+		this.signalSubClient = null;
+
+		this.signalPromises = new Map();
 
 		this.connected = false;
 		this.disconnecting = false;
@@ -98,6 +101,7 @@ class RedisAdapter extends BaseAdapter {
 		if (this.connected) return;
 
 		await this.createCommandClient();
+		await this.createSignalClient();
 
 		await this.afterConnected();
 	}
@@ -124,6 +128,43 @@ class RedisAdapter extends BaseAdapter {
 		});
 	}
 
+	createSignalClient() {
+		return new Promise((resolve, reject) => {
+			const client = this.createRedisClient();
+
+			client.on("ready", () => {
+				this.signalSubClient = client;
+				this.connected = true;
+
+				client.subscribe(this.getKey(C.QUEUE_SIGNAL));
+
+				resolve(client);
+				//this.logger.info("Workflows Redis adapter connected.");
+			});
+			client.on("error", err => {
+				this.connected = false;
+				this.logger.error("Workflows Redis adapter error", err.message);
+			});
+			client.on("end", () => {
+				this.connected = false;
+				this.signalSubClient = null;
+				//this.logger.info("Workflows Redis adapter disconnected.");
+			});
+			client.on("message", (channel, message) => {
+				if (channel === this.getKey(C.QUEUE_SIGNAL)) {
+					const json = this.serializer.deserialize(message);
+					this.logger.debug("Signal received on Pub/Sub", json);
+					const pKey = json.signal + ":" + json.key;
+					const found = this.signalPromises.get(pKey);
+					if (found) {
+						this.signalPromises.delete(pKey);
+						found.resolve(json.payload);
+					}
+				}
+			});
+		});
+	}
+
 	/**
 	 * Disconnect from adapter
 	 */
@@ -141,6 +182,11 @@ class RedisAdapter extends BaseAdapter {
 		if (this.commandClient) {
 			await this.commandClient.quit();
 			this.commandClient = null;
+		}
+
+		if (this.signalSubClient) {
+			await this.signalSubClient.quit();
+			this.signalSubClient = null;
 		}
 
 		this.disconnecting = false;
@@ -518,6 +564,75 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
+	 * Trigger a named signal.
+	 *
+	 * @param {string} signalName
+	 * @param {unknown} key
+	 * @param {unknown} payload
+	 * @returns
+	 */
+	async triggerSignal(signalName, key, payload) {
+		const content = this.serializer.serialize({
+			signal: signalName,
+			key,
+			payload
+		});
+
+		this.log("debug", null, null, "Trigger signal", content.toString());
+
+		const exp = parseDuration(this.opts.signalExpiration);
+		if (exp != null && exp > 0) {
+			await this.commandClient.set(
+				this.getKey(C.QUEUE_SIGNAL, signalName, key),
+				content,
+				"NX",
+				"PX",
+				exp
+			);
+		} else {
+			await this.commandClient.set(
+				this.getKey(C.QUEUE_SIGNAL, signalName, key),
+				content,
+				"NX"
+			);
+		}
+
+		await this.commandClient.publish(this.getKey(C.QUEUE_SIGNAL), content);
+	}
+
+	/**
+	 * Wait for a named signal.
+	 *
+	 * @param {string} signalName
+	 * @param {unknown} key
+	 * @param {unknown} opts
+	 * @returns payload
+	 */
+	async waitForSignal(signalName, key, opts) {
+		const content = await this.commandClient.get(this.getKey(C.QUEUE_SIGNAL, signalName, key));
+		if (content) {
+			const json = this.serializer.deserialize(content);
+			if (key === json.key) {
+				this.logger.debug("Signal received", signalName, key, json);
+				return json.payload;
+			}
+		}
+
+		const pKey = signalName + ":" + key;
+		const found = this.signalPromises.get(pKey);
+		if (found) {
+			return found.promise;
+		}
+
+		const item = {};
+		item.promise = new Promise(resolve => (item.resolve = resolve));
+		this.signalPromises.set(pKey, item);
+		this.logger.debug("Waiting for signal", signalName, key);
+
+		return item.promise;
+	}
+
+	/**
 	 * Create a new job and push it to the waiting queue.
 	 *
 	 * @param {Workflow} workflowName
@@ -746,6 +861,11 @@ class RedisAdapter extends BaseAdapter {
 		}
 	}
 
+	/**
+	 *
+	 * @param {*} workflow
+	 * @param {*} jobId
+	 */
 	async moveStalledJobsToFailed(workflow, jobId) {
 		const res = await this.commandClient.lrem(
 			this.getKey(workflow.name, C.QUEUE_ACTIVE),
@@ -762,6 +882,12 @@ class RedisAdapter extends BaseAdapter {
 		}
 	}
 
+	/**
+	 *
+	 * @param {*} workflow
+	 * @param {*} queueName
+	 * @param {*} duration
+	 */
 	async maintenanceRemoveOldJobs(workflow, queueName, duration) {
 		this.log("debug", workflow.name, null, `Maintenance remove old ${queueName} jobs...`);
 

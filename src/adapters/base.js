@@ -37,6 +37,8 @@ class BaseAdapter {
 		this.opts = _.defaultsDeep({}, opts, {
 			serializer: "JSON",
 
+			signalExpiration: "1h",
+
 			maintenanceTime: 10,
 			removeCompletedAfter: "5m",
 			removeFailedAfter: "10m",
@@ -206,6 +208,9 @@ class BaseAdapter {
 			jobId: job.id
 		};
 
+		const getCurrentTaskEvent = () =>
+			events?.find(e => e.type == "task" && e.taskId === taskId);
+
 		const taskEvent = async (taskType, data) => {
 			return await this.addJobEvent(workflow, job.id, {
 				type: "task",
@@ -253,7 +258,7 @@ class BaseAdapter {
 				try {
 					taskId++;
 
-					const event = events?.find(e => e.taskId === taskId);
+					const event = getCurrentTaskEvent();
 					if (event) return validateEvent(event, taskType);
 
 					const result = await originalMethod.apply(ctx, args);
@@ -278,7 +283,7 @@ class BaseAdapter {
 		ctx.wf.sleep = async duration => {
 			taskId++;
 
-			const event = events?.find(e => e.type == "task" && e.taskId === taskId);
+			const event = getCurrentTaskEvent();
 			if (event) return validateEvent(event, "sleep");
 
 			await new Promise(resolve => setTimeout(resolve, duration));
@@ -289,12 +294,25 @@ class BaseAdapter {
 		ctx.wf.setState = async state => {
 			taskId++;
 
-			const event = events?.find(e => e.type == "task" && e.taskId === taskId);
+			const event = getCurrentTaskEvent();
 			if (event) return validateEvent(event, "state");
 
 			await this.saveJobState(workflow, job.id, state);
 
 			await taskEvent("state", { state });
+		};
+
+		ctx.wf.waitForSignal = async (signalName, key, opts) => {
+			taskId++;
+
+			const event = getCurrentTaskEvent();
+			if (event) return validateEvent(event, "signal");
+
+			const result = await this.waitForSignal(signalName, key, opts);
+
+			await taskEvent("signal", { result, signalName, signalKey: key });
+
+			return result;
 		};
 
 		ctx.wf.run = async (name, fn) => {
@@ -303,9 +321,7 @@ class BaseAdapter {
 			if (!name) name = `custom-${taskId}`;
 			if (!fn) throw new Error("Missing function to run.");
 
-			const event = events?.find(
-				e => e.type == "task" && e.taskId === taskId && e.run == name
-			);
+			const event = getCurrentTaskEvent();
 			if (event) return validateEvent(event, "custom");
 
 			try {
@@ -409,6 +425,20 @@ class BaseAdapter {
 	 * @returns
 	 */
 	async triggerSignal(/*signalName, key, payload*/) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Wait for a named signal.
+	 * TODO:
+	 *
+	 * @param {string} signalName
+	 * @param {unknown} key
+	 * @param {unknown} opts
+	 * @returns payload
+	 */
+	async waitForSignal(/*signalName, key, opts*/) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}

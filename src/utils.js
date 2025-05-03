@@ -26,7 +26,11 @@ unit.group = ",";
 unit.decimal = ".";
 unit.placeholder = " _";
 
-function parseDuration(str = "", format = "ms") {
+function parseDuration(str, format = "ms") {
+	if (str == null) {
+		return str;
+	}
+
 	let result = null,
 		prevUnits;
 
