@@ -7,10 +7,10 @@
 "use strict";
 
 const _ = require("lodash");
-const semver = require("semver");
 const { MoleculerError } = require("moleculer").Errors;
 const { Serializers, METRIC } = require("moleculer");
 const C = require("../constants");
+const { circa, parseDuration } = require("../utils");
 
 /**
  * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
@@ -35,20 +35,29 @@ class BaseAdapter {
 	constructor(opts) {
 		/** @type {BaseDefaultOptions} */
 		this.opts = _.defaultsDeep({}, opts, {
-			serializer: "JSON"
+			serializer: "JSON",
+
+			maintenanceTime: 10,
+			removeCompletedAfter: "10m",
+			removeFailedAfter: "30m",
+
+			backoff: "exponential",
+			backoffDelay: 1000
 		});
 
 		/**
 		 * Tracks the local running workflows
 		 * @type {Array<string>}
 		 */
-		this.activeRuns = [];
+		this.activeRuns = new Map();
 
 		// Registered local workflow handlers
 		this.workflows = new Map();
 
 		/** @type {Boolean} Flag indicating the adapter's connection status */
 		this.connected = false;
+
+		this.maintenanceTimer = null;
 	}
 
 	/**
@@ -68,6 +77,15 @@ class BaseAdapter {
 		this.logger.info("Workflows serializer:", this.broker.getConstructorName(this.serializer));
 
 		this.registerAdapterMetrics(broker);
+
+		this.setNextMaintenance();
+	}
+
+	log(level, workflowName, jobId, msg, ...args) {
+		if (this.logger) {
+			const wfJobName = jobId ? `${workflowName}:${jobId}` : workflowName;
+			this.logger[level](`[${wfJobName}] ${msg}`, ...args);
+		}
 	}
 
 	/**
@@ -135,7 +153,7 @@ class BaseAdapter {
 	 */
 	async connect() {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
 	}
 
 	/**
@@ -152,113 +170,152 @@ class BaseAdapter {
 	 */
 	async disconnect() {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
 	}
 
 	startJobProcessor(/*workflow*/) {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
 	}
 
 	stopJobProcessor(/*workflow*/) {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
 	}
 
 	async createJob(/*workflowName, payload, opts*/) {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
 	}
 
+	/**
+	 * Create a workflow context for the given workflow and job.
+	 *
+	 * @param {*} workflow
+	 * @param {*} job
+	 * @param {*} events
+	 * @returns
+	 */
+	createWorkflowContext(workflow, job, events) {
+		let taskId = 0;
+
+		const ctxOpts = {};
+		const ctx = this.broker.ContextFactory.create(this.broker, null, job.payload, ctxOpts);
+		ctx.wf = {
+			name: workflow.name,
+			jobId: job.id
+		};
+
+		const taskEvent = async (taskType, data) => {
+			return await this.addJobEvent(workflow, job.id, {
+				type: "task",
+				taskId,
+				taskType,
+				...(data ?? {})
+			});
+		};
+
+		const validateEvent = (event, taskType) => {
+			if (event.taskType == taskType) {
+				this.log(
+					"debug",
+					workflow.name,
+					job.id,
+					"Workflow task already executed, skipping.",
+					taskId,
+					event
+				);
+				if (event.error) {
+					const err = this.broker.errorRegenerator.restore(event.error);
+					err.stack = event.error.stack;
+					throw err;
+				}
+
+				return event.result;
+			} else {
+				throw new MoleculerError(
+					`Workflow task mismatch at replaying. Expected '${taskType}' but got '${event.taskType}'.`,
+					500,
+					"WORKFLOW_TASK_MISMATCH",
+					{
+						taskId,
+						expected: taskType,
+						actual: event.taskType
+					}
+				);
+			}
+		};
+
+		const wrapCtxMethod = (ctx, method, taskType, argProcessor) => {
+			const originalMethod = ctx[method];
+			ctx[method] = async (...args) => {
+				const savedArgs = argProcessor ? argProcessor(args) : {};
+				try {
+					taskId++;
+
+					const event = events?.find(e => e.taskId === taskId);
+					if (event) return validateEvent(event, taskType);
+
+					const result = await originalMethod.apply(ctx, args);
+					await taskEvent(taskType, { ...savedArgs, result });
+					return result;
+				} catch (err) {
+					await taskEvent(taskType, {
+						...savedArgs,
+						error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
+					});
+					throw err;
+				}
+			};
+		};
+
+		wrapCtxMethod(ctx, "call", "actionCall", args => ({ action: args[0] }));
+		wrapCtxMethod(ctx, "mcall", "actionMcall");
+		wrapCtxMethod(ctx, "broadcast", "actionBroadcast", args => ({ event: args[0] }));
+		wrapCtxMethod(ctx, "emit", "eventEmit", args => ({ event: args[0] }));
+
+		// Sleep method with Task event
+		ctx.wf.sleep = async duration => {
+			taskId++;
+
+			const event = events?.find(e => e.type == "task" && e.taskId === taskId);
+			if (event) return validateEvent(event, "sleep");
+
+			await new Promise(resolve => setTimeout(resolve, duration));
+
+			await taskEvent("sleep", { duration });
+		};
+
+		ctx.wf.setState = async state => {
+			taskId++;
+
+			const event = events?.find(e => e.type == "task" && e.taskId === taskId);
+			if (event) return validateEvent(event, "state");
+
+			await this.saveJobState(workflow, job.id, state);
+
+			await taskEvent("state", { state });
+		};
+
+		return ctx;
+	}
+
+	/**
+	 * Call workflow handler with a job
+	 *
+	 * @param {*} workflow
+	 * @param {*} job
+	 * @param {*} events
+	 * @returns
+	 */
 	async callWorkflowHandler(workflow, job, events) {
+		this.activeRuns.set(job.id, job);
 		await this.addJobEvent(workflow, job.id, {
 			type: "started"
 		});
 
 		try {
-			const ctxOpts = {};
-			const ctx = this.broker.ContextFactory.create(this.broker, null, job.payload, ctxOpts);
-			ctx.wf = {
-				name: workflow.name,
-				jobId: job.id
-			};
-
-			let taskId = 0;
-
-			ctx.wf.sleep = async ms => {
-				taskId++;
-
-				const event = events?.find(e => e.taskId === taskId);
-				if (event) {
-					if (event.type == "task" && event.taskType == "sleep") {
-						this.logger.info("Task skipped.", taskId, event);
-						return;
-					}
-				}
-
-				await new Promise(resolve => setTimeout(resolve, ms));
-
-				await this.addJobEvent(workflow, job.id, {
-					type: "task",
-					taskId,
-					taskType: "sleep",
-					duration: ms
-				});
-			};
-
-			const originalCall = ctx.call;
-			ctx.call = async (...args) => {
-				try {
-					taskId++;
-
-					const event = events?.find(e => e.taskId === taskId);
-					if (event) {
-						if (event.type == "task" && event.taskType == "actionCall") {
-							this.logger.info("Task skipped.", taskId, event);
-							if (event.error) {
-								const err = new Error(event.error.message);
-								err.name = event.error.name;
-								err.stack = event.error.stack;
-								err.code = event.error.code;
-								err.type = event.error.type;
-
-								throw err;
-							}
-
-							return event.result;
-						}
-					}
-
-					const res = await originalCall.apply(ctx, args);
-					await this.addJobEvent(workflow, job.id, {
-						type: "task",
-						taskId,
-						taskType: "actionCall",
-						action: args[0],
-						//params: args[1],
-						result: res
-					});
-					return res;
-				} catch (err) {
-					await this.addJobEvent(workflow, job.id, {
-						taskId,
-						type: "task",
-						taskType: "actionCall",
-						action: args[0],
-						//params: args[1],
-						error: err
-							? {
-									name: err.name,
-									message: err.message,
-									stack: err.stack,
-									code: err.code,
-									type: err.type
-								}
-							: true
-					});
-					throw err;
-				}
-			};
+			const ctx = this.createWorkflowContext(workflow, job, events);
 
 			const result = await workflow.handler(ctx);
 
@@ -270,15 +327,17 @@ class BaseAdapter {
 		} catch (err) {
 			await this.addJobEvent(workflow, job.id, {
 				type: "failed",
-				error: err
+				error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
 			});
 
 			throw err;
+		} finally {
+			this.activeRuns.delete(job.id);
 		}
 	}
 
 	/**
-	 * Execute a workflow
+	 * Create a job
 	 *
 	 * @param {String} workflowName
 	 * @param {unknown} payload
@@ -287,7 +346,7 @@ class BaseAdapter {
 	 */
 	async run(/*workflowName, payload, opts*/) {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
 	}
 
 	/**
@@ -300,7 +359,20 @@ class BaseAdapter {
 	 */
 	async addJobEvent(/*workflow, jobId, event*/) {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Save state of a job.
+	 *
+	 * @param {*} workflow
+	 * @param {*} jobId
+	 * @param {*} event
+	 * @returns
+	 */
+	async saveJobState(/*workflow, jobId, state*/) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
 	}
 
 	/**
@@ -314,7 +386,7 @@ class BaseAdapter {
 	 */
 	async triggerSignal(/*signalName, key, payload*/) {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
 	}
 
 	/**
@@ -327,7 +399,7 @@ class BaseAdapter {
 	 */
 	async getState(/*workflowName, workflowId*/) {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
 	}
 
 	/**
@@ -342,7 +414,53 @@ class BaseAdapter {
 	 */
 	async cleanUp(workflowName, jobId) {
 		/* istanbul ignore next */
-		throw new Error("This method is not implemented.");
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Calculate the next maintenance time. We use 'circa' to randomize the time a bit
+	 * and avoid that all adapters run the maintenance at the same time.
+	 */
+	setNextMaintenance() {
+		if (this.maintenanceTimer) {
+			clearTimeout(this.maintenanceTimer);
+		}
+
+		this.maintenanceTimer = setTimeout(
+			() => this.maintenance(),
+			circa(this.opts.maintenanceTime * 1000)
+		);
+	}
+
+	async maintenance() {
+		await Promise.all(
+			Array.from(this.workflows.values()).map(async wf => {
+				if (await this.lockMaintenance(wf)) {
+					try {
+						await this.maintenanceDelayedJobs(wf);
+						await this.maintenanceStalledJobs(wf);
+
+						const completedDuration = parseDuration(this.opts.removeCompletedAfter);
+						if (completedDuration > 0) {
+							await this.maintenanceRemoveOldJobs(
+								wf,
+								C.QUEUE_COMPLETED,
+								completedDuration
+							);
+						}
+
+						const failedDuration = parseDuration(this.opts.removeFailedAfter);
+						if (failedDuration > 0) {
+							await this.maintenanceRemoveOldJobs(wf, C.QUEUE_FAILED, failedDuration);
+						}
+					} finally {
+						await this.unlockMaintenance(wf);
+					}
+				}
+			})
+		);
+
+		this.setNextMaintenance();
 	}
 }
 
