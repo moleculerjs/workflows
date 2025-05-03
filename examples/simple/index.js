@@ -106,16 +106,23 @@ broker.createService({
 				this.logger.info("WF handler start", ctx.params, ctx.wf.jobId);
 
 				const res = await ctx.call("test.list");
-				ctx.wf.setState("afterList");
+				await ctx.wf.setState("afterList");
 
 				await ctx.emit("test.event");
-				ctx.wf.setState("afterEvent");
+				await ctx.wf.setState("afterEvent");
+
+				const post = await ctx.wf.run("fetch", async () => {
+					const res = await fetch("https://jsonplaceholder.typicode.com/posts/1");
+					return await res.json();
+				});
+				await ctx.wf.setState("afterFetch");
+				this.logger.info("Post result", post);
 
 				for (let i = 0; i < 1; i++) {
 					this.logger.info("Sleeping...");
 					await ctx.wf.sleep(5000);
 				}
-				ctx.wf.setState("afterSleep");
+				await ctx.wf.setState("afterSleep");
 
 				await ctx.call("test.danger", { name: "John Doe" });
 

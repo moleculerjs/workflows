@@ -38,8 +38,8 @@ class BaseAdapter {
 			serializer: "JSON",
 
 			maintenanceTime: 10,
-			removeCompletedAfter: "10m",
-			removeFailedAfter: "30m",
+			removeCompletedAfter: "5m",
+			removeFailedAfter: "10m",
 
 			backoff: "exponential",
 			backoffDelay: 1000
@@ -295,6 +295,30 @@ class BaseAdapter {
 			await this.saveJobState(workflow, job.id, state);
 
 			await taskEvent("state", { state });
+		};
+
+		ctx.wf.run = async (name, fn) => {
+			taskId++;
+
+			if (!name) name = `custom-${taskId}`;
+			if (!fn) throw new Error("Missing function to run.");
+
+			const event = events?.find(
+				e => e.type == "task" && e.taskId === taskId && e.run == name
+			);
+			if (event) return validateEvent(event, "custom");
+
+			try {
+				const result = await fn();
+				await taskEvent("custom", { run: name, result });
+				return result;
+			} catch (err) {
+				await taskEvent("custom", {
+					run: name,
+					error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
+				});
+				throw err;
+			}
 		};
 
 		return ctx;
