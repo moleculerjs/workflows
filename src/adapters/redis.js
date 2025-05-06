@@ -28,12 +28,13 @@ const { parseDuration, humanize, getCronNextTime } = require("../utils");
  *
  * @class RedisAdapter
  * @extends {BaseAdapter}
+ * @typedef {import("../index.d.ts").RedisAdapterOptions} RedisAdapterOptions
  */
 class RedisAdapter extends BaseAdapter {
 	/**
 	 * Constructor of adapter.
 	 *
-	 * @param  {Object?} opts
+	 * @param  {RedisAdapterOptions?} opts
 	 */
 	constructor(opts) {
 		if (_.isString(opts))
@@ -77,8 +78,8 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Initialize the adapter.
 	 *
-	 * @param {ServiceBroker} broker
-	 * @param {Logger} logger
+	 * @param {import("moleculer").ServiceBroker} broker
+	 * @param {import("moleculer").LoggerInstance} logger
 	 */
 	init(broker, logger) {
 		super.init(broker, logger);
@@ -96,6 +97,7 @@ class RedisAdapter extends BaseAdapter {
 
 	/**
 	 * Connect to Redis.
+	 * @returns {Promise<void>}
 	 */
 	async connect() {
 		if (this.connected) return;
@@ -106,6 +108,10 @@ class RedisAdapter extends BaseAdapter {
 		await this.afterConnected();
 	}
 
+	/**
+	 *
+	 * @returns
+	 */
 	createCommandClient() {
 		return new Promise((resolve, reject) => {
 			const client = this.createRedisClient();
@@ -128,6 +134,10 @@ class RedisAdapter extends BaseAdapter {
 		});
 	}
 
+	/**
+	 *
+	 * @returns
+	 */
 	createSignalClient() {
 		return new Promise((resolve, reject) => {
 			const client = this.createRedisClient();
@@ -167,6 +177,7 @@ class RedisAdapter extends BaseAdapter {
 
 	/**
 	 * Disconnect from adapter
+	 * @returns {Promise<void>}
 	 */
 	async disconnect() {
 		if (this.disconnecting) return;
@@ -233,12 +244,20 @@ class RedisAdapter extends BaseAdapter {
 		});
 	}
 
+	/**
+	 *
+	 * @param {*} workflow
+	 */
 	startJobProcessor(workflow) {
 		if (!this.jobClients[workflow]) {
 			this.runJobProcessor(workflow);
 		}
 	}
 
+	/**
+	 *
+	 * @param {*} workflow
+	 */
 	async stopJobProcessor(workflow) {
 		if (this.jobClients[workflow]) {
 			await this.jobClients[workflow].quit();
@@ -674,10 +693,10 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Create a new job and push it to the waiting/delayed queue.
 	 *
-	 * @param {Workflow} workflowName
+	 * @param {string} workflowName
 	 * @param {*} payload
 	 * @param {*} opts
-	 * @returns
+	 * @returns {Promise<any>}
 	 */
 	async createJob(workflowName, payload, opts) {
 		opts = opts || {};
@@ -863,6 +882,7 @@ class RedisAdapter extends BaseAdapter {
 	 *
 	 * @param {string?} workflowName
 	 * @param {string?} jobId
+	 * @returns {Promise<void>}
 	 */
 	async cleanUp(workflowName, jobId) {
 		if (workflowName && jobId) {

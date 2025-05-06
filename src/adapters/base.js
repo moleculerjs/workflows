@@ -22,15 +22,15 @@ const { circa, parseDuration } = require("../utils");
  */
 
 /**
- * @typedef {Object} BaseDefaultOptions Base Adapter configuration
- * @property {String?} prefix Adapter prefix
- * @property {String} serializer Type of serializer to use in message exchange. Defaults to JSON
+ * Base adapter class
+ *
+ * @class BaseAdapter
+ * @typedef {import("../index.d.ts").BaseDefaultOptions} BaseDefaultOptions
  */
-
 class BaseAdapter {
 	/**
 	 * Constructor of adapter
-	 * @param  {Object?} opts
+	 * @param  {BaseDefaultOptions?} opts
 	 */
 	constructor(opts) {
 		/** @type {BaseDefaultOptions} */
@@ -65,8 +65,8 @@ class BaseAdapter {
 	/**
 	 * Initialize the adapter.
 	 *
-	 * @param {ServiceBroker} broker
-	 * @param {Logger} logger
+	 * @param {import("moleculer").ServiceBroker} broker
+	 * @param {import("moleculer").LoggerInstance} logger
 	 */
 	init(broker, logger) {
 		this.broker = broker;
@@ -83,6 +83,14 @@ class BaseAdapter {
 		this.setNextMaintenance();
 	}
 
+	/**
+	 *
+	 * @param {*} level
+	 * @param {*} workflowName
+	 * @param {*} jobId
+	 * @param {*} msg
+	 * @param  {...any} args
+	 */
 	log(level, workflowName, jobId, msg, ...args) {
 		if (this.logger) {
 			const wfJobName = jobId ? `${workflowName}:${jobId}` : workflowName;
@@ -152,6 +160,7 @@ class BaseAdapter {
 
 	/**
 	 * Connect to the adapter.
+	 * @returns {Promise<void>}
 	 */
 	async connect() {
 		/* istanbul ignore next */
@@ -169,23 +178,38 @@ class BaseAdapter {
 
 	/**
 	 * Disconnect from adapter
+	 * @returns {Promise<void>}
 	 */
 	async disconnect() {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
 
+	/**
+	 *
+	 */
 	startJobProcessor(/*workflow*/) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
 
+	/**
+	 *
+	 */
 	stopJobProcessor(/*workflow*/) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
 
-	async createJob(/*workflowName, payload, opts*/) {
+	/**
+	 * Create a new job.
+	 *
+	 * @param {string} workflowName
+	 * @param {*} payload
+	 * @param {*} opts
+	 * @returns {Promise<any>}
+	 */
+	async createJob(workflowName, payload, opts) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -458,13 +482,10 @@ class BaseAdapter {
 
 	/**
 	 * Clean up the adapter store. Workflowname and jobId are optional.
-	 * If both are provided, the adapter should clean up only the job with the given ID.
-	 * If only the workflow name is provided, the adapter should clean up all jobs
-	 * related to that workflow.
-	 * If neither is provided, the adapter should clean up all jobs.
 	 *
 	 * @param {string?} workflowName
 	 * @param {string?} jobId
+	 * @returns {Promise<void>}
 	 */
 	async cleanUp(workflowName, jobId) {
 		/* istanbul ignore next */
@@ -486,6 +507,9 @@ class BaseAdapter {
 		);
 	}
 
+	/**
+	 *
+	 */
 	async maintenance() {
 		await Promise.all(
 			Array.from(this.workflows.values()).map(async wf => {
