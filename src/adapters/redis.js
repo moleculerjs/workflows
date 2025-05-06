@@ -242,7 +242,7 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	startJobProcessor(workflow) {
 		if (!this.jobClients[workflow.name]) {
-			this.runJobProcessor(workflow.name);
+			this.runJobProcessor(workflow);
 		}
 	}
 
@@ -266,7 +266,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the job is processed.
 	 */
 	async runJobProcessor(workflow) {
-		const client = await this.isClientReady(workflow);
+		const client = await this.isClientReady(workflow.name);
 		if (client.stopped) {
 			this.log("warn", workflow.name, null, "Job processor is stopped");
 			return;

@@ -75,7 +75,7 @@ const broker = new ServiceBroker({
 				};
 
 				if (options.cron) {
-					jobOpts.repeat = { cron: options.cron, endDate: "2025-05-06T19:25:00Z" };
+					jobOpts.repeat = { cron: options.cron /*endDate: "2025-05-06T19:25:00Z"*/ };
 				}
 
 				broker.wf.run(
