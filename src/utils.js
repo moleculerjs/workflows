@@ -28,6 +28,13 @@ unit.group = ",";
 unit.decimal = ".";
 unit.placeholder = " _";
 
+/**
+ * Parse a duration string into a numeric value based on the specified format.
+ *
+ * @param {string} str The duration string to parse.
+ * @param {string} [format="ms"] The format to return the duration in (e.g., "ms", "s").
+ * @returns {number|null} The parsed duration in the specified format, or null if invalid.
+ */
 function parseDuration(str, format = "ms") {
 	if (str == null) {
 		return str;
@@ -60,6 +67,12 @@ function parseDuration(str, format = "ms") {
 	return result && (result / (unit[format] || 1)) * (str[0] === "-" ? -1 : 1);
 }
 
+/**
+ * Generate a random value around the given number, reducing it by up to 25% and adding a random offset.
+ *
+ * @param {number} x The base value to randomize.
+ * @returns {number} The randomized value.
+ */
 function circa(x) {
 	const h = x / 2;
 	const y = Math.floor(Math.random() * h);
@@ -70,6 +83,12 @@ function circa(x) {
 const units = ["h", "m", "s", "ms", "μs", "ns"];
 const divisors = [60 * 60 * 1000, 60 * 1000, 1000, 1, 1e-3, 1e-6];
 
+/**
+ * Convert a duration in milliseconds into a human-readable string.
+ *
+ * @param {number} milli The duration in milliseconds.
+ * @returns {string} The human-readable duration (e.g., "1h", "30m").
+ */
 function humanize(milli) {
 	if (milli == null) return "?";
 
@@ -81,6 +100,14 @@ function humanize(milli) {
 	return "now";
 }
 
+/**
+ * Calculate the next execution time for a given cron expression.
+ *
+ * @param {string} cron The cron expression to evaluate.
+ * @param {Date} currentDate The current date to base the calculation on.
+ * @param {string} [tz] The timezone to use for the calculation.
+ * @returns {number} The timestamp of the next execution time.
+ */
 function getCronNextTime(cron, currentDate, tz) {
 	const interval = CronExpressionParser.parse(cron, {
 		currentDate,

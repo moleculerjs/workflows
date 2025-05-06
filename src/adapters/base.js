@@ -17,8 +17,7 @@ const { circa, parseDuration } = require("../utils");
  * @typedef {import("moleculer").Service} Service Moleculer Service definition
  * @typedef {import("moleculer").LoggerInstance} Logger Logger instance
  * @typedef {import("moleculer").Serializer} Serializer Moleculer Serializer
- * @typedef {import("../index").Channel} Channel Base channel definition
- * @typedef {import("../index").DeadLetteringOptions} DeadLetteringOptions Dead-letter-queue options
+ * @typedef {import("../index").Workflow} Workflow Workflow definition
  */
 
 /**
@@ -217,10 +216,10 @@ class BaseAdapter {
 	/**
 	 * Create a workflow context for the given workflow and job.
 	 *
-	 * @param {*} workflow
-	 * @param {*} job
-	 * @param {*} events
-	 * @returns
+	 * @param {Workflow} workflow The workflow object.
+	 * @param {Job} job The job object.
+	 * @param {Array<Object>} events The list of events associated with the job.
+	 * @returns {Context} The created workflow context.
 	 */
 	createWorkflowContext(workflow, job, events) {
 		let taskId = 0;
@@ -365,12 +364,12 @@ class BaseAdapter {
 	}
 
 	/**
-	 * Call workflow handler with a job
+	 * Call workflow handler with a job.
 	 *
-	 * @param {*} workflow
-	 * @param {*} job
-	 * @param {*} events
-	 * @returns
+	 * @param {Workflow} workflow The workflow object.
+	 * @param {Job} job The job object.
+	 * @param {Array<Object>} events The list of events associated with the job.
+	 * @returns {Promise<*>} The result of the workflow handler execution.
 	 */
 	async callWorkflowHandler(workflow, job, events) {
 		this.activeRuns.set(job.id, job);
@@ -416,10 +415,10 @@ class BaseAdapter {
 	/**
 	 * Add job event to Redis.
 	 *
-	 * @param {*} workflow
-	 * @param {*} jobId
-	 * @param {*} event
-	 * @returns
+	 * @param {Workflow} workflow The workflow object.
+	 * @param {string} jobId The ID of the job.
+	 * @param {Object} event The event object to add.
+	 * @returns {Promise<void>} Resolves when the event is added.
 	 */
 	async addJobEvent(/*workflow, jobId, event*/) {
 		/* istanbul ignore next */
@@ -429,10 +428,10 @@ class BaseAdapter {
 	/**
 	 * Save state of a job.
 	 *
-	 * @param {*} workflow
-	 * @param {*} jobId
-	 * @param {*} event
-	 * @returns
+	 * @param {Workflow} workflow The workflow object.
+	 * @param {string} jobId The ID of the job.
+	 * @param {Object} state The state object to save.
+	 * @returns {Promise<void>} Resolves when the state is saved.
 	 */
 	async saveJobState(/*workflow, jobId, state*/) {
 		/* istanbul ignore next */
@@ -441,12 +440,11 @@ class BaseAdapter {
 
 	/**
 	 * Trigger a named signal.
-	 * TODO:
 	 *
-	 * @param {string} signalName
-	 * @param {unknown} key
-	 * @param {unknown} payload
-	 * @returns
+	 * @param {string} signalName The name of the signal to trigger.
+	 * @param {string} key The key associated with the signal.
+	 * @param {Object} payload The payload to send with the signal.
+	 * @returns {Promise<void>} Resolves when the signal is triggered.
 	 */
 	async triggerSignal(/*signalName, key, payload*/) {
 		/* istanbul ignore next */
@@ -455,12 +453,11 @@ class BaseAdapter {
 
 	/**
 	 * Wait for a named signal.
-	 * TODO:
 	 *
-	 * @param {string} signalName
-	 * @param {unknown} key
-	 * @param {unknown} opts
-	 * @returns payload
+	 * @param {string} signalName The name of the signal to wait for.
+	 * @param {string} key The key associated with the signal.
+	 * @param {Object} opts Options for waiting for the signal.
+	 * @returns {Promise<*>} The payload of the received signal.
 	 */
 	async waitForSignal(/*signalName, key, opts*/) {
 		/* istanbul ignore next */
