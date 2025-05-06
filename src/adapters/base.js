@@ -40,8 +40,8 @@ class BaseAdapter {
 			signalExpiration: "1h",
 
 			maintenanceTime: 10,
-			removeCompletedAfter: "5m",
-			removeFailedAfter: "10m",
+			removeCompletedAfter: "30m",
+			removeFailedAfter: "30m",
 
 			backoff: "exponential",
 			backoffDelay: 1000

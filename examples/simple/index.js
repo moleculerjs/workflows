@@ -58,11 +58,26 @@ const broker = new ServiceBroker({
 				{
 					option: "-t, --timeout <text_value_or_int>",
 					description: "Execution timeout (like: 5s, 1m, 6h, 2d)"
+				},
+				{
+					option: "--cron <cron timing>",
+					description: "Repeatable job with cron timing (e.g.: 15 3 * * * )"
 				}
 			],
 			async action(broker, args) {
 				const { options } = args;
 				console.log(options);
+				const jobOpts = {
+					jobId: options.jobId,
+					delay: options.delay,
+					retries: options.retries != null ? parseInt(options.retries) : 0,
+					timeout: options.timeout
+				};
+
+				if (options.cron) {
+					jobOpts.repeat = { cron: options.cron, endDate: "2025-05-06T19:25:00Z" };
+				}
+
 				broker.wf.run(
 					options.workflow || "test.wf1",
 					{
@@ -71,12 +86,7 @@ const broker = new ServiceBroker({
 						pid: process.pid,
 						nodeID: broker.nodeID
 					},
-					{
-						jobId: options.jobId,
-						delay: options.delay,
-						retries: options.retries != null ? parseInt(options.retries) : 0,
-						timeout: options.timeout
-					}
+					jobOpts
 				);
 			}
 		},
@@ -92,7 +102,7 @@ const broker = new ServiceBroker({
 			],
 			async action(broker, args) {
 				const { options } = args;
-				console.log(args);
+				// console.log(args);
 				const signalName = options.signalName ?? "test.signal";
 				const key = !Number.isNaN(Number(options.key)) ? Number(options.key) : options.key;
 				broker.wf.adapter.triggerSignal(signalName, key, { user: "John Doe" });
@@ -122,6 +132,7 @@ broker.createService({
 			// Workflow handler
 			async handler(ctx) {
 				this.logger.info("WF handler start", ctx.params, ctx.wf.jobId);
+				/*
 
 				const res = await ctx.call("test.list");
 				await ctx.wf.setState("afterList");
@@ -129,7 +140,6 @@ broker.createService({
 				await ctx.emit("test.event");
 				await ctx.wf.setState("afterEvent");
 
-				/*
 				const post = await ctx.wf.run("fetch", async () => {
 					const res = await fetch("https://jsonplaceholder.typicode.com/posts/1");
 					return await res.json();
@@ -144,14 +154,17 @@ broker.createService({
 				await ctx.wf.setState("afterSleep");
 
 				//await ctx.call("test.danger", { name: "John Doe" });
-				*/
 
 				const signalRes = await ctx.wf.waitForSignal("test.signal", 123);
 				this.logger.info("Signal result", signalRes);
 
+				*/
+
+				// await ctx.call("test.danger", { name: "John Doe" });
+
 				this.logger.info("WF handler end", ctx.wf.jobId);
 
-				return res;
+				return true;
 			}
 		}
 	},

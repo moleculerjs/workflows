@@ -1,3 +1,5 @@
+const { CronExpressionParser } = require("cron-parser");
+
 /**
  * Credits: https://github.com/jkroso/parse-duration
  */
@@ -79,8 +81,20 @@ function humanize(milli) {
 	return "now";
 }
 
+function getCronNextTime(cron, currentDate, tz) {
+	const interval = CronExpressionParser.parse(cron, {
+		currentDate,
+		tz
+	});
+
+	const next = interval.next();
+
+	return next.getTime();
+}
+
 module.exports = {
 	parseDuration,
 	circa,
-	humanize
+	humanize,
+	getCronNextTime
 };

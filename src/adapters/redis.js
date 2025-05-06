@@ -11,7 +11,7 @@ const BaseAdapter = require("./base");
 const { MoleculerError } = require("moleculer").Errors;
 const C = require("../constants");
 const Redis = require("ioredis");
-const { parseDuration, humanize } = require("../utils");
+const { parseDuration, humanize, getCronNextTime } = require("../utils");
 
 /**
  * @typedef {import("ioredis").Cluster} Cluster Redis cluster instance. More info: https://github.com/luin/ioredis/blob/master/API.md#Cluster
@@ -337,7 +337,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {String} jobId
 	 */
 	async processJob(workflow, jobId) {
-		const job = await this.getJob(workflow, jobId);
+		const job = await this.getJob(workflow.name, jobId);
 		if (!job) {
 			this.log("warn", workflow.name, jobId, "Job not found");
 			// Remove from active queue
@@ -368,10 +368,10 @@ class RedisAdapter extends BaseAdapter {
 				`Job finished in ${humanize(duration)}.`,
 				result
 			);
-			await this.moveToCompleted(workflow, jobId, result);
+			await this.moveToCompleted(workflow, job, result);
 		} catch (err) {
 			this.log("error", workflow.name, jobId, "Job processing is failed.", err);
-			await this.moveToFailed(workflow, jobId, err);
+			await this.moveToFailed(workflow, job, err);
 		} finally {
 			await unlock();
 		}
@@ -380,27 +380,45 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Get job from Redis.
 	 *
-	 * @param {Workflow} workflow
+	 * @param {string} workflowName
 	 * @param {*} jobId
+	 * @param {string[] | boolean} fields
 	 * @returns
 	 */
-	async getJob(workflow, jobId) {
-		const [payload] = await this.commandClient.hmget(
-			this.getKey(workflow.name, C.QUEUE_JOB, jobId),
-			["payload"]
-		);
+	async getJob(workflowName, jobId, fields) {
+		if (fields == null) {
+			fields = ["payload", "parent"];
+		}
 
-		return {
-			id: jobId,
-			payload: payload != null ? this.serializer.deserialize(payload) : null
-		};
+		let job;
+
+		if (fields === true) {
+			job = await this.commandClient.hgetall(this.getKey(workflowName, C.QUEUE_JOB, jobId));
+		} else {
+			const values = await this.commandClient.hmget(
+				this.getKey(workflowName, C.QUEUE_JOB, jobId),
+				fields
+			);
+
+			job = fields.reduce((acc, field, i) => {
+				if (values[i] == null) return acc;
+				acc[field] = values[i];
+				return acc;
+			}, {});
+
+			job.id = jobId;
+		}
+
+		if (!job) return null;
+
+		return this.deserializeJob(job);
 	}
 
 	/**
-	 * Get job events from Redis.
+	 * Get a job events from Redis.
 	 *
 	 * @param {Workflow} workflow
-	 * @param {*} jobId
+	 * @param {string} jobId
 	 * @returns
 	 */
 	async getJobEvents(workflow, jobId) {
@@ -437,13 +455,13 @@ class RedisAdapter extends BaseAdapter {
 	 * Move job to completed queue.
 	 *
 	 * @param {Workflow} workflow
-	 * @param {*} jobId
+	 * @param {Job} job
 	 * @param {*} result
 	 */
-	async moveToCompleted(workflow, jobId, result) {
-		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, jobId);
+	async moveToCompleted(workflow, job, result) {
+		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
 		if (this.opts.removeOnComplete) {
-			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, jobId));
+			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
 		} else {
 			const fields = {
 				success: true,
@@ -454,17 +472,26 @@ class RedisAdapter extends BaseAdapter {
 			}
 
 			// Update job
-			await this.commandClient.hmset(this.getKey(workflow.name, C.QUEUE_JOB, jobId), fields);
+			await this.commandClient.hmset(this.getKey(workflow.name, C.QUEUE_JOB, job.id), fields);
 
 			// Push to completed queue
 			await this.commandClient.zadd(
 				this.getKey(workflow.name, C.QUEUE_COMPLETED),
 				fields.completedAt,
-				jobId
+				job.id
 			);
+		}
+
+		if (job.parent) {
+			await this.rescheduleJob(workflow.name, job.parent);
 		}
 	}
 
+	/**
+	 *
+	 * @param {*} retryAttempts
+	 * @returns
+	 */
 	getBackoffTime(retryAttempts) {
 		const backoff = this.opts.backoff;
 		const delay = parseDuration(this.opts.backoffDelay) ?? 100;
@@ -481,15 +508,15 @@ class RedisAdapter extends BaseAdapter {
 	 * Move job to failed queue.
 	 *
 	 * @param {Workflow} workflow
-	 * @param {*} jobId
+	 * @param {Job} job
 	 * @param {*} err
 	 */
-	async moveToFailed(workflow, jobId, err) {
-		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, jobId);
+	async moveToFailed(workflow, job, err) {
+		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
 
 		if (err?.retryable) {
 			let retryFields = await this.commandClient.hmget(
-				this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+				this.getKey(workflow.name, C.QUEUE_JOB, job.id),
 				["retries", "retryAttempts"]
 			);
 			const retries = parseInt(retryFields[0] ?? 0);
@@ -497,7 +524,7 @@ class RedisAdapter extends BaseAdapter {
 
 			if (retries > 0 && retryAttempts < retries) {
 				await this.commandClient.hincrby(
-					this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+					this.getKey(workflow.name, C.QUEUE_JOB, job.id),
 					"retryAttempts",
 					1
 				);
@@ -505,7 +532,7 @@ class RedisAdapter extends BaseAdapter {
 				this.log(
 					"debug",
 					workflow.name,
-					jobId,
+					job.id,
 					`Retrying job after ${backoffTime} ms...`,
 					retryAttempts,
 					retries
@@ -513,14 +540,14 @@ class RedisAdapter extends BaseAdapter {
 
 				const promoteAt = Date.now() + backoffTime;
 				await this.commandClient.hset(
-					this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+					this.getKey(workflow.name, C.QUEUE_JOB, job.id),
 					"promoteAt",
 					promoteAt
 				);
 				await this.commandClient.zadd(
 					this.getKey(workflow.name, C.QUEUE_DELAYED),
 					promoteAt,
-					jobId
+					job.id
 				);
 
 				return;
@@ -528,7 +555,7 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		if (this.opts.removeOnFailed) {
-			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, jobId));
+			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
 		} else {
 			const fields = {
 				success: false,
@@ -540,17 +567,21 @@ class RedisAdapter extends BaseAdapter {
 				);
 			}
 
-			this.log("debug", workflow.name, jobId, `Job move to failed queue.`);
+			this.log("debug", workflow.name, job.id, `Job move to failed queue.`);
 
 			// Update job
-			await this.commandClient.hmset(this.getKey(workflow.name, C.QUEUE_JOB, jobId), fields);
+			await this.commandClient.hmset(this.getKey(workflow.name, C.QUEUE_JOB, job.id), fields);
 
 			// Push to failed queue
 			await this.commandClient.zadd(
 				this.getKey(workflow.name, C.QUEUE_FAILED),
 				fields.failedAt,
-				jobId
+				job.id
 			);
+		}
+
+		if (job.parent) {
+			await this.rescheduleJob(workflow.name, job.parent);
 		}
 	}
 
@@ -641,7 +672,7 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Create a new job and push it to the waiting queue.
+	 * Create a new job and push it to the waiting/delayed queue.
 	 *
 	 * @param {Workflow} workflowName
 	 * @param {*} payload
@@ -655,7 +686,7 @@ class RedisAdapter extends BaseAdapter {
 
 		const job = {
 			id: jobId,
-			payload: this.serializer.serialize(payload),
+			payload,
 			createdAt: Date.now()
 		};
 
@@ -673,20 +704,154 @@ class RedisAdapter extends BaseAdapter {
 			job.promoteAt = Date.now() + job.delay;
 		}
 
-		await this.commandClient.hmset(this.getKey(workflowName, C.QUEUE_JOB, jobId), job);
-		this.log("debug", workflowName, job.id, "Job created.", job);
+		if (opts.repeat) {
+			if (!opts.jobId) {
+				throw new MoleculerError(
+					"Job ID is required for repeatable jobs",
+					400,
+					"MISSING_REPEAT_JOB_ID"
+				);
+			}
 
-		if (job.delay) {
+			job.repeat = opts.repeat;
+
+			if (opts.repeat.endDate) {
+				const endDate = new Date(opts.repeat.endDate).getTime();
+				if (endDate < Date.now()) {
+					throw new MoleculerError(
+						"Repeatable job is expired at " + opts.repeat.endDate,
+						400,
+						"REPEAT_JOB_EXPIRED",
+						{
+							jobId,
+							endDate: opts.repeat.endDate
+						}
+					);
+				}
+			}
+		}
+
+		// Save the Job to Redis
+		await this.commandClient.hmset(
+			this.getKey(workflowName, C.QUEUE_JOB, jobId),
+			this.serializeJob(job)
+		);
+
+		if (job.repeat) {
+			// Repeatable job
+			this.log("debug", workflowName, job.id, "Repeatable job created.", job);
+
+			await this.rescheduleJob(workflowName, job);
+		} else if (job.delay) {
+			// Delayed job
+			this.log(
+				"debug",
+				workflowName,
+				job.id,
+				`Delayed job created. Next run: ${new Date(job.promoteAt).toISOString()}`,
+				job
+			);
 			await this.commandClient.zadd(
 				this.getKey(workflowName, C.QUEUE_DELAYED),
 				job.promoteAt,
 				jobId
 			);
 		} else {
+			// Normal job
+			this.log("debug", workflowName, job.id, "Job created.", job);
 			await this.commandClient.rpush(this.getKey(workflowName, C.QUEUE_WAITING), jobId);
 		}
 
 		return job;
+	}
+
+	serializeJob(job) {
+		const res = { ...job };
+		if (job.payload) {
+			res.payload = this.serializer.serialize(job.payload);
+		}
+		if (job.repeat) {
+			res.repeat = this.serializer.serialize(job.repeat);
+		}
+		return res;
+	}
+
+	deserializeJob(job) {
+		const res = { ...job };
+		if (job.payload) {
+			res.payload = this.serializer.deserialize(job.payload);
+		}
+		if (job.repeat) {
+			res.repeat = this.serializer.deserialize(job.repeat);
+		}
+		return res;
+	}
+
+	/**
+	 *
+	 * @param {*} workflowName
+	 * @param {*} jobId
+	 */
+	async rescheduleJob(workflowName, job) {
+		try {
+			if (typeof job == "string") {
+				job = await this.getJob(workflowName, job, [
+					"payload",
+					"repeat",
+					"retries",
+					"timeout"
+				]);
+			}
+
+			const nextJob = { ...job };
+			delete nextJob.repeat;
+			nextJob.parent = job.id;
+
+			if (job.repeat.cron) {
+				if (job.repeat.endDate) {
+					const endDate = new Date(job.repeat.endDate).getTime();
+					if (endDate < Date.now()) {
+						this.log(
+							"debug",
+							workflowName,
+							job.id,
+							`Repeatable job is expired at ${job.repeat.endDate}. Not rescheduling.`,
+							job
+						);
+						return;
+					}
+				}
+
+				const promoteAt = getCronNextTime(job.repeat.cron, Date.now(), job.repeat.tz);
+				if (!nextJob.promoteAt || nextJob.promoteAt < promoteAt) {
+					nextJob.promoteAt = promoteAt;
+				}
+
+				nextJob.id = job.id + ":" + nextJob.promoteAt;
+
+				// Save the next scheduled Job to Redis
+				await this.commandClient.hmset(
+					this.getKey(workflowName, C.QUEUE_JOB, nextJob.id),
+					this.serializeJob(nextJob)
+				);
+				this.log(
+					"debug",
+					workflowName,
+					job.id,
+					`Scheduled job created. Next run: ${new Date(nextJob.promoteAt).toISOString()}`,
+					nextJob
+				);
+
+				// Push to delayed queue
+				await this.commandClient.zadd(
+					this.getKey(workflowName, C.QUEUE_DELAYED),
+					nextJob.promoteAt,
+					nextJob.id
+				);
+			}
+		} catch (err) {
+			this.log("error", workflowName, job.id, "Error while rescheduling job", err);
+		}
 	}
 
 	/**
@@ -714,6 +879,11 @@ class RedisAdapter extends BaseAdapter {
 		}
 	}
 
+	/**
+	 *
+	 * @param {*} pattern
+	 * @returns
+	 */
 	async cleanDb(pattern) {
 		if (this.commandClient instanceof Redis.Cluster) {
 			return this.clusterCleanDb(pattern);
@@ -722,6 +892,11 @@ class RedisAdapter extends BaseAdapter {
 		}
 	}
 
+	/**
+	 *
+	 * @param {*} pattern
+	 * @returns
+	 */
 	async clusterCleanDb(pattern) {
 		// get only master nodes to scan for deletion,
 		// if we get slave nodes, it would be failed for deletion.
@@ -730,6 +905,12 @@ class RedisAdapter extends BaseAdapter {
 			.map(async node => this.nodeScanDel(node, pattern));
 	}
 
+	/**
+	 *
+	 * @param {*} node
+	 * @param {*} pattern
+	 * @returns
+	 */
 	async nodeCleanDb(node, pattern) {
 		return new Promise((resolve, reject) => {
 			const stream = node.scanStream({
@@ -807,23 +988,28 @@ class RedisAdapter extends BaseAdapter {
 					`Found ${jobIds.length} delayed jobs:`,
 					jobIds
 				);
-				try {
-					await this.commandClient.lpush(
-						this.getKey(workflow.name, C.QUEUE_WAITING),
-						jobIds
-					);
-					await this.commandClient.zrem(
-						this.getKey(workflow.name, C.QUEUE_DELAYED),
-						jobIds
-					);
-				} catch (err) {
-					this.log(
-						"error",
-						workflow.name,
-						null,
-						"Error while moving delayed jobs to waiting queue",
-						err
-					);
+				for (const jobId of jobIds) {
+					try {
+						const job = await this.getJob(workflow.name, jobId, ["id"]);
+						if (job) {
+							await this.commandClient.lpush(
+								this.getKey(workflow.name, C.QUEUE_WAITING),
+								jobId
+							);
+						}
+						await this.commandClient.zrem(
+							this.getKey(workflow.name, C.QUEUE_DELAYED),
+							jobId
+						);
+					} catch (err) {
+						this.log(
+							"error",
+							workflow.name,
+							null,
+							"Error while moving delayed jobs to waiting queue",
+							err
+						);
+					}
 				}
 			}
 		} catch (err) {
