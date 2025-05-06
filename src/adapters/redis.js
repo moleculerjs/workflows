@@ -179,10 +179,7 @@ class RedisAdapter extends BaseAdapter {
 		this.disconnecting = true;
 		this.connected = false;
 
-		if (this.blockedClient) {
-			await this.blockedClient.quit();
-			this.blockedClient = null;
-		}
+		await super.disconnect();
 
 		if (this.commandClient) {
 			await this.commandClient.quit();
@@ -244,8 +241,8 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {string} workflow - The name of the workflow.
 	 */
 	startJobProcessor(workflow) {
-		if (!this.jobClients[workflow]) {
-			this.runJobProcessor(workflow);
+		if (!this.jobClients[workflow.name]) {
+			this.runJobProcessor(workflow.name);
 		}
 	}
 
@@ -256,9 +253,9 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the job processor is stopped.
 	 */
 	async stopJobProcessor(workflow) {
-		if (this.jobClients[workflow]) {
-			await this.jobClients[workflow].quit();
-			this.jobClients[workflow].stopped = true;
+		if (this.jobClients[workflow.name]) {
+			await this.jobClients[workflow.name].quit();
+			this.jobClients[workflow.name].stopped = true;
 		}
 	}
 

@@ -82,6 +82,12 @@ class BaseAdapter {
 		this.setNextMaintenance();
 	}
 
+	disconnect() {
+		if (this.maintenanceTimer) {
+			clearTimeout(this.maintenanceTimer);
+		}
+	}
+
 	/**
 	 *
 	 * @param {*} level
@@ -173,15 +179,6 @@ class BaseAdapter {
 		this.workflows.forEach(workflow => {
 			this.startJobProcessor(workflow);
 		});
-	}
-
-	/**
-	 * Disconnect from adapter
-	 * @returns {Promise<void>}
-	 */
-	async disconnect() {
-		/* istanbul ignore next */
-		throw new Error("Abstract method is not implemented.");
 	}
 
 	/**
