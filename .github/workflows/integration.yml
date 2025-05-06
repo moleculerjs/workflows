@@ -43,7 +43,7 @@ jobs:
 
     - name: Start containers for ${{ matrix.adapter }} adapter
       run: docker compose up -d redis && sleep 10
-      if: ${{ matrix.adapter == 'reid' }}
+      if: ${{ matrix.adapter == 'Redis' }}
       working-directory: ./test
 
     - name: Check containers
