@@ -129,12 +129,14 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.remove = (workflowName, jobId) => {
+				adapter.checkWorkflowName(workflowName);
+
 				if (!jobId) {
 					return Promise.reject(
 						new MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
 					);
 				}
-				return adapter.removeJob(workflowName, jobId);
+				return adapter.cleanUp(workflowName, jobId);
 			};
 
 			/**
@@ -146,6 +148,16 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.signal = (signalName, key, payload) => {
+				if (!signalName) {
+					return Promise.reject(
+						new MoleculerError("Signal name is required!", 400, "SIGNAL_NAME_REQUIRED")
+					);
+				}
+				if (!key) {
+					return Promise.reject(
+						new MoleculerError("Signal key is required!", 400, "SIGNAL_KEY_REQUIRED")
+					);
+				}
 				broker.metrics.increment(
 					C.METRIC_WORKFLOWS_SIGNAL_TOTAL,
 					{ signal: signalName },
@@ -158,11 +170,66 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * Get state of a workflow run.
 			 *
 			 * @param {string} workflowName
-			 * @param {string} workflowId
+			 * @param {string} jobId
 			 * @returns
 			 */
-			broker.wf.getState = (workflowName, workflowId) => {
-				return adapter.getState(workflowName, workflowId);
+			broker.wf.getState = (workflowName, jobId) => {
+				adapter.checkWorkflowName(workflowName);
+
+				if (!jobId) {
+					return Promise.reject(
+						new MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
+					);
+				}
+				return adapter.getState(workflowName, jobId);
+			};
+
+			/**
+			 * Get job details of a workflow run.
+			 *
+			 * @param {string} workflowName
+			 * @param {string} jobId
+			 * @returns
+			 */
+			broker.wf.get = (workflowName, jobId) => {
+				adapter.checkWorkflowName(workflowName);
+
+				if (!jobId) {
+					return Promise.reject(
+						new MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
+					);
+				}
+				return adapter.getJob(workflowName, jobId, true);
+			};
+
+			/**
+			 * Get job events of a workflow run.
+			 *
+			 * @param {string} workflowName
+			 * @param {string} jobId
+			 * @returns
+			 */
+			broker.wf.getEvents = (workflowName, jobId) => {
+				adapter.checkWorkflowName(workflowName);
+
+				if (!jobId) {
+					return Promise.reject(
+						new MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
+					);
+				}
+				return adapter.getJobEvents(workflowName, jobId, true);
+			};
+
+			/**
+			 * Delete all workflow jobs & history.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.cleanUp = workflowName => {
+				adapter.checkWorkflowName(workflowName);
+
+				return adapter.cleanUp(workflowName);
 			};
 
 			// Add adapter reference to the broker instance

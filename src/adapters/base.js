@@ -165,6 +165,7 @@ class BaseAdapter {
 
 	/**
 	 * Connect to the adapter.
+	 *
 	 * @returns {Promise<void>}
 	 */
 	async connect() {
@@ -182,7 +183,7 @@ class BaseAdapter {
 	}
 
 	/**
-	 *
+	 * Start the job processor for the given workflow.
 	 */
 	startJobProcessor(/*workflow*/) {
 		/* istanbul ignore next */
@@ -190,7 +191,7 @@ class BaseAdapter {
 	}
 
 	/**
-	 *
+	 * Stop the job processor for the given workflow.
 	 */
 	stopJobProcessor(/*workflow*/) {
 		/* istanbul ignore next */
@@ -205,19 +206,7 @@ class BaseAdapter {
 	 * @param {*} opts
 	 * @returns {Promise<any>}
 	 */
-	async createJob(workflowName, payload, opts) {
-		/* istanbul ignore next */
-		throw new Error("Abstract method is not implemented.");
-	}
-
-	/**
-	 * Remove a job.
-	 *
-	 * @param {string} workflowName
-	 * @param {string} jobId
-	 * @returns {Promise<any>}
-	 */
-	async removeJob(workflowName, jobId) {
+	async createJob(/*workflowName, payload, opts*/) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -475,13 +464,37 @@ class BaseAdapter {
 
 	/**
 	 * Get state of a workflow run.
-	 * TODO:
 	 *
 	 * @param {string} workflowName
-	 * @param {string} workflowId
+	 * @param {string} jobId
 	 * @returns
 	 */
-	async getState(/*workflowName, workflowId*/) {
+	async getState(/*workflowName, jobId*/) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Get a job details.
+	 *
+	 * @param {string} workflowName - The name of the workflow.
+	 * @param {string} jobId - The ID of the job.
+	 * @param {string[]|boolean} fields - The fields to retrieve or true to retrieve all fields.
+	 * @returns {Promise<Object|null>} Resolves with the job object or null if not found.
+	 */
+	async getJob(/*workflowName, jobId, fields*/) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Get job events from Redis.
+	 *
+	 * @param {string} workflowName - The name of the workflow.
+	 * @param {string} jobId - The ID of the job.
+	 * @returns {Promise<Object[]>} Resolves with an array of job events.
+	 */
+	async getJobEvents(workflowName, jobId) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -493,7 +506,7 @@ class BaseAdapter {
 	 * @param {string?} jobId
 	 * @returns {Promise<void>}
 	 */
-	async cleanUp(workflowName, jobId) {
+	async cleanUp(/*workflowName, jobId*/) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}

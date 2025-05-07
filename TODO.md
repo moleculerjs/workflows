@@ -5,7 +5,7 @@
   - [x] endDate
   - [x] Remove repeated job by jobId
 - [ ] Job error handling (if it crashed the job, don't save to events, to avoid replaying crasher error)
-- [ ] Get workflow state
+- [x] Get workflow state
 - [ ] job timeout handling
 - [ ] Integration tests
 - [ ] Performance improvement

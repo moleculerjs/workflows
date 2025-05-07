@@ -14,6 +14,8 @@ const WorkFlowsMiddleware = require("../../index").Middleware;
 
 let c = 1;
 
+let lastJobId;
+
 const isNoService = process.argv[2] === "noservice";
 
 // Create broker
@@ -80,7 +82,7 @@ const broker = new ServiceBroker({
 					jobOpts.repeat = { cron: options.cron /*endDate: "2025-05-06T19:25:00Z"*/ };
 				}
 
-				broker.wf.run(
+				const job = await broker.wf.run(
 					options.workflow || "test.wf1",
 					{
 						c: c++,
@@ -90,6 +92,9 @@ const broker = new ServiceBroker({
 					},
 					jobOpts
 				);
+
+				lastJobId = job.id;
+				console.log("Job started", job);
 			}
 		},
 
@@ -109,7 +114,79 @@ const broker = new ServiceBroker({
 			async action(broker, args) {
 				const { options } = args;
 				//console.log(options);
-				return broker.wf.remove(options.workflow || "test.wf1", options.jobId);
+				return broker.wf.remove(options.workflow || "test.wf1", options.jobId || lastJobId);
+			}
+		},
+
+		{
+			command: "state",
+			alias: ["t"],
+			options: [
+				{
+					option: "-w, --workflow <workflowName>",
+					description: "Name of the workflow. Default: 'test.wf1'"
+				},
+				{
+					option: "-j, --jobId <jobId>",
+					description: "Job ID to run the workflow with"
+				}
+			],
+			async action(broker, args) {
+				const { options } = args;
+				//console.log(options);
+				const state = await broker.wf.getState(
+					options.workflow || "test.wf1",
+					options.jobId || lastJobId
+				);
+				console.log("State", state);
+			}
+		},
+
+		{
+			command: "get",
+			alias: ["g"],
+			options: [
+				{
+					option: "-w, --workflow <workflowName>",
+					description: "Name of the workflow. Default: 'test.wf1'"
+				},
+				{
+					option: "-j, --jobId <jobId>",
+					description: "Job ID to run the workflow with"
+				}
+			],
+			async action(broker, args) {
+				const { options } = args;
+				//console.log(options);
+				const job = await broker.wf.get(
+					options.workflow || "test.wf1",
+					options.jobId || lastJobId
+				);
+				console.log(job);
+			}
+		},
+
+		{
+			command: "jobEvents",
+			alias: ["e"],
+			options: [
+				{
+					option: "-w, --workflow <workflowName>",
+					description: "Name of the workflow. Default: 'test.wf1'"
+				},
+				{
+					option: "-j, --jobId <jobId>",
+					description: "Job ID to run the workflow with"
+				}
+			],
+			async action(broker, args) {
+				const { options } = args;
+				//console.log(options);
+				const job = await broker.wf.getEvents(
+					options.workflow || "test.wf1",
+					options.jobId || lastJobId
+				);
+				console.log(job);
 			}
 		},
 
@@ -127,7 +204,7 @@ const broker = new ServiceBroker({
 				// console.log(args);
 				const signalName = options.signalName ?? "test.signal";
 				const key = !Number.isNaN(Number(options.key)) ? Number(options.key) : options.key;
-				broker.wf.adapter.triggerSignal(signalName, key, { user: "John Doe" });
+				broker.wf.signal(signalName, key, { user: "John Doe" });
 			}
 		},
 
@@ -137,7 +214,7 @@ const broker = new ServiceBroker({
 			async action(broker, args) {
 				const { options } = args;
 				//console.log(options);
-				broker.wf.adapter.cleanUp("test.wf1");
+				broker.wf.cleanUp("test.wf1");
 			}
 		}
 	]
@@ -155,39 +232,36 @@ if (!isNoService) {
 				// Workflow handler
 				async handler(ctx) {
 					this.logger.info("WF handler start", ctx.params, ctx.wf.jobId);
-					/*
 
-				const res = await ctx.call("test.list");
-				await ctx.wf.setState("afterList");
+					const res = await ctx.call("test.list");
+					await ctx.wf.setState("afterList");
 
-				await ctx.emit("test.event");
-				await ctx.wf.setState("afterEvent");
+					await ctx.emit("test.event");
+					await ctx.wf.setState("afterEvent");
 
-				const post = await ctx.wf.run("fetch", async () => {
-					const res = await fetch("https://jsonplaceholder.typicode.com/posts/1");
-					return await res.json();
-				});
-				await ctx.wf.setState("afterFetch");
-				this.logger.info("Post result", post);
+					const post = await ctx.wf.run("fetch", async () => {
+						const res = await fetch("https://jsonplaceholder.typicode.com/posts/1");
+						return await res.json();
+					});
+					await ctx.wf.setState("afterFetch");
+					this.logger.info("Post result", post);
 
-				for (let i = 0; i < 1; i++) {
-					this.logger.info("Sleeping...");
-					await ctx.wf.sleep(5000);
-				}
-				await ctx.wf.setState("afterSleep");
+					for (let i = 0; i < 5; i++) {
+						this.logger.info("Sleeping...");
+						await ctx.wf.sleep(1000);
+						await ctx.wf.setState("afterSleep-" + (i + 1));
+					}
 
-				//await ctx.call("test.danger", { name: "John Doe" });
+					//await ctx.call("test.danger", { name: "John Doe" });
 
-				const signalRes = await ctx.wf.waitForSignal("test.signal", 123);
-				this.logger.info("Signal result", signalRes);
-
-				*/
-
-					// await ctx.call("test.danger", { name: "John Doe" });
+					const signalRes = await ctx.wf.waitForSignal("test.signal", 123);
+					this.logger.info("Signal result", signalRes);
 
 					this.logger.info("WF handler end", ctx.wf.jobId);
 
-					return true;
+					await ctx.wf.setState({ progress: 100 });
+
+					return post;
 				}
 			},
 

@@ -358,7 +358,7 @@ class RedisAdapter extends BaseAdapter {
 			return;
 		}
 
-		const jobEvents = await this.getJobEvents(workflow, jobId);
+		const jobEvents = await this.getJobEvents(workflow.name, jobId);
 
 		const unlock = await this.lock(workflow, jobId);
 		try {
@@ -437,14 +437,13 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {string} jobId - The ID of the job.
 	 * @returns {Promise<Object[]>} Resolves with an array of job events.
 	 */
-	async getJobEvents(workflow, jobId) {
+	async getJobEvents(workflowName, jobId) {
 		const jobEvents = await this.commandClient.lrange(
-			this.getKey(workflow.name, C.QUEUE_EVENTS, jobId),
+			this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId),
 			0,
 			-1
 		);
 
-		this.log("debug", workflow.name, jobId, "Job events:", jobEvents);
 		return jobEvents.map(e => this.serializer.deserialize(e));
 	}
 
@@ -458,7 +457,7 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	async addJobEvent(workflow, jobId, event) {
 		await this.commandClient.rpush(
-			this.getKey(workflow.name, C.QUEUE_EVENTS, jobId),
+			this.getKey(workflow.name, C.QUEUE_JOB_EVENTS, jobId),
 			this.serializer.serialize({
 				...event,
 				ts: Date.now(),
@@ -482,7 +481,7 @@ class RedisAdapter extends BaseAdapter {
 		} else {
 			const fields = {
 				success: true,
-				completedAt: Date.now()
+				finishedAt: Date.now()
 			};
 			if (result != null) {
 				fields.result = this.serializer.serialize(result);
@@ -494,7 +493,7 @@ class RedisAdapter extends BaseAdapter {
 			// Push to completed queue
 			await this.commandClient.zadd(
 				this.getKey(workflow.name, C.QUEUE_COMPLETED),
-				fields.completedAt,
+				fields.finishedAt,
 				job.id
 			);
 		}
@@ -572,7 +571,7 @@ class RedisAdapter extends BaseAdapter {
 		} else {
 			const fields = {
 				success: false,
-				failedAt: Date.now()
+				finishedAt: Date.now()
 			};
 			if (err != null) {
 				fields.error = this.serializer.serialize(
@@ -588,7 +587,7 @@ class RedisAdapter extends BaseAdapter {
 			// Push to failed queue
 			await this.commandClient.zadd(
 				this.getKey(workflow.name, C.QUEUE_FAILED),
-				fields.failedAt,
+				fields.finishedAt,
 				job.id
 			);
 		}
@@ -613,6 +612,22 @@ class RedisAdapter extends BaseAdapter {
 			this.serializer.serialize(state)
 		);
 		this.log("debug", workflow.name, jobId, "Job state set.", state);
+	}
+
+	/**
+	 * Get state of a workflow run.
+	 *
+	 * @param {string} workflowName
+	 * @param {string} jobId
+	 * @returns
+	 */
+	async getState(workflowName, jobId) {
+		const state = await this.commandClient.hget(
+			this.getKey(workflowName, C.QUEUE_JOB, jobId),
+			"state"
+		);
+
+		return state != null ? this.serializer.deserialize(state) : null;
 	}
 
 	/**
@@ -779,23 +794,6 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Remove a job.
-	 *
-	 * @param {string} workflowName
-	 * @param {string} jobId
-	 * @returns {Promise<any>}
-	 */
-	async removeJob(workflowName, jobId) {
-		const removed = await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB, jobId));
-		await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_LOCK, jobId));
-		await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId));
-		await this.commandClient.lrem(this.getKey(workflowName, C.QUEUE_WAITING), 1, jobId);
-
-		this.log("info", workflowName, jobId, "Job removed.");
-		return removed > 0;
-	}
-
-	/**
 	 * Serialize a job object for storage in Redis.
 	 *
 	 * @param {Object} job - The job object to serialize.
@@ -820,11 +818,32 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	deserializeJob(job) {
 		const res = { ...job };
-		if (job.payload) {
+		if (job.payload != null) {
 			res.payload = this.serializer.deserialize(job.payload);
 		}
-		if (job.repeat) {
+		if (job.repeat != null) {
 			res.repeat = this.serializer.deserialize(job.repeat);
+		}
+		if (job.result != null) {
+			res.result = this.serializer.deserialize(job.result);
+		}
+		if (job.error != null) {
+			res.error = this.serializer.deserialize(job.error);
+		}
+		if (job.state != null) {
+			res.state = this.serializer.deserialize(job.state);
+		}
+		if (job.createdAt != null) {
+			res.createdAt = Number(job.createdAt);
+		}
+		if (job.startedAt != null) {
+			res.startedAt = Number(job.startedAt);
+		}
+		if (job.finishedAt != null) {
+			res.finishedAt = Number(job.finishedAt);
+		}
+		if (job.promoteAt != null) {
+			res.promoteAt = Number(job.promoteAt);
 		}
 		return res;
 	}
@@ -919,6 +938,7 @@ class RedisAdapter extends BaseAdapter {
 			await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB, jobId));
 			await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_LOCK, jobId));
 			await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId));
+			await this.commandClient.lrem(this.getKey(workflowName, C.QUEUE_WAITING), 1, jobId);
 			this.log("info", workflowName, jobId, "Cleaned up job store.");
 		} else if (workflowName) {
 			await this.cleanDb(this.getKey(workflowName) + ":*");
@@ -1164,7 +1184,7 @@ class RedisAdapter extends BaseAdapter {
 				);
 				const jobKeys = jobIds.map(jobId => this.getKey(workflow.name, C.QUEUE_JOB, jobId));
 				const jobEventsKeys = jobIds.map(jobId =>
-					this.getKey(workflow.name, C.QUEUE_EVENTS, jobId)
+					this.getKey(workflow.name, C.QUEUE_JOB_EVENTS, jobId)
 				);
 				await this.commandClient.del(jobKeys);
 				await this.commandClient.del(jobEventsKeys);

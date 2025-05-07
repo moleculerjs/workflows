@@ -1,8 +1,8 @@
 module.exports = {
 	QUEUE_JOB: "job",
 	QUEUE_JOB_LOCK: "job-lock",
+	QUEUE_JOB_EVENTS: "job-events",
 	QUEUE_MAINTENANCE_LOCK: "maintenance-lock",
-	QUEUE_EVENTS: "job-events",
 	QUEUE_SIGNAL: "signal",
 	QUEUE_WAITING: "waiting",
 	QUEUE_ACTIVE: "active",
