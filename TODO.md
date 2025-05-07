@@ -3,7 +3,9 @@
 - [x] Scheduling
   - [x] Cron
   - [x] endDate
+  - [ ] count of executions
   - [x] Remove repeated job by jobId
+  - [ ] 
 - [ ] Job error handling (if it crashed the job, don't save to events, to avoid replaying crasher error)
 - [x] Get workflow state
 - [ ] jobId collision policy

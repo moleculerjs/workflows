@@ -585,6 +585,36 @@ class BaseAdapter {
 
 		return jobId;
 	}
+
+	/**
+	 * Check if the job ID is valid.
+	 *
+	 * @param {String} jobId
+	 */
+	checkSignal(signalName, key) {
+		const re = /^[a-zA-Z0-9_.-]+$/;
+		if (!re.test(signalName)) {
+			throw new MoleculerError(
+				`Invalid signal name '${signalName}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
+				400,
+				"INVALID_SIGNAL_NAME",
+				{
+					signalName
+				}
+			);
+		}
+
+		if (!re.test(key)) {
+			throw new MoleculerError(
+				`Invalid signal key '${key}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
+				400,
+				"INVALID_SIGNAL_KEY",
+				{
+					key
+				}
+			);
+		}
+	}
 }
 
 module.exports = BaseAdapter;

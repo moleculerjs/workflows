@@ -177,11 +177,14 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						new MoleculerError("Signal name is required!", 400, "SIGNAL_NAME_REQUIRED")
 					);
 				}
+
 				if (!key) {
 					return Promise.reject(
 						new MoleculerError("Signal key is required!", 400, "SIGNAL_KEY_REQUIRED")
 					);
 				}
+
+				adapter.checkSignal(signalName, key);
 
 				if (broker.isMetricsEnabled()) {
 					broker.metrics.increment(C.METRIC_WORKFLOWS_SIGNAL_TOTAL, {
@@ -209,6 +212,8 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						new MoleculerError("Signal key is required!", 400, "SIGNAL_KEY_REQUIRED")
 					);
 				}
+
+				adapter.checkSignal(signalName, key);
 
 				return adapter.removeSignal(signalName, key);
 			};
