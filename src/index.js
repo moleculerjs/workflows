@@ -111,12 +111,30 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.run = (workflowName, payload, opts) => {
+				adapter.checkWorkflowName(workflowName);
+
 				broker.metrics.increment(
 					C.METRIC_WORKFLOWS_RUN_TOTAL,
 					{ workflow: workflowName },
 					1
 				);
 				return adapter.createJob(workflowName, payload, opts);
+			};
+
+			/**
+			 * Remove a workflow job
+			 *
+			 * @param {String} workflowName
+			 * @param {string} jobId
+			 * @returns
+			 */
+			broker.wf.remove = (workflowName, jobId) => {
+				if (!jobId) {
+					return Promise.reject(
+						new MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
+					);
+				}
+				return adapter.removeJob(workflowName, jobId);
 			};
 
 			/**
@@ -186,6 +204,8 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						}
 
 						if (!wf.name) wf.name = svc.fullName + "." + name;
+
+						adapter.checkWorkflowName(wf.name);
 
 						// Wrap the original handler
 						let handler = broker.Promise.method(wf.handler).bind(svc);

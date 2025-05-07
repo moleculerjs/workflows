@@ -14,6 +14,8 @@ const WorkFlowsMiddleware = require("../../index").Middleware;
 
 let c = 1;
 
+const isNoService = process.argv[2] === "noservice";
+
 // Create broker
 const broker = new ServiceBroker({
 	logger: {
@@ -66,7 +68,7 @@ const broker = new ServiceBroker({
 			],
 			async action(broker, args) {
 				const { options } = args;
-				console.log(options);
+				//console.log(options);
 				const jobOpts = {
 					jobId: options.jobId,
 					delay: options.delay,
@@ -88,6 +90,26 @@ const broker = new ServiceBroker({
 					},
 					jobOpts
 				);
+			}
+		},
+
+		{
+			command: "delete",
+			alias: ["d"],
+			options: [
+				{
+					option: "-w, --workflow <workflowName>",
+					description: "Name of the workflow. Default: 'test.wf1'"
+				},
+				{
+					option: "-j, --jobId <jobId>",
+					description: "Job ID to run the workflow with"
+				}
+			],
+			async action(broker, args) {
+				const { options } = args;
+				//console.log(options);
+				return broker.wf.remove(options.workflow || "test.wf1", options.jobId);
 			}
 		},
 
@@ -121,18 +143,19 @@ const broker = new ServiceBroker({
 	]
 });
 
-// Create a service
-broker.createService({
-	name: "test",
+if (!isNoService) {
+	// Create a service
+	broker.createService({
+		name: "test",
 
-	// Define workflows
-	workflows: {
-		// User signup workflow.
-		wf1: {
-			// Workflow handler
-			async handler(ctx) {
-				this.logger.info("WF handler start", ctx.params, ctx.wf.jobId);
-				/*
+		// Define workflows
+		workflows: {
+			// User signup workflow.
+			wf1: {
+				// Workflow handler
+				async handler(ctx) {
+					this.logger.info("WF handler start", ctx.params, ctx.wf.jobId);
+					/*
 
 				const res = await ctx.call("test.list");
 				await ctx.wf.setState("afterList");
@@ -160,47 +183,53 @@ broker.createService({
 
 				*/
 
-				// await ctx.call("test.danger", { name: "John Doe" });
+					// await ctx.call("test.danger", { name: "John Doe" });
 
-				this.logger.info("WF handler end", ctx.wf.jobId);
+					this.logger.info("WF handler end", ctx.wf.jobId);
 
-				return true;
-			}
-		}
-	},
+					return true;
+				}
+			},
 
-	actions: {
-		list: {
-			async handler(ctx) {
-				// List something
-
-				this.logger.info("List something");
-
-				return [
-					{ id: 1, name: "John Doe" },
-					{ id: 2, name: "Jane Doe" },
-					{ id: 3, name: "Jack Doe" }
-				];
+			wf2: {
+				name: "wf2",
+				handler(ctx) {}
 			}
 		},
 
-		danger(ctx) {
-			this.logger.info("Danger action", ctx.params);
-			if (Math.random() > 0.5) {
-				throw new MoleculerRetryableError("Random error");
-			}
-			return { ok: true };
-		}
-	},
+		actions: {
+			list: {
+				async handler(ctx) {
+					// List something
 
-	events: {
-		"test.event": {
-			async handler(ctx) {
-				this.logger.info("Test Event handler", ctx.params);
+					this.logger.info("List something");
+
+					return [
+						{ id: 1, name: "John Doe" },
+						{ id: 2, name: "Jane Doe" },
+						{ id: 3, name: "Jack Doe" }
+					];
+				}
+			},
+
+			danger(ctx) {
+				this.logger.info("Danger action", ctx.params);
+				if (Math.random() > 0.5) {
+					throw new MoleculerRetryableError("Random error");
+				}
+				return { ok: true };
+			}
+		},
+
+		events: {
+			"test.event": {
+				async handler(ctx) {
+					this.logger.info("Test Event handler", ctx.params);
+				}
 			}
 		}
-	}
-});
+	});
+}
 
 // Start server
 broker

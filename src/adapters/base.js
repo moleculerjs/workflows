@@ -211,6 +211,18 @@ class BaseAdapter {
 	}
 
 	/**
+	 * Remove a job.
+	 *
+	 * @param {string} workflowName
+	 * @param {string} jobId
+	 * @returns {Promise<any>}
+	 */
+	async removeJob(workflowName, jobId) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
 	 * Create a workflow context for the given workflow and job.
 	 *
 	 * @param {Workflow} workflow The workflow object.
@@ -533,6 +545,47 @@ class BaseAdapter {
 		);
 
 		this.setNextMaintenance();
+	}
+
+	/**
+	 * Check if the workflow name is valid.
+	 * @param {String} workflowName
+	 */
+	checkWorkflowName(workflowName) {
+		const re = /^[a-zA-Z0-9_.-]+$/;
+		if (!re.test(workflowName)) {
+			throw new MoleculerError(
+				`Invalid workflow name '${workflowName}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
+				400,
+				"INVALID_WORKFLOW_NAME",
+				{
+					workflowName
+				}
+			);
+		}
+
+		return workflowName;
+	}
+
+	/**
+	 * Check if the job ID is valid.
+	 *
+	 * @param {String} jobId
+	 */
+	checkJobId(jobId) {
+		const re = /^[a-zA-Z0-9_.-]+$/;
+		if (!re.test(jobId)) {
+			throw new MoleculerError(
+				`Invalid job ID '${jobId}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
+				400,
+				"INVALID_JOB_ID",
+				{
+					jobId
+				}
+			);
+		}
+
+		return jobId;
 	}
 }
 

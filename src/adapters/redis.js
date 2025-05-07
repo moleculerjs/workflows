@@ -403,6 +403,11 @@ class RedisAdapter extends BaseAdapter {
 			fields = ["payload", "parent"];
 		}
 
+		const exists = await this.commandClient.exists(
+			this.getKey(workflowName, C.QUEUE_JOB, jobId)
+		);
+		if (!exists) return null;
+
 		let job;
 
 		if (fields === true) {
@@ -421,8 +426,6 @@ class RedisAdapter extends BaseAdapter {
 
 			job.id = jobId;
 		}
-
-		if (!job) return null;
 
 		return this.deserializeJob(job);
 	}
@@ -692,7 +695,7 @@ class RedisAdapter extends BaseAdapter {
 	async createJob(workflowName, payload, opts) {
 		opts = opts || {};
 
-		const jobId = opts.jobId ?? this.broker.generateUid();
+		const jobId = this.checkJobId(opts.jobId) ?? this.broker.generateUid();
 
 		const job = {
 			id: jobId,
@@ -776,6 +779,23 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
+	 * Remove a job.
+	 *
+	 * @param {string} workflowName
+	 * @param {string} jobId
+	 * @returns {Promise<any>}
+	 */
+	async removeJob(workflowName, jobId) {
+		const removed = await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB, jobId));
+		await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_LOCK, jobId));
+		await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId));
+		await this.commandClient.lrem(this.getKey(workflowName, C.QUEUE_WAITING), 1, jobId);
+
+		this.log("info", workflowName, jobId, "Job removed.");
+		return removed > 0;
+	}
+
+	/**
 	 * Serialize a job object for storage in Redis.
 	 *
 	 * @param {Object} job - The job object to serialize.
@@ -825,6 +845,11 @@ class RedisAdapter extends BaseAdapter {
 					"retries",
 					"timeout"
 				]);
+
+				if (!job) {
+					this.log("warn", workflowName, job, "Parent job not found. Not rescheduling.");
+					return;
+				}
 			}
 
 			const nextJob = { ...job };
@@ -1040,20 +1065,34 @@ class RedisAdapter extends BaseAdapter {
 		this.log("debug", workflow.name, null, "Maintenance stalled jobs...");
 
 		try {
-			const activeJobIds = await this.commandClient.lrange(
-				this.getKey(workflow.name, C.QUEUE_ACTIVE),
-				0,
-				-1
+			const stalledJobIds = await this.commandClient.smembers(
+				this.getKey(workflow.name, C.QUEUE_STALLED)
 			);
-			if (activeJobIds.length > 0) {
-				for (const jobId of activeJobIds) {
+			if (stalledJobIds.length > 0) {
+				for (const jobId of stalledJobIds) {
 					try {
+						// Check the job lock is exists
 						const exists = await this.commandClient.exists(
 							this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId)
 						);
 						if (exists == 0) {
-							await this.moveStalledJobsToFailed(workflow, jobId);
+							// Check the job is in the active queue
+							const removed = await this.commandClient.lrem(
+								this.getKey(workflow.name, C.QUEUE_ACTIVE),
+								1,
+								jobId
+							);
+							if (removed > 0) {
+								// Move the job back to the waiting queue
+								await this.moveStalledJobsToWaiting(workflow, jobId);
+							}
 						}
+
+						// Remove from stalled queue
+						await this.commandClient.srem(
+							this.getKey(workflow.name, C.QUEUE_STALLED),
+							jobId
+						);
 					} catch (err) {
 						this.log(
 							"error",
@@ -1065,32 +1104,36 @@ class RedisAdapter extends BaseAdapter {
 					}
 				}
 			}
+
+			// Copy active jobIds to stalled queue
+			const activeJobIds = await this.commandClient.lrange(
+				this.getKey(workflow.name, C.QUEUE_ACTIVE),
+				0,
+				-1
+			);
+			if (activeJobIds.length > 0) {
+				await this.commandClient.sadd(
+					this.getKey(workflow.name, C.QUEUE_STALLED),
+					activeJobIds
+				);
+			}
 		} catch (err) {
 			this.log("error", workflow.name, null, "Error while processing stalled jobs", err);
 		}
 	}
 
 	/**
-	 * Move stalled jobs to the failed queue.
+	 * Move stalled job back to the waiting queue.
 	 *
 	 * @param {Object} workflow - The workflow object.
 	 * @param {string} jobId - The ID of the stalled job.
 	 * @returns {Promise<void>} Resolves when the job is moved to the failed queue.
 	 */
-	async moveStalledJobsToFailed(workflow, jobId) {
-		const res = await this.commandClient.lrem(
-			this.getKey(workflow.name, C.QUEUE_ACTIVE),
-			1,
-			jobId
-		);
-		// Check if the job was removed from the active queue (maybe someone else removed it already)
-		if (res > 0) {
-			await this.addJobEvent(workflow, jobId, { type: "stalled" });
+	async moveStalledJobsToWaiting(workflow, jobId) {
+		await this.addJobEvent(workflow, jobId, { type: "stalled" });
 
-			this.log("debug", workflow.name, jobId, `Job is stalled. Moved back to waiting queue.`);
-
-			await this.commandClient.lpush(this.getKey(workflow.name, C.QUEUE_WAITING), jobId);
-		}
+		this.log("debug", workflow.name, jobId, `Job is stalled. Moved back to waiting queue.`);
+		await this.commandClient.lpush(this.getKey(workflow.name, C.QUEUE_WAITING), jobId);
 	}
 
 	/**

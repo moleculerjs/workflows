@@ -6,6 +6,7 @@ module.exports = {
 	QUEUE_SIGNAL: "signal",
 	QUEUE_WAITING: "waiting",
 	QUEUE_ACTIVE: "active",
+	QUEUE_STALLED: "stalled",
 	QUEUE_DELAYED: "delayed",
 	QUEUE_COMPLETED: "completed",
 	QUEUE_FAILED: "failed",
