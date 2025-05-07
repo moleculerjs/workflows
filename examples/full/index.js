@@ -191,7 +191,7 @@ broker.createService({
 		// this.broker.wf.run("notifyNonLoggedUsers", {}, {
 		// 	jobId: "midnight-notify", // Only start a new schedule if not exists with the same jobId
 		// 	// Delayed run
-		// 	startDelay: "1 hour",
+		// 	delay: "1 hour",
 		// 	// Recurring run
 		// 	repeat: {
 		// 		cron: "0 0 * * *" // run every midnight

@@ -202,14 +202,28 @@ class BaseAdapter {
 			jobId: job.id
 		};
 
-		const getCurrentTaskEvent = () =>
-			events?.find(e => e.type == "task" && e.taskId === taskId);
+		const maxEventTaskId = Math.max(
+			0,
+			...(events || []).filter(e => e.type == "task").map(e => e.taskId || 0)
+		);
 
-		const taskEvent = async (taskType, data) => {
+		const getCurrentTaskEvent = () => {
+			const event = events?.find(e => e.type == "task" && e.taskId === taskId);
+			if (event?.error) {
+				if (taskId == maxEventTaskId) {
+					// If it's the last task, we don't throw the error because it should retry to execute it.
+					return null;
+				}
+			}
+			return event;
+		};
+
+		const taskEvent = async (taskType, data, startTime) => {
 			return await this.addJobEvent(workflow, job.id, {
 				type: "task",
 				taskId,
 				taskType,
+				duration: startTime ? Date.now() - startTime : undefined,
 				...(data ?? {})
 			});
 		};
@@ -249,6 +263,7 @@ class BaseAdapter {
 			const originalMethod = ctx[method];
 			ctx[method] = async (...args) => {
 				const savedArgs = argProcessor ? argProcessor(args) : {};
+				const startTime = Date.now();
 				try {
 					taskId++;
 
@@ -256,13 +271,17 @@ class BaseAdapter {
 					if (event) return validateEvent(event, taskType);
 
 					const result = await originalMethod.apply(ctx, args);
-					await taskEvent(taskType, { ...savedArgs, result });
+					await taskEvent(taskType, { ...savedArgs, result }, startTime);
 					return result;
 				} catch (err) {
-					await taskEvent(taskType, {
-						...savedArgs,
-						error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
-					});
+					await taskEvent(
+						taskType,
+						{
+							...savedArgs,
+							error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
+						},
+						startTime
+					);
 					throw err;
 				}
 			};
@@ -274,15 +293,16 @@ class BaseAdapter {
 		wrapCtxMethod(ctx, "emit", "eventEmit", args => ({ event: args[0] }));
 
 		// Sleep method with Task event
-		ctx.wf.sleep = async duration => {
+		ctx.wf.sleep = async time => {
 			taskId++;
+			const startTime = Date.now();
 
 			const event = getCurrentTaskEvent();
 			if (event) return validateEvent(event, "sleep");
 
-			await new Promise(resolve => setTimeout(resolve, duration));
+			await new Promise(resolve => setTimeout(resolve, time));
 
-			await taskEvent("sleep", { duration });
+			await taskEvent("sleep", { time }, startTime);
 		};
 
 		ctx.wf.setState = async state => {
@@ -298,19 +318,21 @@ class BaseAdapter {
 
 		ctx.wf.waitForSignal = async (signalName, key, opts) => {
 			taskId++;
+			const startTime = Date.now();
 
 			const event = getCurrentTaskEvent();
 			if (event) return validateEvent(event, "signal");
 
 			const result = await this.waitForSignal(signalName, key, opts);
 
-			await taskEvent("signal", { result, signalName, signalKey: key });
+			await taskEvent("signal", { result, signalName, signalKey: key }, startTime);
 
 			return result;
 		};
 
 		ctx.wf.run = async (name, fn) => {
 			taskId++;
+			const startTime = Date.now();
 
 			if (!name) name = `custom-${taskId}`;
 			if (!fn) throw new Error("Missing function to run.");
@@ -320,13 +342,17 @@ class BaseAdapter {
 
 			try {
 				const result = await fn();
-				await taskEvent("custom", { run: name, result });
+				await taskEvent("custom", { run: name, result }, startTime);
 				return result;
 			} catch (err) {
-				await taskEvent("custom", {
-					run: name,
-					error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
-				});
+				await taskEvent(
+					"custom",
+					{
+						run: name,
+						error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
+					},
+					startTime
+				);
 				throw err;
 			}
 		};

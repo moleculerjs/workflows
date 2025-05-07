@@ -38,7 +38,7 @@ const broker = new ServiceBroker({
 	},
 
 	metrics: {
-		enabled: true,
+		enabled: false,
 		reporter: {
 			type: "Console",
 			options: {
