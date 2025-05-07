@@ -8,3 +8,13 @@
 - [ ] job timeout handling
 - [ ] Integration tests
 - [ ] Performance improvement
+- [ ] Metrics
+- [ ] Tracing
+- [ ] maxStalledCount - limit the number of putting back the stalled job to wait. (0 means, never, null means everytime)
+- [ ] Events:
+  - [ ] - `jobCreated`
+  - [ ] - `jobStarted`
+  - [ ] - `jobStalled`
+  - [ ] - `jobCompleted`
+  - [ ] - `jobFailed`
+
