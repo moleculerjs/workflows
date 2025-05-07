@@ -668,6 +668,19 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
+	 * Remove a named signal.
+	 *
+	 * @param {string} signalName - The name of the signal.
+	 * @param {unknown} key - The key associated with the signal.
+	 * @returns {Promise<void>} Resolves when the signal is triggered.
+	 */
+	async removeSignal(signalName, key) {
+		this.log("debug", null, null, "Remove signal", signalName, key);
+
+		await this.commandClient.del(this.getKey(C.QUEUE_SIGNAL, signalName, key));
+	}
+
+	/**
 	 * Wait for a named signal.
 	 *
 	 * @param {string} signalName - The name of the signal.

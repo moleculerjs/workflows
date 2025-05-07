@@ -6,16 +6,33 @@
   - [x] Remove repeated job by jobId
 - [ ] Job error handling (if it crashed the job, don't save to events, to avoid replaying crasher error)
 - [x] Get workflow state
+- [ ] jobId collision policy
+  - [ ] reject
+  - [ ] skip
+  - [ ] rerun
 - [ ] job timeout handling
+- [ ] wait for result `const result = await broker.wf.run(...).promise()`
+  - [ ] job will run on other nodes, so it should subscribe for `job.finished` Redis msg and resolve or reject the stored promise.
+- [ ] Signal wait timeout `WfSignalTimeoutError`
 - [ ] Integration tests
+- [ ] Better processing delayed/failed job (without waiting for maintenance time)
 - [ ] Performance improvement
+- [ ] Concurrent job running
+- [ ] Job parameter validation
+- [ ] ~~ctx.opts~~
+  - [ ] ~~`beforeSetState`~~
+  - [ ] ~~`afterSetState`~~
 - [ ] Metrics
 - [ ] Tracing
 - [ ] maxStalledCount - limit the number of putting back the stalled job to wait. (0 means, never, null means everytime)
 - [ ] Events:
-  - [ ] - `jobCreated`
-  - [ ] - `jobStarted`
-  - [ ] - `jobStalled`
-  - [ ] - `jobCompleted`
-  - [ ] - `jobFailed`
+  - [ ] - `job.created`
+  - [ ] - `job.started`
+  - [ ] - `job.stalled`
+  - [ ] - `job.finished`
+  - [ ] - `job.completed`
+  - [ ] - `job.failed`
+- [ ] SAGA
+  - [ ] compensations
+  - [ ] revert running
 

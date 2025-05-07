@@ -47,34 +47,58 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 
 		broker.metrics.register({
 			type: METRIC.TYPE_COUNTER,
-			name: C.METRIC_CHANNELS_MESSAGES_SENT,
-			labelNames: ["channel"],
+			name: C.METRIC_WORKFLOWS_JOBS_CREATED,
+			labelNames: ["workflow"],
 			rate: true,
-			unit: "call"
+			unit: "job"
 		});
 
 		broker.metrics.register({
 			type: METRIC.TYPE_COUNTER,
-			name: C.METRIC_CHANNELS_MESSAGES_TOTAL,
-			labelNames: ["channel", "group"],
+			name: C.METRIC_WORKFLOWS_JOBS_TOTAL,
+			labelNames: ["workflow"],
 			rate: true,
-			unit: "msg"
+			unit: "job"
 		});
 
 		broker.metrics.register({
 			type: METRIC.TYPE_GAUGE,
-			name: C.METRIC_CHANNELS_MESSAGES_ACTIVE,
-			labelNames: ["channel", "group"],
+			name: C.METRIC_WORKFLOWS_JOBS_ACTIVE,
+			labelNames: ["workflow"],
 			rate: true,
-			unit: "msg"
+			unit: "job"
 		});
 
 		broker.metrics.register({
 			type: METRIC.TYPE_HISTOGRAM,
-			name: C.METRIC_CHANNELS_MESSAGES_TIME,
-			labelNames: ["channel", "group"],
+			name: C.METRIC_WORKFLOWS_JOBS_TIME,
+			labelNames: ["workflow"],
 			quantiles: true,
-			unit: "msg"
+			unit: "job"
+		});
+
+		broker.metrics.register({
+			type: METRIC.TYPE_GAUGE,
+			name: C.METRIC_WORKFLOWS_JOBS_ERRORS_TOTAL,
+			labelNames: ["workflow"],
+			rate: true,
+			unit: "job"
+		});
+
+		broker.metrics.register({
+			type: METRIC.TYPE_GAUGE,
+			name: C.METRIC_WORKFLOWS_JOBS_RETRIES_TOTAL,
+			labelNames: ["workflow"],
+			rate: true,
+			unit: "job"
+		});
+
+		broker.metrics.register({
+			type: METRIC.TYPE_GAUGE,
+			name: C.METRIC_WORKFLOWS_SIGNAL_TOTAL,
+			labelNames: ["signal"],
+			rate: true,
+			unit: "signal"
 		});
 	}
 
@@ -113,11 +137,11 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			broker.wf.run = (workflowName, payload, opts) => {
 				adapter.checkWorkflowName(workflowName);
 
-				broker.metrics.increment(
-					C.METRIC_WORKFLOWS_RUN_TOTAL,
-					{ workflow: workflowName },
-					1
-				);
+				if (broker.isMetricsEnabled()) {
+					broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_CREATED, {
+						workflow: workflowName
+					});
+				}
 				return adapter.createJob(workflowName, payload, opts);
 			};
 
@@ -147,7 +171,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @param {unknown} payload
 			 * @returns
 			 */
-			broker.wf.signal = (signalName, key, payload) => {
+			broker.wf.triggerSignal = (signalName, key, payload) => {
 				if (!signalName) {
 					return Promise.reject(
 						new MoleculerError("Signal name is required!", 400, "SIGNAL_NAME_REQUIRED")
@@ -158,12 +182,35 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						new MoleculerError("Signal key is required!", 400, "SIGNAL_KEY_REQUIRED")
 					);
 				}
-				broker.metrics.increment(
-					C.METRIC_WORKFLOWS_SIGNAL_TOTAL,
-					{ signal: signalName },
-					1
-				);
+
+				if (broker.isMetricsEnabled()) {
+					broker.metrics.increment(C.METRIC_WORKFLOWS_SIGNAL_TOTAL, {
+						signal: signalName
+					});
+				}
 				return adapter.triggerSignal(signalName, key, payload);
+			};
+
+			/**
+			 * Remove a named signal.
+			 *
+			 * @param {string} signalName
+			 * @param {unknown} key
+			 * @returns
+			 */
+			broker.wf.removeSignal = (signalName, key) => {
+				if (!signalName) {
+					return Promise.reject(
+						new MoleculerError("Signal name is required!", 400, "SIGNAL_NAME_REQUIRED")
+					);
+				}
+				if (!key) {
+					return Promise.reject(
+						new MoleculerError("Signal key is required!", 400, "SIGNAL_KEY_REQUIRED")
+					);
+				}
+
+				return adapter.removeSignal(signalName, key);
 			};
 
 			/**
@@ -271,7 +318,6 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						}
 
 						if (!wf.name) wf.name = svc.fullName + "." + name;
-
 						adapter.checkWorkflowName(wf.name);
 
 						// Wrap the original handler
@@ -288,38 +334,30 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 
 						// Add metrics for the handler
 						if (broker.isMetricsEnabled()) {
-							wf.handler = (...args) => {
+							wf.handler = async (...args) => {
 								const labels = { workflow: wf.name };
 								const timeEnd = broker.metrics.timer(
-									C.METRIC_WORKFLOWS_EXECUTIONS_TIME,
+									C.METRIC_WORKFLOWS_JOBS_TIME,
 									labels
 								);
-								broker.metrics.increment(
-									C.METRIC_WORKFLOWS_EXECUTIONS_TOTAL,
-									labels
-								);
-								broker.metrics.increment(
-									C.METRIC_WORKFLOWS_EXECUTIONS_ACTIVE,
-									labels
-								);
-								return handler2(...args)
-									.then(res => {
-										timeEnd();
-										broker.metrics.decrement(
-											C.METRIC_WORKFLOWS_EXECUTIONS_ACTIVE,
-											labels
-										);
-										return res;
-									})
-									.catch(err => {
-										timeEnd();
-										broker.metrics.decrement(
-											C.METRIC_WORKFLOWS_EXECUTIONS_ACTIVE,
-											labels
-										);
-
-										throw err;
-									});
+								broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_ACTIVE, labels);
+								try {
+									const result = await handler2(...args);
+									return result;
+								} catch (err) {
+									broker.metrics.increment(
+										C.METRIC_WORKFLOWS_JOBS_ERRORS_TOTAL,
+										labels
+									);
+									throw err;
+								} finally {
+									timeEnd();
+									broker.metrics.decrement(
+										C.METRIC_WORKFLOWS_JOBS_ACTIVE,
+										labels
+									);
+									broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_TOTAL, labels);
+								}
 							};
 						}
 

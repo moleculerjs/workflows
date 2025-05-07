@@ -23,6 +23,7 @@ const broker = new ServiceBroker({
 	logger: {
 		type: "Console",
 		options: {
+			formatter: "short",
 			level: {
 				WORKFLOWS: "debug",
 				"*": "info"
@@ -33,6 +34,16 @@ const broker = new ServiceBroker({
 					colors: true,
 					depth: 3
 				})
+		}
+	},
+
+	metrics: {
+		enabled: true,
+		reporter: {
+			type: "Console",
+			options: {
+				includes: ["moleculer.workflows.**"]
+			}
 		}
 	},
 
@@ -204,7 +215,25 @@ const broker = new ServiceBroker({
 				// console.log(args);
 				const signalName = options.signalName ?? "test.signal";
 				const key = !Number.isNaN(Number(options.key)) ? Number(options.key) : options.key;
-				broker.wf.signal(signalName, key, { user: "John Doe" });
+				broker.wf.triggerSignal(signalName, key, { user: "John Doe" });
+			}
+		},
+
+		{
+			command: "remsignal [signalName]",
+			alias: ["z"],
+			options: [
+				{
+					option: "-k, --key <key>",
+					description: "Signal key"
+				}
+			],
+			async action(broker, args) {
+				const { options } = args;
+				// console.log(args);
+				const signalName = options.signalName ?? "test.signal";
+				const key = !Number.isNaN(Number(options.key)) ? Number(options.key) : options.key;
+				broker.wf.removeSignal(signalName, key);
 			}
 		},
 
@@ -252,7 +281,7 @@ if (!isNoService) {
 						await ctx.wf.setState("afterSleep-" + (i + 1));
 					}
 
-					//await ctx.call("test.danger", { name: "John Doe" });
+					await ctx.call("test.danger", { name: "John Doe" });
 
 					const signalRes = await ctx.wf.waitForSignal("test.signal", 123);
 					this.logger.info("Signal result", signalRes);

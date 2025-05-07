@@ -11,12 +11,12 @@ module.exports = {
 	QUEUE_COMPLETED: "completed",
 	QUEUE_FAILED: "failed",
 
-	METRIC_WORKFLOWS_RUN_TOTAL: "moleculer.workflows.run.total",
-	METRIC_WORKFLOWS_SIGNAL_TOTAL: "moleculer.workflows.signal.total",
-	METRIC_WORKFLOWS_EXECUTIONS_TOTAL: "moleculer.workflows.executions.total",
-	METRIC_WORKFLOWS_EXECUTIONS_ACTIVE: "moleculer.workflows.executions.active",
-	METRIC_WORKFLOWS_EXECUTIONS_TIME: "moleculer.workflows.executions.time",
+	METRIC_WORKFLOWS_JOBS_CREATED: "moleculer.workflows.jobs.created",
+	METRIC_WORKFLOWS_JOBS_TOTAL: "moleculer.workflows.jobs.total",
+	METRIC_WORKFLOWS_JOBS_ACTIVE: "moleculer.workflows.jobs.active",
+	METRIC_WORKFLOWS_JOBS_TIME: "moleculer.workflows.jobs.time",
+	METRIC_WORKFLOWS_JOBS_ERRORS_TOTAL: "moleculer.workflows.jobs.errors.total",
+	METRIC_WORKFLOWS_JOBS_RETRIES_TOTAL: "moleculer.workflows.jobs.retries.total",
 
-	METRIC_WORKFLOWS_EXECUTIONS_ERRORS_TOTAL: "moleculer.workflows.executions.errors.total",
-	METRIC_WORKFLOWS_EXECUTIONS_RETRIES_TOTAL: "moleculer.workflows.executions.retries.total"
+	METRIC_WORKFLOWS_SIGNAL_TOTAL: "moleculer.workflows.signal.total"
 };

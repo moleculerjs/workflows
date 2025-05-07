@@ -77,8 +77,6 @@ class BaseAdapter {
 		this.serializer.init(this.broker);
 		this.logger.info("Workflows serializer:", this.broker.getConstructorName(this.serializer));
 
-		this.registerAdapterMetrics(broker);
-
 		this.setNextMaintenance();
 	}
 
@@ -89,7 +87,7 @@ class BaseAdapter {
 	}
 
 	/**
-	 *
+	 * Log a message with the given level.
 	 * @param {*} level
 	 * @param {*} workflowName
 	 * @param {*} jobId
@@ -104,39 +102,14 @@ class BaseAdapter {
 	}
 
 	/**
-	 * Register adapter related metrics
-	 * @param {ServiceBroker} broker
-	 */
-	registerAdapterMetrics(broker) {
-		if (!broker.isMetricsEnabled()) return;
-
-		broker.metrics.register({
-			type: METRIC.TYPE_COUNTER,
-			name: C.METRIC_WORKFLOWS_EXECUTIONS_ERRORS_TOTAL,
-			labelNames: ["workflow"],
-			rate: true
-		});
-
-		broker.metrics.register({
-			type: METRIC.TYPE_COUNTER,
-			name: C.METRIC_WORKFLOWS_EXECUTIONS_RETRIES_TOTAL,
-			labelNames: ["workflow"],
-			rate: true
-		});
-	}
-
-	/**
-	 *
+	 * Increment a metric.
 	 * @param {String} metricName
-	 * @param {Channel} chan
+	 * @param {String} workflow
 	 */
-	metricsIncrement(metricName, chan) {
+	metricsIncrement(metricName, workflow) {
 		if (!this.broker.isMetricsEnabled()) return;
 
-		this.broker.metrics.increment(metricName, {
-			channel: chan.name,
-			group: chan.group
-		});
+		this.broker.metrics.increment(metricName, { workflow });
 	}
 
 	/**
@@ -445,6 +418,18 @@ class BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the signal is triggered.
 	 */
 	async triggerSignal(/*signalName, key, payload*/) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Remove a named signal.
+	 *
+	 * @param {string} signalName The name of the signal to trigger.
+	 * @param {string} key The key associated with the signal.
+	 * @returns {Promise<void>} Resolves when the signal is triggered.
+	 */
+	async removeSignal(/*signalName, key*/) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}

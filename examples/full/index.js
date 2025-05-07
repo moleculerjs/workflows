@@ -34,7 +34,7 @@ const broker = new ServiceBroker({
 		reporter: {
 			type: "Console",
 			options: {
-				includes: ["moleculer.workflow.**"]
+				includes: ["moleculer.workflows.**"]
 			}
 		}
 	},
@@ -75,7 +75,7 @@ broker.createService({
 			// Workflow handler
 			async handler(ctx) {
 				// Check the e-mail address is not exists
-				const isExist = await ctx.wf.call("users.getByEmail", { email: ctx.params.email });
+				const isExist = await ctx.call("users.getByEmail", { email: ctx.params.email });
 
 				if (isExist) {
 					throw new MoleculerClientError(
@@ -84,10 +84,10 @@ broker.createService({
 				}
 
 				// Check the e-mail address is valid and not a temp mail address
-				await ctx.wf.call("utils.isTemporaryEmail", { email: ctx.params.email });
+				await ctx.call("utils.isTemporaryEmail", { email: ctx.params.email });
 
 				// Register (max execution is 10 sec)
-				const user = await ctx.wf.call("users.register", ctx.params, {
+				const user = await ctx.call("users.register", ctx.params, {
 					timeout: 10,
 					// Set the workflow state to this before call the action
 					beforeSetState: "REGISTERING",
@@ -98,7 +98,7 @@ broker.createService({
 				});
 
 				// Send verification
-				await ctx.wf.call("mail.send", { type: "verification", user });
+				await ctx.call("mail.send", { type: "verification", user });
 
 				// Wait for verification (max 1 hour)
 				await ctx.wf.setState("WAIT_VERIFICATION");
@@ -111,7 +111,7 @@ broker.createService({
 				} catch (err) {
 					if (err.name == "WorkflowTaskTimeoutError") {
 						// Registraion not verified in 1 hour, remove the user
-						await ctx.wf.call("user.remove", { id: user.id });
+						await ctx.call("user.remove", { id: user.id });
 						return null;
 					}
 
@@ -121,10 +121,10 @@ broker.createService({
 
 				// Set user verified and save
 				user.verified = true;
-				await ctx.wf.call("users.update", user);
+				await ctx.call("users.update", user);
 
 				// Send event to Moleculer services
-				await ctx.wf.broadcast("user.registered", user);
+				await ctx.broadcast("user.registered", user);
 
 				// Other non-moleculer related workflow task
 				await ctx.wf.run("httpPost", async () => {
@@ -132,7 +132,7 @@ broker.createService({
 				});
 
 				// Send welcome email
-				await ctx.wf.call("mail.send", { type: "welcome", user });
+				await ctx.call("mail.send", { type: "welcome", user });
 
 				// Set the workflow state to done (It can be a string, number, or object)
 				await ctx.wf.setState("DONE");
@@ -147,19 +147,19 @@ broker.createService({
 		signup: {
 			rest: "POST /register",
 			async handler(ctx) {
-				const res = await ctx.wf.run("users.signupWorkflow", ctx.params, {
-					workflowId: ctx.requestID // optional
+				const job = await this.broker.wf.run("users.signupWorkflow", ctx.params, {
+					jobId: ctx.requestID // optional
 					/* other workflow run options */
 				});
 				// Here the workflow is running, the res is a state object
 				return {
-					// With the workflowId, you can call the `checkSignupState` REST action
+					// With the jobId, you can call the `checkSignupState` REST action
 					// to get the state of the execution on the frontend.
-					workflowId: res.workflowId
+					jobId: job.id
 				};
 
 				// or wait for the execution and return the result
-				// return await res.result();
+				// return await job.promise();
 			}
 		},
 
@@ -169,19 +169,19 @@ broker.createService({
 				// Check the validity
 				const user = ctx.call("users.find", { verificationToken: ctx.params.token });
 				if (user) {
-					ctx.wf.sendSignal("email.verification", user.id, { a: 5 });
+					this.broker.wf.sendSignal("email.verification", user.id, { a: 5 });
 				}
 			}
 		},
 
 		checkSignupState: {
-			rest: "GET /state/:workflowId",
+			rest: "GET /state/:jobId",
 			async handler(ctx) {
-				const res = await ctx.wf.getState({ workflowId: ctx.params.workflowId });
+				const res = await ctx.wf.getState({ jobId: ctx.params.jobId });
 				if (res.state == "DONE") {
 					return { user: res.result };
 				} else {
-					return { state: res.state, startedAt: res.startedAt, duration: res.duration };
+					return { state: res.state, startedAt: res.startedAt };
 				}
 			}
 		}
@@ -189,11 +189,11 @@ broker.createService({
 
 	started() {
 		// this.broker.wf.run("notifyNonLoggedUsers", {}, {
-		// 	workflowId: "midnight-notify", // Only start a new schedule if not exists with the same workflowId
+		// 	jobId: "midnight-notify", // Only start a new schedule if not exists with the same jobId
 		// 	// Delayed run
 		// 	startDelay: "1 hour",
 		// 	// Recurring run
-		// 	schedule: {
+		// 	repeat: {
 		// 		cron: "0 0 * * *" // run every midnight
 		// 	}
 		// });
