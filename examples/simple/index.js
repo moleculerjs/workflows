@@ -76,13 +76,17 @@ const broker = new ServiceBroker({
 					description: "Execution timeout (like: 5s, 1m, 6h, 2d)"
 				},
 				{
-					option: "--cron <cron timing>",
+					option: "--cron <cron timing> [limit]",
 					description: "Repeatable job with cron timing (e.g.: 15 3 * * * )"
+				},
+				{
+					option: "--limit <limit>",
+					description: "Number of executions"
 				}
 			],
 			async action(broker, args) {
 				const { options } = args;
-				//console.log(options);
+				console.log(args);
 				const jobOpts = {
 					jobId: options.jobId,
 					delay: options.delay,
@@ -91,7 +95,10 @@ const broker = new ServiceBroker({
 				};
 
 				if (options.cron) {
-					jobOpts.repeat = { cron: options.cron /*endDate: "2025-05-06T19:25:00Z"*/ };
+					jobOpts.repeat = {
+						cron: options.cron /*endDate: "2025-05-06T19:25:00Z"*/,
+						limit: options.limit != null ? Number(options.limit) : null
+					};
 				}
 
 				const job = await broker.wf.run(
@@ -259,6 +266,8 @@ if (!isNoService) {
 		workflows: {
 			// User signup workflow.
 			wf1: {
+				maxStalledCount: 3,
+
 				// Workflow handler
 				async handler(ctx) {
 					this.logger.info("WF handler start", ctx.params, ctx.wf.jobId);
@@ -274,6 +283,7 @@ if (!isNoService) {
 						return await res.json();
 					});
 					await ctx.wf.setState("afterFetch");
+					/*
 					this.logger.info("Post result", post);
 
 					for (let i = 0; i < 5; i++) {
@@ -283,7 +293,7 @@ if (!isNoService) {
 					}
 
 					await ctx.call("test.danger", { name: "John Doe" });
-
+					*/
 					const signalRes = await ctx.wf.waitForSignal("test.signal", 123);
 					this.logger.info("Signal result", signalRes);
 

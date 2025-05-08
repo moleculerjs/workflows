@@ -46,7 +46,7 @@ export class BaseAdapter {
     constructor(opts?: BaseDefaultOptions);
     init(broker: ServiceBroker, logger: LoggerInstance): void;
     connect(): Promise<void>;
-    disconnect(): Promise<void>;
+    destroy(): Promise<void>;
     createJob(workflowName: string, payload: any, opts?: any): Promise<any>;
     cleanUp(workflowName?: string, jobId?: string): Promise<void>;
 }
@@ -54,7 +54,7 @@ export class BaseAdapter {
 export class RedisAdapter extends BaseAdapter {
     constructor(opts?: RedisAdapterOptions);
     connect(): Promise<void>;
-    disconnect(): Promise<void>;
+    destroy(): Promise<void>;
     createJob(workflowName: string, payload: any, opts?: any): Promise<any>;
     cleanUp(workflowName?: string, jobId?: string): Promise<void>;
 }

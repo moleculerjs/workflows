@@ -1,6 +1,6 @@
 /*
- * @moleculer/channels
- * Copyright (c) 2021 MoleculerJS (https://github.com/moleculerjs/channels)
+ * @moleculer/workflows
+ * Copyright (c) 2025 MoleculerJS (https://github.com/moleculerjs/workflows)
  * MIT Licensed
  */
 
@@ -87,9 +87,9 @@ class RedisAdapter extends BaseAdapter {
 		if (this.opts.prefix) {
 			this.prefix = this.opts.prefix + ":";
 		} else if (this.broker.namespace) {
-			this.prefix = "MOLWF-" + this.broker.namespace + ":";
+			this.prefix = "molwf-" + this.broker.namespace + ":";
 		} else {
-			this.prefix = "MOLWF:";
+			this.prefix = "molwf:";
 		}
 
 		this.logger.info("Workflows Redis adapter prefix:", this.prefix);
@@ -173,13 +173,13 @@ class RedisAdapter extends BaseAdapter {
 	 *
 	 * @returns {Promise<void>} Resolves when the disconnection is complete.
 	 */
-	async disconnect() {
+	async destroy() {
 		if (this.disconnecting) return;
 
 		this.disconnecting = true;
 		this.connected = false;
 
-		await super.disconnect();
+		await super.destroy();
 
 		if (this.commandClient) {
 			await this.commandClient.quit();
@@ -519,11 +519,15 @@ class RedisAdapter extends BaseAdapter {
 	 * Move a job to the failed queue.
 	 *
 	 * @param {string} workflow - The name of the workflow.
-	 * @param {Object} job - The job object.
+	 * @param {Object|string} job - The job object.
 	 * @param {Error} err - The error that caused the job to fail.
 	 * @returns {Promise<void>} Resolves when the job is moved to the failed queue.
 	 */
 	async moveToFailed(workflow, job, err) {
+		if (typeof job == "string") {
+			job = await this.getJob(workflow.name, job, ["parent"]);
+		}
+
 		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
 
 		if (err?.retryable) {
@@ -755,6 +759,7 @@ class RedisAdapter extends BaseAdapter {
 			}
 
 			job.repeat = opts.repeat;
+			job.repeatCounter = 0;
 
 			if (opts.repeat.endDate) {
 				const endDate = new Date(opts.repeat.endDate).getTime();
@@ -858,6 +863,12 @@ class RedisAdapter extends BaseAdapter {
 		if (job.promoteAt != null) {
 			res.promoteAt = Number(job.promoteAt);
 		}
+		if (job.repeatCounter != null) {
+			res.repeatCounter = Number(job.repeatCounter);
+		}
+		if (job.stalledCounter != null) {
+			res.stalledCounter = Number(job.stalledCounter);
+		}
 		return res;
 	}
 
@@ -874,6 +885,7 @@ class RedisAdapter extends BaseAdapter {
 				job = await this.getJob(workflowName, job, [
 					"payload",
 					"repeat",
+					"repeatCounter",
 					"retries",
 					"timeout"
 				]);
@@ -899,8 +911,39 @@ class RedisAdapter extends BaseAdapter {
 							`Repeatable job is expired at ${job.repeat.endDate}. Not rescheduling.`,
 							job
 						);
+
+						await this.commandClient.hset(
+							this.getKey(workflowName, C.QUEUE_JOB, job.id),
+							"finishedAt",
+							Date.now()
+						);
 						return;
 					}
+				}
+				if (job.repeat.limit > 0) {
+					if (job.repeatCounter >= job.repeat.limit) {
+						this.log(
+							"debug",
+							workflowName,
+							job.id,
+							`Repeatable job reached the limit of ${job.repeat.limit}. Not rescheduling.`,
+							job
+						);
+
+						await this.commandClient.hset(
+							this.getKey(workflowName, C.QUEUE_JOB, job.id),
+							"finishedAt",
+							Date.now()
+						);
+
+						return;
+					}
+
+					nextJob.repeatCounter = await this.commandClient.hincrby(
+						this.getKey(workflowName, C.QUEUE_JOB, job.id),
+						"repeatCounter",
+						1
+					);
 				}
 
 				const promoteAt = getCronNextTime(job.repeat.cron, Date.now(), job.repeat.tz);
@@ -1163,7 +1206,32 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the job is moved to the failed queue.
 	 */
 	async moveStalledJobsToWaiting(workflow, jobId) {
+		const stalledCounter = await this.commandClient.hincrby(
+			this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+			"stalledCounter",
+			1
+		);
+
 		await this.addJobEvent(workflow, jobId, { type: "stalled" });
+
+		if (workflow.maxStalledCount > 0 && stalledCounter > workflow.maxStalledCount) {
+			this.log(
+				"debug",
+				workflow.name,
+				jobId,
+				"Job is reached the maximum stalled count. It's moved to failed."
+			);
+
+			await this.addJobEvent(workflow, jobId, {
+				type: "failed",
+				error: this.broker.errorRegenerator.extractPlainError(
+					new Error("Job stalled too many times.")
+				)
+			});
+
+			await this.moveToFailed(workflow, jobId);
+			return;
+		}
 
 		this.log("debug", workflow.name, jobId, `Job is stalled. Moved back to waiting queue.`);
 		await this.commandClient.lpush(this.getKey(workflow.name, C.QUEUE_WAITING), jobId);

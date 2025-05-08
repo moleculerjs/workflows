@@ -451,7 +451,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 		 */
 		async stopped() {
 			logger.info("Workflows adapter is disconnecting...");
-			await adapter.disconnect();
+			await adapter.destroy();
 			logger.debug("Workflows adapter disconnected.");
 
 			started = false;

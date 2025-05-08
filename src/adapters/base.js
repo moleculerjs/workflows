@@ -80,7 +80,16 @@ class BaseAdapter {
 		this.setNextMaintenance();
 	}
 
-	disconnect() {
+	/**
+	 * Close the adapter.
+	 */
+	destroy() {
+		if (this.activeRuns.size > 0) {
+			this.logger.warn(
+				`Disconnecting adapter while there are ${this.activeRuns.size} active workflow jobs. This may cause data loss.`
+			);
+		}
+
 		if (this.maintenanceTimer) {
 			clearTimeout(this.maintenanceTimer);
 		}
