@@ -8,7 +8,8 @@
 
 const _ = require("lodash");
 const { Context, METRIC } = require("moleculer");
-const { BrokerOptionsError, ServiceSchemaError, MoleculerError } = require("moleculer").Errors;
+const { BrokerOptionsError, ServiceSchemaError, MoleculerError, ValidationError } =
+	require("moleculer").Errors;
 const Adapters = require("./adapters");
 const C = require("./constants");
 
@@ -43,7 +44,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 	 *
 	 * @param {ServiceBroker} broker
 	 */
-	function registerWorkflowMetrics(broker) {
+	function registerMetrics(broker) {
 		if (!broker.isMetricsEnabled()) return;
 
 		broker.metrics.register({
@@ -288,7 +289,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			// Add adapter reference to the broker instance
 			broker.wf.adapter = adapter;
 
-			registerWorkflowMetrics(broker);
+			registerMetrics(broker);
 		},
 
 		/**
@@ -363,6 +364,23 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 										labels
 									);
 									broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_TOTAL, labels);
+								}
+							};
+						}
+
+						if (wf.params) {
+							const handler3 = wf.handler;
+
+							const check = broker.validator.compile(wf.params);
+							wf.handler = async ctx => {
+								const res = await check(ctx.params != null ? ctx.params : {});
+								if (res === true) return handler3(ctx);
+								else {
+									throw new ValidationError(
+										"Parameters validation error!",
+										null,
+										res
+									);
 								}
 							};
 						}

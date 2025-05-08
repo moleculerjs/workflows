@@ -87,6 +87,10 @@ const broker = new ServiceBroker({
 				{
 					option: "--limit <limit>",
 					description: "Number of executions"
+				},
+				{
+					option: "--wait",
+					description: "Wait for exection result"
 				}
 			],
 			async action(broker, args) {
@@ -119,6 +123,15 @@ const broker = new ServiceBroker({
 
 				lastJobId = job.id;
 				console.log("Job started", job);
+
+				if (options.wait) {
+					try {
+						const res = await job.promise();
+						console.log("Job result", res);
+					} catch (err) {
+						console.log("Job failed", err.message);
+					}
+				}
 			}
 		},
 
@@ -273,6 +286,14 @@ if (!isNoService) {
 			wf1: {
 				maxStalledCount: 3,
 
+				__params: {
+					c: { type: "number" },
+					name: { type: "string" },
+					pid: { type: "number" },
+					nodeID: { type: "string" },
+					status: { type: "boolean" }
+				},
+
 				// Workflow handler
 				async handler(ctx) {
 					this.logger.info("WF handler start", ctx.params, ctx.wf.jobId);
@@ -297,8 +318,9 @@ if (!isNoService) {
 						await ctx.wf.setState("afterSleep-" + (i + 1));
 					}
 
-					await ctx.call("test.danger", { name: "John Doe" });
 					*/
+					await ctx.call("test.danger", { name: "John Doe" });
+
 					const signalRes = await ctx.wf.waitForSignal("test.signal", 123);
 					this.logger.info("Signal result", signalRes);
 

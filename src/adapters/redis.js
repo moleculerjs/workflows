@@ -69,10 +69,9 @@ class RedisAdapter extends BaseAdapter {
 		this.signalSubClient = null;
 
 		this.signalPromises = new Map();
+		this.jobResultPromises = new Map();
 
-		this.connected = false;
 		this.disconnecting = false;
-		this.isRunning = false;
 	}
 
 	/**
@@ -162,6 +161,25 @@ class RedisAdapter extends BaseAdapter {
 					if (found) {
 						this.signalPromises.delete(pKey);
 						found.resolve(json.payload);
+					}
+				} else if (
+					channel.startsWith(this.prefix) &&
+					channel.endsWith(C.FINISHED) &&
+					this.jobResultPromises.size > 0
+				) {
+					const json = this.serializer.deserialize(message);
+					this.logger.debug("Job finished message received.", json);
+					const jobId = json.jobId;
+					if (this.jobResultPromises.has(jobId)) {
+						const storePromise = this.jobResultPromises.get(jobId);
+						this.jobResultPromises.delete(jobId);
+						if (json.error) {
+							storePromise.reject(
+								this.broker.errorRegenerator.extractPlainError(json.error)
+							);
+						} else {
+							storePromise.resolve(json.result);
+						}
 					}
 				}
 			});
@@ -510,6 +528,20 @@ class RedisAdapter extends BaseAdapter {
 			);
 		}
 
+		if (this.jobResultPromises.has(job.id)) {
+			const storePromise = this.jobResultPromises.get(job.id);
+			this.jobResultPromises.delete(job.id);
+			storePromise.resolve(result);
+		} else {
+			this.commandClient.publish(
+				this.getKey(workflow.name, C.FINISHED),
+				this.serializer.serialize({
+					jobId: job.id,
+					result
+				})
+			);
+		}
+
 		if (job.parent) {
 			await this.rescheduleJob(workflow.name, job.parent);
 		}
@@ -613,6 +645,20 @@ class RedisAdapter extends BaseAdapter {
 				this.getKey(workflow.name, C.QUEUE_FAILED),
 				fields.finishedAt,
 				job.id
+			);
+		}
+
+		if (this.jobResultPromises.has(job.id)) {
+			const storePromise = this.jobResultPromises.get(job.id);
+			this.jobResultPromises.delete(job.id);
+			storePromise.reject(err);
+		} else {
+			this.commandClient.publish(
+				this.getKey(workflow.name, C.FINISHED),
+				this.serializer.serialize({
+					jobId: job.id,
+					error: this.broker.errorRegenerator.extractPlainError(err)
+				})
 			);
 		}
 
@@ -829,6 +875,20 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		this.sendJobEvent(workflowName, job.id, "created");
+
+		job.promise = () => {
+			let storePromise = {};
+			storePromise.promise = new Promise((resolve, reject) => {
+				storePromise.resolve = resolve;
+				storePromise.reject = reject;
+			});
+
+			this.jobResultPromises.set(jobId, storePromise);
+
+			this.signalSubClient?.subscribe(this.getKey(workflowName, C.FINISHED));
+
+			return storePromise.promise;
+		};
 
 		return job;
 	}

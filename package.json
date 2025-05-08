@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --inspect examples/index.js",
-    "dev:noservice": "nodemon examples/index.js simple noservice",
+    "dev:noservice": "nodemon --inspect=9228 examples/index.js simple noservice",
     "ci:unit": "jest --testMatch \"**/unit/**/*.spec.js\" --watch",
     "ci:integration": "jest --testMatch \"**/integration/**/*.spec.js\" --runInBand --watch",
     "ci:leak": "jest --testMatch \"**/leak-detection/**/index.spec.js\" --runInBand --watch",

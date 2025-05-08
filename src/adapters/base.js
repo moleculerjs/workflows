@@ -133,7 +133,9 @@ class BaseAdapter {
 		}
 
 		this.workflows.set(workflow.name, workflow);
-		this.startJobProcessor(workflow);
+		if (this.connected) {
+			this.startJobProcessor(workflow);
+		}
 	}
 
 	/**
@@ -143,7 +145,9 @@ class BaseAdapter {
 	 */
 	unregisterWorkflow(workflow) {
 		this.workflows.delete(workflow.name);
-		this.stopJobProcessor(workflow);
+		if (this.connected) {
+			this.stopJobProcessor(workflow);
+		}
 	}
 
 	/**

@@ -11,6 +11,8 @@ module.exports = {
 	QUEUE_COMPLETED: "completed",
 	QUEUE_FAILED: "failed",
 
+	FINISHED: "finished",
+
 	METRIC_WORKFLOWS_JOBS_CREATED: "moleculer.workflows.jobs.created",
 	METRIC_WORKFLOWS_JOBS_TOTAL: "moleculer.workflows.jobs.total",
 	METRIC_WORKFLOWS_JOBS_ACTIVE: "moleculer.workflows.jobs.active",
