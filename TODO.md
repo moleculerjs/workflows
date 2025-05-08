@@ -26,37 +26,16 @@
 - [x] maxStalledCount - limit the number of putting back the stalled job to wait. (0 means, never, null means everytime)
 
 - [ ] Moleculer Events:
-  - [ ] `jobEventType: "broadcast","emit", null - disable
-  - [ ] - `job.${workflowName}.created`
-  - [ ] - `job.${workflowName}.started`
-  - [ ] - `job.${workflowName}.stalled`
-  - [ ] - `job.${workflowName}.finished`
-  - [ ] - `job.${workflowName}.completed`
-  - [ ] - `job.${workflowName}.failed`
+  - [x] `jobEventType: "broadcast","emit", null - disable
+  - [x] - `job.${workflowName}.created`
+  - [x] - `job.${workflowName}.started`
+  - [x] - `job.${workflowName}.stalled`
+  - [x] - `job.${workflowName}.finished`
+  - [x] - `job.${workflowName}.completed`
+  - [x] - `job.${workflowName}.failed`
 
 ```js
-		/**
-		 * Send entity lifecycle events
-		 *
-		 * @param {String} type
-		 * @param {any} data
-		 * @param {any} oldData
-		 * @param {Context?} ctx
-		 * @param {Object?} opts
-		 */
-		sendJobEvent(workflowName, jobId, type) {
-			if (mixinOpts.jobEventType) {
-				const eventName = `job.${workflowName}.${type}`;
 
-				const payload = {
-					type,
-					workflow: workflowName,
-					job: jobId
-				};
-
-				this.broker[mixinOpts.jobEventType](eventName, payload);
-			}
-		},
 ```
 
 - [ ] SAGA

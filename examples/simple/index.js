@@ -10,7 +10,7 @@ const { ServiceBroker } = require("moleculer");
 const { MoleculerRetryableError } = require("moleculer").Errors;
 const { inspect } = require("util");
 
-const WorkFlowsMiddleware = require("../../index").Middleware;
+const WorkflowsMiddleware = require("../../index").Middleware;
 
 let c = 1;
 
@@ -21,12 +21,13 @@ const isNoService = process.argv[2] === "noservice";
 
 // Create broker
 const broker = new ServiceBroker({
+	transporter: "Redis",
 	logger: {
 		type: "Console",
 		options: {
 			formatter: "short",
 			level: {
-				WORKFLOWS: "debug",
+				// WORKFLOWS: "debug",
 				"*": "info"
 			},
 			objectPrinter: obj =>
@@ -48,7 +49,11 @@ const broker = new ServiceBroker({
 		}
 	},
 
-	middlewares: [WorkFlowsMiddleware({})],
+	middlewares: [
+		WorkflowsMiddleware({
+			// jobEventType: "broadcast"
+		})
+	],
 
 	replCommands: [
 		{
@@ -339,6 +344,18 @@ if (!isNoService) {
 			"test.event": {
 				async handler(ctx) {
 					this.logger.info("Test Event handler", ctx.params);
+				}
+			}
+		}
+	});
+} else {
+	broker.createService({
+		name: "job-events",
+
+		events: {
+			"job.**": {
+				async handler(ctx) {
+					this.logger.info(">>> JOB EVENT ", ctx.eventName, ctx.params.job);
 				}
 			}
 		}

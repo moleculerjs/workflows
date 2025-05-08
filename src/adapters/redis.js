@@ -81,8 +81,8 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {ServiceBroker} broker - The Moleculer Service Broker instance.
 	 * @param {LoggerInstance} logger - The logger instance.
 	 */
-	init(broker, logger) {
-		super.init(broker, logger);
+	init(broker, logger, mixinOpts) {
+		super.init(broker, logger, mixinOpts);
 
 		if (this.opts.prefix) {
 			this.prefix = this.opts.prefix + ":";
@@ -282,8 +282,6 @@ class RedisAdapter extends BaseAdapter {
 
 			if (jobId) {
 				await this.processJob(workflow, jobId);
-			} else {
-				// this.logger.debug(`No job for workflow '${workflow.name}'...`);
 			}
 		} catch (err) {
 			// Swallow error if disconnecting
@@ -369,18 +367,25 @@ class RedisAdapter extends BaseAdapter {
 				now
 			);
 
+			await this.addJobEvent(workflow.name, job.id, {
+				type: "started"
+			});
+
+			this.sendJobEvent(workflow.name, job.id, "started");
+
 			this.log("debug", workflow.name, jobId, "Running job...", job);
 
 			const result = await this.callWorkflowHandler(workflow, job, jobEvents);
 
 			const duration = Date.now() - now;
 			this.log(
-				"info",
+				"debug",
 				workflow.name,
 				jobId,
 				`Job finished in ${humanize(duration)}.`,
 				result
 			);
+
 			await this.moveToCompleted(workflow, job, result);
 		} catch (err) {
 			this.log("error", workflow.name, jobId, "Job processing is failed.", err);
@@ -450,14 +455,14 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Add a job event to Redis.
 	 *
-	 * @param {string} workflow - The name of the workflow.
+	 * @param {string} workflowName - The name of the workflow.
 	 * @param {string} jobId - The ID of the job.
 	 * @param {Object} event - The event object to add.
 	 * @returns {Promise<void>} Resolves when the event is added.
 	 */
-	async addJobEvent(workflow, jobId, event) {
+	async addJobEvent(workflowName, jobId, event) {
 		await this.commandClient.rpush(
-			this.getKey(workflow.name, C.QUEUE_JOB_EVENTS, jobId),
+			this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId),
 			this.serializer.serialize({
 				...event,
 				ts: Date.now(),
@@ -475,6 +480,13 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the job is moved to the completed queue.
 	 */
 	async moveToCompleted(workflow, job, result) {
+		await this.addJobEvent(workflow.name, job.id, {
+			type: "finished"
+		});
+
+		this.sendJobEvent(workflow.name, job.id, "finished");
+		this.sendJobEvent(workflow.name, job.id, "completed");
+
 		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
 		if (this.opts.removeOnComplete) {
 			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
@@ -527,6 +539,14 @@ class RedisAdapter extends BaseAdapter {
 		if (typeof job == "string") {
 			job = await this.getJob(workflow.name, job, ["parent"]);
 		}
+
+		await this.addJobEvent(workflow.name, job.id, {
+			type: "failed",
+			error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
+		});
+
+		this.sendJobEvent(workflow.name, job.id, "finished");
+		this.sendJobEvent(workflow.name, job.id, "failed");
 
 		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
 
@@ -807,6 +827,8 @@ class RedisAdapter extends BaseAdapter {
 			this.log("debug", workflowName, job.id, "Job created.", job);
 			await this.commandClient.rpush(this.getKey(workflowName, C.QUEUE_WAITING), jobId);
 		}
+
+		this.sendJobEvent(workflowName, job.id, "created");
 
 		return job;
 	}
@@ -1212,7 +1234,8 @@ class RedisAdapter extends BaseAdapter {
 			1
 		);
 
-		await this.addJobEvent(workflow, jobId, { type: "stalled" });
+		await this.addJobEvent(workflow.name, jobId, { type: "stalled" });
+		this.sendJobEvent(workflow.name, jobId, "stalled");
 
 		if (workflow.maxStalledCount > 0 && stalledCounter > workflow.maxStalledCount) {
 			this.log(
@@ -1222,14 +1245,7 @@ class RedisAdapter extends BaseAdapter {
 				"Job is reached the maximum stalled count. It's moved to failed."
 			);
 
-			await this.addJobEvent(workflow, jobId, {
-				type: "failed",
-				error: this.broker.errorRegenerator.extractPlainError(
-					new Error("Job stalled too many times.")
-				)
-			});
-
-			await this.moveToFailed(workflow, jobId);
+			await this.moveToFailed(workflow, jobId, new Error("Job stalled too many times."));
 			return;
 		}
 

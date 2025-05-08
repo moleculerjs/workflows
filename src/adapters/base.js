@@ -8,7 +8,7 @@
 
 const _ = require("lodash");
 const { MoleculerError } = require("moleculer").Errors;
-const { Serializers, METRIC } = require("moleculer");
+const { Serializers } = require("moleculer");
 const C = require("../constants");
 const { circa, parseDuration } = require("../utils");
 
@@ -67,9 +67,10 @@ class BaseAdapter {
 	 * @param {import("moleculer").ServiceBroker} broker
 	 * @param {import("moleculer").LoggerInstance} logger
 	 */
-	init(broker, logger) {
+	init(broker, logger, mixinOpts) {
 		this.broker = broker;
 		this.logger = logger;
+		this.mixinOpts = mixinOpts;
 
 		// create an instance of serializer (default to JSON)
 		/** @type {Serializer} */
@@ -228,7 +229,7 @@ class BaseAdapter {
 		};
 
 		const taskEvent = async (taskType, data, startTime) => {
-			return await this.addJobEvent(workflow, job.id, {
+			return await this.addJobEvent(workflow.name, job.id, {
 				type: "task",
 				taskId,
 				taskType,
@@ -379,27 +380,11 @@ class BaseAdapter {
 	 */
 	async callWorkflowHandler(workflow, job, events) {
 		this.activeRuns.set(job.id, job);
-		await this.addJobEvent(workflow, job.id, {
-			type: "started"
-		});
-
 		try {
 			const ctx = this.createWorkflowContext(workflow, job, events);
 
 			const result = await workflow.handler(ctx);
-
-			await this.addJobEvent(workflow, job.id, {
-				type: "finished"
-			});
-
 			return result;
-		} catch (err) {
-			await this.addJobEvent(workflow, job.id, {
-				type: "failed",
-				error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
-			});
-
-			throw err;
 		} finally {
 			this.activeRuns.delete(job.id);
 		}
@@ -421,12 +406,12 @@ class BaseAdapter {
 	/**
 	 * Add job event to Redis.
 	 *
-	 * @param {Workflow} workflow The workflow object.
+	 * @param {String} workflowName The workflow object.
 	 * @param {string} jobId The ID of the job.
 	 * @param {Object} event The event object to add.
 	 * @returns {Promise<void>} Resolves when the event is added.
 	 */
-	async addJobEvent(/*workflow, jobId, event*/) {
+	async addJobEvent(/*workflowName, jobId, event*/) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -578,6 +563,27 @@ class BaseAdapter {
 		);
 
 		this.setNextMaintenance();
+	}
+
+	/**
+	 * Send entity lifecycle events
+	 *
+	 * @param {String} workflowName
+	 * @param {String} jobId
+	 * @param {String} type
+	 */
+	sendJobEvent(workflowName, jobId, type) {
+		if (this.mixinOpts?.jobEventType) {
+			const eventName = `job.${workflowName}.${type}`;
+
+			const payload = {
+				type,
+				workflow: workflowName,
+				job: jobId
+			};
+
+			this.broker[this.mixinOpts.jobEventType](eventName, payload);
+		}
 	}
 
 	/**

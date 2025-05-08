@@ -24,7 +24,8 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 	mwOpts = _.defaultsDeep({}, mwOpts, {
 		adapter: "Redis",
 		schemaProperty: "workflows",
-		workflowHandlerTrigger: "emitLocalWorkflowHandler"
+		workflowHandlerTrigger: "emitLocalWorkflowHandler",
+		jobEventType: null
 	});
 
 	/** @type {ServiceBroker} */
@@ -119,7 +120,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 				throw new BrokerOptionsError("Workflow adapter must be defined.", { opts: mwOpts });
 
 			adapter = Adapters.resolve(mwOpts.adapter);
-			adapter.init(broker, logger);
+			adapter.init(broker, logger, mwOpts);
 
 			// Populate broker with new methods
 			if (!broker.wf) {
