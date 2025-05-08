@@ -38,8 +38,6 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 	/** @type {boolean} */
 	let started = false;
 
-	const wfList = [];
-
 	/**
 	 *
 	 * @param {ServiceBroker} broker
@@ -299,6 +297,8 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 		 */
 		async serviceCreated(svc) {
 			if (_.isPlainObject(svc.schema[mwOpts.schemaProperty])) {
+				svc.$workflowList = [];
+
 				// Process `workflows` in the schema
 				await broker.Promise.mapSeries(
 					Object.entries(svc.schema[mwOpts.schemaProperty]),
@@ -324,7 +324,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 							);
 						}
 
-						if (!wf.name) wf.name = svc.fullName + "." + name;
+						wf.name = svc.fullName + "." + (wf.name || name);
 						adapter.checkWorkflowName(wf.name);
 
 						// Wrap the original handler
@@ -389,7 +389,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 
 						// Register thw workflow handler into the adapter
 						adapter.registerWorkflow(wf);
-						wfList.push(wf);
+						svc.$workflowList.push(wf);
 						logger.info(`Workflow '${wf.name}' is registered.`);
 					}
 				);
@@ -448,10 +448,12 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 		 * @param {Service} svc
 		 */
 		async serviceStopping(svc) {
-			wfList.forEach(wf => {
+			if (!svc.$workflowList) return;
+
+			for (const wf of svc.$workflowList) {
 				adapter.unregisterWorkflow(wf);
 				logger.info(`Workflow '${wf.name}' is unregistered.`);
-			});
+			}
 		},
 
 		/**

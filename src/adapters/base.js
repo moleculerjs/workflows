@@ -7,7 +7,7 @@
 "use strict";
 
 const _ = require("lodash");
-const { MoleculerError } = require("moleculer").Errors;
+const { WorkflowError, WorkflowTaskMismatchError } = require("../errors");
 const { Serializers } = require("moleculer");
 const C = require("../constants");
 const { circa, parseDuration } = require("../utils");
@@ -143,10 +143,10 @@ class BaseAdapter {
 	 *
 	 * @param {Workflow} workflow
 	 */
-	unregisterWorkflow(workflow) {
+	async unregisterWorkflow(workflow) {
 		this.workflows.delete(workflow.name);
 		if (this.connected) {
-			this.stopJobProcessor(workflow);
+			await this.stopJobProcessor(workflow);
 		}
 	}
 
@@ -260,16 +260,7 @@ class BaseAdapter {
 
 				return event.result;
 			} else {
-				throw new MoleculerError(
-					`Workflow task mismatch at replaying. Expected '${taskType}' but got '${event.taskType}'.`,
-					500,
-					"WORKFLOW_TASK_MISMATCH",
-					{
-						taskId,
-						expected: taskType,
-						actual: event.taskType
-					}
-				);
+				throw new WorkflowTaskMismatchError(taskId, taskType, event.taskType);
 			}
 		};
 
@@ -349,7 +340,7 @@ class BaseAdapter {
 			const startTime = Date.now();
 
 			if (!name) name = `custom-${taskId}`;
-			if (!fn) throw new Error("Missing function to run.");
+			if (!fn) throw new WorkflowError("Missing function to run.", 400, "MISSING_FUNCTION");
 
 			const event = getCurrentTaskEvent();
 			if (event) return validateEvent(event, "custom");
@@ -503,7 +494,7 @@ class BaseAdapter {
 	 * @param {string} jobId - The ID of the job.
 	 * @returns {Promise<Object[]>} Resolves with an array of job events.
 	 */
-	async getJobEvents(workflowName, jobId) {
+	async getJobEvents(/*workflowName, jobId*/) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -597,7 +588,7 @@ class BaseAdapter {
 	checkWorkflowName(workflowName) {
 		const re = /^[a-zA-Z0-9_.-]+$/;
 		if (!re.test(workflowName)) {
-			throw new MoleculerError(
+			throw new WorkflowError(
 				`Invalid workflow name '${workflowName}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
 				400,
 				"INVALID_WORKFLOW_NAME",
@@ -618,7 +609,7 @@ class BaseAdapter {
 	checkJobId(jobId) {
 		const re = /^[a-zA-Z0-9_.-]+$/;
 		if (!re.test(jobId)) {
-			throw new MoleculerError(
+			throw new WorkflowError(
 				`Invalid job ID '${jobId}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
 				400,
 				"INVALID_JOB_ID",
@@ -639,7 +630,7 @@ class BaseAdapter {
 	checkSignal(signalName, key) {
 		const re = /^[a-zA-Z0-9_.-]+$/;
 		if (!re.test(signalName)) {
-			throw new MoleculerError(
+			throw new WorkflowError(
 				`Invalid signal name '${signalName}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
 				400,
 				"INVALID_SIGNAL_NAME",
@@ -650,7 +641,7 @@ class BaseAdapter {
 		}
 
 		if (!re.test(key)) {
-			throw new MoleculerError(
+			throw new WorkflowError(
 				`Invalid signal key '${key}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
 				400,
 				"INVALID_SIGNAL_KEY",

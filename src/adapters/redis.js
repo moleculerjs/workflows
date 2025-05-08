@@ -8,7 +8,8 @@
 
 const _ = require("lodash");
 const BaseAdapter = require("./base");
-const { MoleculerError } = require("moleculer").Errors;
+const { BrokerOptionsError } = require("moleculer").Errors;
+const { WorkflowError, WorkflowAlreadyLocked } = require("../errors");
 const C = require("../constants");
 const Redis = require("ioredis");
 const { parseDuration, humanize, getCronNextTime } = require("../utils");
@@ -329,7 +330,7 @@ class RedisAdapter extends BaseAdapter {
 		);
 		this.log("debug", workflow.name, jobId, "Lock result", lockRes);
 
-		if (!lockRes) throw new Error(`Job ${jobId} is already locked.`);
+		if (!lockRes) throw new WorkflowError(`Job ${jobId} is already locked.`);
 
 		const lockExtender = async () => {
 			this.log("debug", workflow.name, jobId, "Extending lock");
@@ -376,8 +377,10 @@ class RedisAdapter extends BaseAdapter {
 
 		const jobEvents = await this.getJobEvents(workflow.name, jobId);
 
-		const unlock = await this.lock(workflow, jobId);
+		let unlock;
 		try {
+			unlock = await this.lock(workflow, jobId);
+
 			const now = Date.now();
 			await this.commandClient.hset(
 				this.getKey(workflow.name, C.QUEUE_JOB, jobId),
@@ -406,10 +409,14 @@ class RedisAdapter extends BaseAdapter {
 
 			await this.moveToCompleted(workflow, job, result);
 		} catch (err) {
+			if (err instanceof WorkflowAlreadyLocked) {
+				this.log("debug", workflow.name, jobId, "Job is already locked.");
+				return;
+			}
 			this.log("error", workflow.name, jobId, "Job processing is failed.", err);
 			await this.moveToFailed(workflow, job, err);
 		} finally {
-			await unlock();
+			if (unlock) await unlock();
 		}
 	}
 
@@ -817,7 +824,7 @@ class RedisAdapter extends BaseAdapter {
 
 		if (opts.repeat) {
 			if (!opts.jobId) {
-				throw new MoleculerError(
+				throw new WorkflowError(
 					"Job ID is required for repeatable jobs",
 					400,
 					"MISSING_REPEAT_JOB_ID"
@@ -830,7 +837,7 @@ class RedisAdapter extends BaseAdapter {
 			if (opts.repeat.endDate) {
 				const endDate = new Date(opts.repeat.endDate).getTime();
 				if (endDate < Date.now()) {
-					throw new MoleculerError(
+					throw new WorkflowError(
 						"Repeatable job is expired at " + opts.repeat.endDate,
 						400,
 						"REPEAT_JOB_EXPIRED",
@@ -1387,7 +1394,7 @@ class RedisAdapter extends BaseAdapter {
 	 * Create Redis standalone or cluster client.
 	 *
 	 * @returns {Redis|Cluster} A Redis client instance, either standalone or cluster.
-	 * @throws {MoleculerError} If no nodes are defined for Redis cluster.
+	 * @throws {WorkflowError} If no nodes are defined for Redis cluster.
 	 */
 	createRedisClient() {
 		let client;
@@ -1396,9 +1403,8 @@ class RedisAdapter extends BaseAdapter {
 
 		if (opts && opts.cluster) {
 			if (!opts.cluster.nodes || opts.cluster.nodes.length === 0) {
-				throw new MoleculerError(
+				throw new BrokerOptionsError(
 					"No nodes defined for Redis cluster in Workflow adapter.",
-					500,
 					"ERR_NO_REDIS_CLUSTER_NODES"
 				);
 			}

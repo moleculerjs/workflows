@@ -40,7 +40,7 @@ const broker = new ServiceBroker({
 	},
 
 	metrics: {
-		enabled: false,
+		enabled: true,
 		reporter: {
 			type: "Console",
 			options: {
@@ -131,6 +131,47 @@ const broker = new ServiceBroker({
 					} catch (err) {
 						console.log("Job failed", err.message);
 					}
+				}
+			}
+		},
+
+		{
+			command: "batch",
+			options: [
+				{
+					option: "-w, --workflow <workflowName>",
+					description: "Name of the workflow. Default: 'test.wf2'"
+				},
+				{
+					option: "-c, --count <count>",
+					description: "Number of jobs to run"
+				}
+			],
+			async action(broker, args) {
+				const { options } = args;
+				//console.log(options);
+				const count = options.count || 100;
+
+				const jobs = new Map();
+				const start = Date.now();
+
+				console.log(`Generate ${count} jobs...`);
+				for (let i = 0; i < count; i++) {
+					const jobId = "batch-" + i;
+					const job = await broker.wf.run(
+						options.workflow || "test.wf2",
+						{ i },
+						{ jobId }
+					);
+
+					job.promise().then(() => {
+						jobs.delete(jobId);
+						if (jobs.size === 0) {
+							console.log("All jobs finished. Time:", Date.now() - start, "ms");
+						}
+					});
+
+					jobs.set(jobId, job);
 				}
 			}
 		},
