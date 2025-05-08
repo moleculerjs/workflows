@@ -22,13 +22,14 @@
 			"cwd": "${workspaceRoot}"
 		},
 		{
-			"name": "Attach by Process ID",
-			"processId": "${command:PickProcess}",
+			"name": "Attach to demo",
+			"port": 9229,
 			"request": "attach",
 			"skipFiles": [
 				"<node_internals>/**"
 			],
-			"type": "node"
+			"type": "node",
+			"restart": true
 		},
 		{
 			"type": "node",

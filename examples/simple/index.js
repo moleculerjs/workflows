@@ -16,6 +16,7 @@ let c = 1;
 
 let lastJobId;
 
+// console.log(process.argv);
 const isNoService = process.argv[2] === "noservice";
 
 // Create broker

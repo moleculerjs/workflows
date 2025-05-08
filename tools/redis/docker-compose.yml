@@ -1,0 +1,19 @@
+services:
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - data:/data
+
+  insight:
+    image: redis/redisinsight:latest
+    ports:
+      - "5540:5540"
+    volumes:
+      - insight_data:/data
+
+volumes:
+  data:
+  insight_data:
