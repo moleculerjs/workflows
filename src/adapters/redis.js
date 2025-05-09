@@ -540,6 +540,8 @@ class RedisAdapter extends BaseAdapter {
 		this.sendJobEvent(workflow.name, job.id, "completed");
 
 		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
+		await this.commandClient.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
+
 		if (this.opts.removeOnComplete) {
 			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
 		} else {
@@ -600,7 +602,7 @@ class RedisAdapter extends BaseAdapter {
 			return Math.pow(2, retryAttempts) * delay;
 		}
 
-		return 0;
+		return delay;
 	}
 
 	/**
@@ -626,6 +628,7 @@ class RedisAdapter extends BaseAdapter {
 		this.sendJobEvent(workflow.name, job.id, "failed");
 
 		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
+		await this.commandClient.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
 
 		if (err?.retryable) {
 			let retryFields = await this.commandClient.hmget(

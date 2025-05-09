@@ -556,8 +556,8 @@ class BaseAdapter {
 			Array.from(this.workflows.values()).map(async wf => {
 				if (await this.lockMaintenance(wf)) {
 					try {
-						await this.maintenanceDelayedJobs(wf);
 						await this.maintenanceStalledJobs(wf);
+						await this.maintenanceDelayedJobs(wf);
 
 						if (wf.retention) {
 							const retention = parseDuration(wf.retention);

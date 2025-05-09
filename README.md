@@ -12,13 +12,86 @@ Reliable & scalable workflow feature (like Temporal.io or Restate) for Moleculer
 
 ## Features
 
+- Reliable and scalable workflow management for the Moleculer framework.
+- Supports multiple adapters (e.g., Redis, Fake) for workflow storage.
+- Workflow execution with concurrency control and retry policies.
+- Event-driven architecture with support for signals and state transitions.
+- Built-in metrics and monitoring capabilities.
+- Parameter validation and error handling.
+- Workflow history retention and maintenance.
+- Integration with Moleculer services and actions.
+
 ## Install
-```
+
+To install the package, use the following command:
+
+```bash
 npm i @moleculer/workflows
 ```
 
 ## Usage
 
+### Basic Example
+
+```javascript
+const { ServiceBroker } = require("moleculer");
+const WorkflowsMiddleware = require("@moleculer/workflows").Middleware;
+
+// Create a ServiceBroker
+const broker = new ServiceBroker({
+    logger: true,
+    transporter: "Redis",
+    middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+});
+
+// Define a service with workflows
+broker.createService({
+    name: "test",
+    workflows: {
+        simpleWorkflow: {
+            async handler(ctx) {
+                return `Hello, ${ctx.params.name}`;
+            }
+        }
+    }
+});
+
+// Start the broker
+broker.start().then(async () => {
+    // Run the workflow
+    const result = await broker.wf.run("test.simpleWorkflow", { name: "World" });
+    console.log(result);
+});
+```
+
+### Advanced Example
+
+```javascript
+broker.createService({
+    name: "users",
+    workflows: {
+        signupWorkflow: {
+            timeout: "1 day",
+            retention: "3 days",
+            concurrency: 3,
+            async handler(ctx) {
+                const user = await ctx.call("users.register", ctx.params);
+                await ctx.wf.setState("REGISTERED");
+                await ctx.call("mail.send", { type: "welcome", user });
+                return user;
+            }
+        }
+    },
+    actions: {
+        register(ctx) {
+            // User registration logic
+        },
+        sendMail(ctx) {
+            // Email sending logic
+        }
+    }
+});
+```
 
 ## Documentation
 You can find [here the documentation](docs/README.md).

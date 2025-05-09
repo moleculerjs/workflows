@@ -14,6 +14,8 @@ const WorkflowsMiddleware = require("../../index").Middleware;
 
 let c = 1;
 
+let attempt = 0;
+
 let lastJobId;
 
 // console.log(process.argv);
@@ -94,6 +96,8 @@ const broker = new ServiceBroker({
 				}
 			],
 			async action(broker, args) {
+				attempt = 0;
+
 				const { options } = args;
 				console.log(args);
 				const jobOpts = {
@@ -392,7 +396,13 @@ if (!isNoService) {
 			wf2: {
 				fullName: "wf2",
 				concurrency: 10,
-				handler(ctx) {}
+				handler(ctx) {
+					attempt++;
+					if (attempt < 3) {
+						throw new MoleculerRetryableError("Simulated failure");
+					}
+					return `Success on attempt ${attempt}`;
+				}
 			}
 		},
 
