@@ -285,11 +285,28 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the job is processed.
 	 */
 	async runJobProcessor(workflow) {
+		// if (workflow.$isRunning) {
+		// 	return;
+		// }
+
+		// workflow.$isRunning = true;
 		const client = await this.isClientReady(workflow.name);
 		if (client.stopped) {
 			this.log("warn", workflow.name, null, "Job processor is stopped");
 			return;
 		}
+
+		const concurrency = workflow.concurrency ?? 1;
+		const runningJobs = this.activeRuns.get(workflow.name) || [];
+
+		if (runningJobs.length >= concurrency) {
+			// this.log("debug", workflow.name, null, "Max concurrency reached. Waiting...");
+			//workflow.$isRunning = false;
+			//setTimeout(() => this.runJobProcessor(workflow), 500);
+			setImmediate(() => this.runJobProcessor(workflow));
+			return;
+		}
+
 		try {
 			client.blocked = true;
 			const jobId = await client.brpoplpush(
@@ -300,7 +317,9 @@ class RedisAdapter extends BaseAdapter {
 			client.blocked = false;
 
 			if (jobId) {
-				await this.processJob(workflow, jobId);
+				this.addRunningJob(workflow, jobId);
+				// Process the job, without awaiting for it
+				this.processJob(workflow, jobId);
 			}
 		} catch (err) {
 			// Swallow error if disconnecting
@@ -309,6 +328,74 @@ class RedisAdapter extends BaseAdapter {
 			}
 		} finally {
 			setImmediate(() => this.runJobProcessor(workflow));
+		}
+	}
+
+	/**
+	 * Get job details and process it.
+	 *
+	 * @param {string} workflow - The name of the workflow.
+	 * @param {string} jobId - The ID of the job to process.
+	 * @returns {Promise<void>} Resolves when the job is processed.
+	 */
+	async processJob(workflow, jobId) {
+		const job = await this.getJob(workflow.name, jobId);
+		if (!job) {
+			this.log("warn", workflow.name, jobId, "Job not found");
+			// Remove from active queue
+			await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, jobId);
+
+			this.removeRunningJob(workflow, jobId);
+
+			return;
+		}
+
+		const jobEvents = await this.getJobEvents(workflow.name, jobId);
+
+		const now = Date.now();
+		let unlock;
+		try {
+			unlock = await this.lock(workflow, jobId);
+
+			await this.commandClient.hset(
+				this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+				"startedAt",
+				now
+			);
+
+			await this.addJobEvent(workflow.name, job.id, {
+				type: "started"
+			});
+
+			this.sendJobEvent(workflow.name, job.id, "started");
+
+			this.log("debug", workflow.name, jobId, "Running job...", job);
+
+			const result = await this.callWorkflowHandler(workflow, job, jobEvents);
+
+			const duration = Date.now() - now;
+			this.log(
+				"debug",
+				workflow.name,
+				jobId,
+				`Job finished in ${humanize(duration)}.`,
+				result
+			);
+
+			await this.moveToCompleted(workflow, job, result, duration);
+		} catch (err) {
+			if (err instanceof WorkflowAlreadyLocked) {
+				this.log("debug", workflow.name, jobId, "Job is already locked.");
+				return;
+			}
+			this.log("error", workflow.name, jobId, "Job processing is failed.", err);
+			await this.moveToFailed(workflow, job, err, Date.now() - now);
+		} finally {
+			this.removeRunningJob(workflow, jobId);
+
+			if (unlock) await unlock();
+
+			//setImmediate(() => this.runJobProcessor(workflow));
 		}
 	}
 
@@ -357,67 +444,6 @@ class RedisAdapter extends BaseAdapter {
 			);
 			this.log("debug", workflow.name, jobId, "Unlock result", unlockRes);
 		};
-	}
-
-	/**
-	 * Get job details and process it.
-	 *
-	 * @param {string} workflow - The name of the workflow.
-	 * @param {string} jobId - The ID of the job to process.
-	 * @returns {Promise<void>} Resolves when the job is processed.
-	 */
-	async processJob(workflow, jobId) {
-		const job = await this.getJob(workflow.name, jobId);
-		if (!job) {
-			this.log("warn", workflow.name, jobId, "Job not found");
-			// Remove from active queue
-			await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, jobId);
-			return;
-		}
-
-		const jobEvents = await this.getJobEvents(workflow.name, jobId);
-
-		let unlock;
-		try {
-			unlock = await this.lock(workflow, jobId);
-
-			const now = Date.now();
-			await this.commandClient.hset(
-				this.getKey(workflow.name, C.QUEUE_JOB, jobId),
-				"startedAt",
-				now
-			);
-
-			await this.addJobEvent(workflow.name, job.id, {
-				type: "started"
-			});
-
-			this.sendJobEvent(workflow.name, job.id, "started");
-
-			this.log("debug", workflow.name, jobId, "Running job...", job);
-
-			const result = await this.callWorkflowHandler(workflow, job, jobEvents);
-
-			const duration = Date.now() - now;
-			this.log(
-				"debug",
-				workflow.name,
-				jobId,
-				`Job finished in ${humanize(duration)}.`,
-				result
-			);
-
-			await this.moveToCompleted(workflow, job, result);
-		} catch (err) {
-			if (err instanceof WorkflowAlreadyLocked) {
-				this.log("debug", workflow.name, jobId, "Job is already locked.");
-				return;
-			}
-			this.log("error", workflow.name, jobId, "Job processing is failed.", err);
-			await this.moveToFailed(workflow, job, err);
-		} finally {
-			if (unlock) await unlock();
-		}
 	}
 
 	/**
@@ -502,9 +528,10 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {string} workflow - The name of the workflow.
 	 * @param {Object} job - The job object.
 	 * @param {*} result - The result of the job execution.
+	 * @param {number} duration - The duration of the job execution.
 	 * @returns {Promise<void>} Resolves when the job is moved to the completed queue.
 	 */
-	async moveToCompleted(workflow, job, result) {
+	async moveToCompleted(workflow, job, result, duration) {
 		await this.addJobEvent(workflow.name, job.id, {
 			type: "finished"
 		});
@@ -518,7 +545,8 @@ class RedisAdapter extends BaseAdapter {
 		} else {
 			const fields = {
 				success: true,
-				finishedAt: Date.now()
+				finishedAt: Date.now(),
+				duration
 			};
 			if (result != null) {
 				fields.result = this.serializer.serialize(result);
@@ -554,9 +582,16 @@ class RedisAdapter extends BaseAdapter {
 		}
 	}
 
-	getBackoffTime(retryAttempts) {
-		const backoff = this.opts.backoff;
-		const delay = parseDuration(this.opts.backoffDelay) ?? 100;
+	/**
+	 * Calculate the backoff time for a job.
+	 *
+	 * @param {Workflow} workflow
+	 * @param {number} retryAttempts
+	 * @returns {number} The backoff time in milliseconds.
+	 */
+	getBackoffTime(workflow, retryAttempts) {
+		const backoff = workflow.backoff;
+		const delay = parseDuration(workflow.backoffDelay) ?? 100;
 		if (typeof backoff === "function") {
 			return backoff(retryAttempts);
 		} else if (backoff === "fixed") {
@@ -564,6 +599,8 @@ class RedisAdapter extends BaseAdapter {
 		} else if (backoff === "exponential") {
 			return Math.pow(2, retryAttempts) * delay;
 		}
+
+		return 0;
 	}
 
 	/**
@@ -572,9 +609,10 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {string} workflow - The name of the workflow.
 	 * @param {Object|string} job - The job object.
 	 * @param {Error} err - The error that caused the job to fail.
+	 * @param {number} duration - The duration of the job execution.
 	 * @returns {Promise<void>} Resolves when the job is moved to the failed queue.
 	 */
-	async moveToFailed(workflow, job, err) {
+	async moveToFailed(workflow, job, err, duration) {
 		if (typeof job == "string") {
 			job = await this.getJob(workflow.name, job, ["parent"]);
 		}
@@ -603,14 +641,12 @@ class RedisAdapter extends BaseAdapter {
 					"retryAttempts",
 					1
 				);
-				const backoffTime = this.getBackoffTime(retryAttempts);
+				const backoffTime = this.getBackoffTime(workflow, retryAttempts);
 				this.log(
 					"debug",
 					workflow.name,
 					job.id,
-					`Retrying job after ${backoffTime} ms...`,
-					retryAttempts,
-					retries
+					`Retrying job (${retryAttempts} attempts of ${retries}) after ${backoffTime} ms...`
 				);
 
 				const promoteAt = Date.now() + backoffTime;
@@ -634,7 +670,8 @@ class RedisAdapter extends BaseAdapter {
 		} else {
 			const fields = {
 				success: false,
-				finishedAt: Date.now()
+				finishedAt: Date.now(),
+				duration
 			};
 			if (err != null) {
 				fields.error = this.serializer.serialize(
@@ -878,7 +915,7 @@ class RedisAdapter extends BaseAdapter {
 		} else {
 			// Normal job
 			this.log("debug", workflowName, job.id, "Job created.", job);
-			await this.commandClient.rpush(this.getKey(workflowName, C.QUEUE_WAITING), jobId);
+			await this.commandClient.lpush(this.getKey(workflowName, C.QUEUE_WAITING), jobId);
 		}
 
 		this.sendJobEvent(workflowName, job.id, "created");
@@ -1325,14 +1362,19 @@ class RedisAdapter extends BaseAdapter {
 	 *
 	 * @param {Object} workflow - The workflow object.
 	 * @param {string} queueName - The name of the queue (e.g., completed, failed).
-	 * @param {number} duration - The age threshold in milliseconds for removing jobs.
+	 * @param {number} retention - The age threshold in milliseconds for removing jobs.
 	 * @returns {Promise<void>} Resolves when old jobs are removed.
 	 */
-	async maintenanceRemoveOldJobs(workflow, queueName, duration) {
-		this.log("debug", workflow.name, null, `Maintenance remove old ${queueName} jobs...`);
+	async maintenanceRemoveOldJobs(workflow, queueName, retention) {
+		this.log(
+			"debug",
+			workflow.name,
+			null,
+			`Maintenance remove old ${queueName} jobs... (retention: ${humanize(retention)})`
+		);
 
 		try {
-			const minDate = Date.now() - duration;
+			const minDate = Date.now() - retention;
 			const jobIds = await this.commandClient.zrangebyscore(
 				this.getKey(workflow.name, queueName),
 				0,

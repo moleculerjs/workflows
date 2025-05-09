@@ -324,7 +324,9 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 							);
 						}
 
-						wf.name = svc.fullName + "." + (wf.name || name);
+						wf.name = wf.fullName
+							? wf.fullName
+							: svc.fullName + "." + (wf.name || name);
 						adapter.checkWorkflowName(wf.name);
 
 						// Wrap the original handler

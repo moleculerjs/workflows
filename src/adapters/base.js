@@ -38,17 +38,12 @@ class BaseAdapter {
 
 			signalExpiration: "1h",
 
-			maintenanceTime: 10,
-			removeCompletedAfter: "30m",
-			removeFailedAfter: "30m",
-
-			backoff: "exponential",
-			backoffDelay: 1000
+			maintenanceTime: 10
 		});
 
 		/**
-		 * Tracks the local running workflows
-		 * @type {Array<string>}
+		 * Tracks the local running jobs per workflow.
+		 * @type {Map<string, string>}
 		 */
 		this.activeRuns = new Map();
 
@@ -85,9 +80,10 @@ class BaseAdapter {
 	 * Close the adapter.
 	 */
 	destroy() {
-		if (this.activeRuns.size > 0) {
+		const runningJobs = Array.from(this.activeRuns.values());
+		if (runningJobs.size > 0) {
 			this.logger.warn(
-				`Disconnecting adapter while there are ${this.activeRuns.size} active workflow jobs. This may cause data loss.`
+				`Disconnecting adapter while there are ${runningJobs.size} active workflow jobs. This may cause data loss.`
 			);
 		}
 
@@ -366,6 +362,37 @@ class BaseAdapter {
 	}
 
 	/**
+	 * Add a running job to the list of active jobs.
+	 *
+	 * @param {Workflow} workflow
+	 * @param {string} jobId
+	 */
+	addRunningJob(workflow, jobId) {
+		const wf = this.activeRuns.get(workflow.name);
+		if (!wf) {
+			this.activeRuns.set(workflow.name, [jobId]);
+		} else {
+			wf.push(jobId);
+		}
+	}
+
+	/**
+	 * Remove a running job from the list of active jobs.
+	 *
+	 * @param {Workflow} workflow
+	 * @param {string} jobId
+	 */
+	removeRunningJob(workflow, jobId) {
+		const wf = this.activeRuns.get(workflow.name);
+		if (wf) {
+			const idx = wf.indexOf(jobId);
+			if (idx > -1) {
+				wf.splice(idx, 1);
+			}
+		}
+	}
+
+	/**
 	 * Call workflow handler with a job.
 	 *
 	 * @param {Workflow} workflow The workflow object.
@@ -374,15 +401,10 @@ class BaseAdapter {
 	 * @returns {Promise<*>} The result of the workflow handler execution.
 	 */
 	async callWorkflowHandler(workflow, job, events) {
-		this.activeRuns.set(job.id, job);
-		try {
-			const ctx = this.createWorkflowContext(workflow, job, events);
+		const ctx = this.createWorkflowContext(workflow, job, events);
 
-			const result = await workflow.handler(ctx);
-			return result;
-		} finally {
-			this.activeRuns.delete(job.id);
-		}
+		const result = await workflow.handler(ctx);
+		return result;
 	}
 
 	/**
@@ -537,18 +559,30 @@ class BaseAdapter {
 						await this.maintenanceDelayedJobs(wf);
 						await this.maintenanceStalledJobs(wf);
 
-						const completedDuration = parseDuration(this.opts.removeCompletedAfter);
-						if (completedDuration > 0) {
-							await this.maintenanceRemoveOldJobs(
-								wf,
-								C.QUEUE_COMPLETED,
-								completedDuration
-							);
-						}
+						if (wf.retention) {
+							const retention = parseDuration(wf.retention);
+							if (retention > 0) {
+								// Execution time is 1 minute, or the retention time if it's less.
+								const executionTime = Math.min(retention, 60 * 1000);
 
-						const failedDuration = parseDuration(this.opts.removeFailedAfter);
-						if (failedDuration > 0) {
-							await this.maintenanceRemoveOldJobs(wf, C.QUEUE_FAILED, failedDuration);
+								if (
+									!wf.$lastRetentionTime ||
+									wf.$lastRetentionTime + executionTime < Date.now()
+								) {
+									await this.maintenanceRemoveOldJobs(
+										wf,
+										C.QUEUE_COMPLETED,
+										retention
+									);
+									await this.maintenanceRemoveOldJobs(
+										wf,
+										C.QUEUE_FAILED,
+										retention
+									);
+
+									wf.$lastRetentionTime = Date.now();
+								}
+							}
 						}
 					} finally {
 						await this.unlockMaintenance(wf);

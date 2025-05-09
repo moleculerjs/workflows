@@ -27,7 +27,7 @@ const broker = new ServiceBroker({
 		options: {
 			formatter: "short",
 			level: {
-				// WORKFLOWS: "debug",
+				WORKFLOWS: "debug",
 				"*": "info"
 			},
 			objectPrinter: obj =>
@@ -40,7 +40,7 @@ const broker = new ServiceBroker({
 	},
 
 	metrics: {
-		enabled: true,
+		enabled: false,
 		reporter: {
 			type: "Console",
 			options: {
@@ -51,7 +51,7 @@ const broker = new ServiceBroker({
 
 	middlewares: [
 		WorkflowsMiddleware({
-			// jobEventType: "broadcast"
+			//jobEventType: "broadcast"
 		})
 	],
 
@@ -140,7 +140,7 @@ const broker = new ServiceBroker({
 			options: [
 				{
 					option: "-w, --workflow <workflowName>",
-					description: "Name of the workflow. Default: 'test.wf2'"
+					description: "Name of the workflow. Default: 'test.wf1'"
 				},
 				{
 					option: "-c, --count <count>",
@@ -159,7 +159,7 @@ const broker = new ServiceBroker({
 				for (let i = 0; i < count; i++) {
 					const jobId = "batch-" + i;
 					const job = await broker.wf.run(
-						options.workflow || "test.wf2",
+						options.workflow || "test.wf1",
 						{ i },
 						{ jobId }
 					);
@@ -167,12 +167,17 @@ const broker = new ServiceBroker({
 					job.promise().then(() => {
 						jobs.delete(jobId);
 						if (jobs.size === 0) {
-							console.log("All jobs finished. Time:", Date.now() - start, "ms");
+							console.log(
+								`All ${count} jobs finished. Time:`,
+								Date.now() - start,
+								"ms"
+							);
 						}
 					});
 
 					jobs.set(jobId, job);
 				}
+				console.log(`Generated ${count} jobs. Time:`, Date.now() - start, "ms");
 			}
 		},
 
@@ -307,10 +312,16 @@ const broker = new ServiceBroker({
 		{
 			command: "cleanup",
 			alias: ["c"],
+			options: [
+				{
+					option: "-w, --workflow <workflowName>",
+					description: "Name of the workflow. Default: 'test.wf1'"
+				}
+			],
 			async action(broker, args) {
 				const { options } = args;
 				//console.log(options);
-				broker.wf.cleanUp("test.wf1");
+				broker.wf.cleanUp(options.workflow ?? "test.wf1");
 			}
 		}
 	]
@@ -323,9 +334,15 @@ if (!isNoService) {
 
 		// Define workflows
 		workflows: {
-			// User signup workflow.
+			// Test 1 workflow.
 			wf1: {
+				concurrency: 3,
 				maxStalledCount: 3,
+
+				retention: "10m",
+
+				backoff: "exponential",
+				backoffDelay: 1000,
 
 				__params: {
 					c: { type: "number" },
@@ -350,16 +367,15 @@ if (!isNoService) {
 						return await res.json();
 					});
 					await ctx.wf.setState("afterFetch");
-					/*
+
 					this.logger.info("Post result", post);
 
-					for (let i = 0; i < 5; i++) {
-						this.logger.info("Sleeping...");
-						await ctx.wf.sleep(1000);
-						await ctx.wf.setState("afterSleep-" + (i + 1));
-					}
+					// for (let i = 0; i < 5; i++) {
+					// 	this.logger.info("Sleeping...");
+					// 	await ctx.wf.sleep(1000);
+					// 	await ctx.wf.setState("afterSleep-" + (i + 1));
+					// }
 
-					*/
 					await ctx.call("test.danger", { name: "John Doe" });
 
 					const signalRes = await ctx.wf.waitForSignal("test.signal", 123);
@@ -374,7 +390,8 @@ if (!isNoService) {
 			},
 
 			wf2: {
-				name: "wf2",
+				fullName: "wf2",
+				concurrency: 10,
 				handler(ctx) {}
 			}
 		},

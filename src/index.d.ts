@@ -5,6 +5,10 @@ import { Cluster, Redis, RedisOptions } from "ioredis";
 
 export interface Workflow {
     name: string;
+	backoff: "fixed" | "exponential" | ((retryAttempts: number) => number);
+    backoffDelay: number;
+	concurrency: number;
+
     handler: (ctx: WorkflowContext) => Promise<any>;
 }
 
@@ -30,10 +34,6 @@ export interface BaseDefaultOptions {
     serializer: string;
     signalExpiration: string;
     maintenanceTime: number;
-    removeCompletedAfter: string;
-    removeFailedAfter: string;
-    backoff: "fixed" | "exponential" | ((retryAttempts: number) => number);
-    backoffDelay: number;
 }
 
 export interface RedisAdapterOptions extends BaseDefaultOptions {
