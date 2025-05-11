@@ -1,27 +1,46 @@
 // TypeScript type definitions for the Moleculer Workflow project
 
-import { ServiceBroker, LoggerInstance } from "moleculer";
+import { ServiceBroker, LoggerInstance, Context } from "moleculer";
 import { Cluster, Redis, RedisOptions } from "ioredis";
 
-export interface Workflow {
-    name: string;
-	backoff: "fixed" | "exponential" | ((retryAttempts: number) => number);
-    backoffDelay: number;
-	concurrency: number;
+/**
+ * Options for the Workflows middleware
+ */
+export interface WorkflowsMiddlewareOptions {
+    adapter: string | BaseAdapter | RedisAdapterOptions;
+    schemaProperty?: string;
+    workflowHandlerTrigger?: string;
+    jobEventType?: string;
+}
 
+export interface Workflow {
+    name?: string;
+    timeout?: string | number;
+    retention?: string | number;
+    concurrency?: number;
+    retries?: number;
+    retryPolicy?: {
+        enabled?: boolean;
+        retries?: number;
+        delay?: number;
+        maxDelay?: number;
+        factor?: number;
+        backoff?: "fixed" | "exponential" | ((retryAttempts: number) => number);
+    };
+    backoff?: "fixed" | "exponential" | ((retryAttempts: number) => number);
+    backoffDelay?: number;
+
+    signalExpiration?: string;
+    maintenanceTime?: number;
+
+    params?: Record<string, any>;
     handler: (ctx: WorkflowContext) => Promise<any>;
 }
 
-export interface WorkflowContext {
+export interface WorkflowContext extends Context {
     wf: {
         name: string;
         jobId: string;
-    };
-    call: (action: string, params?: any) => Promise<any>;
-    mcall: (calls: Record<string, any>) => Promise<any>;
-    broadcast: (event: string, payload?: any) => void;
-    emit: (event: string, payload?: any) => void;
-    wf: {
         sleep: (duration: number) => Promise<void>;
         setState: (state: any) => Promise<void>;
         waitForSignal: (signalName: string, key: any, opts?: any) => Promise<any>;
@@ -31,15 +50,13 @@ export interface WorkflowContext {
 
 export interface BaseDefaultOptions {
     prefix?: string;
-    serializer: string;
-    signalExpiration: string;
-    maintenanceTime: number;
+    serializer?: string;
 }
 
 export interface RedisAdapterOptions extends BaseDefaultOptions {
     redis: RedisOptions | { url: string } | { cluster: { nodes: string[]; clusterOptions?: any } };
-    drainDelay: number;
-    lockDuration: number;
+    drainDelay?: number;
+    lockDuration?: number;
 }
 
 export class BaseAdapter {
@@ -53,8 +70,4 @@ export class BaseAdapter {
 
 export class RedisAdapter extends BaseAdapter {
     constructor(opts?: RedisAdapterOptions);
-    connect(): Promise<void>;
-    destroy(): Promise<void>;
-    createJob(workflowName: string, payload: any, opts?: any): Promise<any>;
-    cleanUp(workflowName?: string, jobId?: string): Promise<void>;
 }

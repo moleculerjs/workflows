@@ -34,11 +34,7 @@ class BaseAdapter {
 	constructor(opts) {
 		/** @type {BaseDefaultOptions} */
 		this.opts = _.defaultsDeep({}, opts, {
-			serializer: "JSON",
-
-			signalExpiration: "1h",
-
-			maintenanceTime: 10
+			serializer: "JSON"
 		});
 
 		/**
@@ -544,7 +540,7 @@ class BaseAdapter {
 
 		this.maintenanceTimer = setTimeout(
 			() => this.maintenance(),
-			circa(this.opts.maintenanceTime * 1000)
+			circa(this.mixinOpts.maintenanceTime * 1000)
 		);
 	}
 

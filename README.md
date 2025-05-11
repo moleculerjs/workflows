@@ -40,7 +40,6 @@ const WorkflowsMiddleware = require("@moleculer/workflows").Middleware;
 // Create a ServiceBroker
 const broker = new ServiceBroker({
     logger: true,
-    transporter: "Redis",
     middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
 });
 

@@ -764,7 +764,7 @@ class RedisAdapter extends BaseAdapter {
 
 		this.log("debug", null, null, "Trigger signal", content.toString());
 
-		const exp = parseDuration(this.opts.signalExpiration);
+		const exp = parseDuration(this.mixinOpts.signalExpiration);
 		if (exp != null && exp > 0) {
 			await this.commandClient.set(
 				this.getKey(C.QUEUE_SIGNAL, signalName, key),
