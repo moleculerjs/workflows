@@ -5,7 +5,7 @@
 [![Known Vulnerabilities](https://snyk.io/test/github/moleculerjs/workflows/badge.svg)](https://snyk.io/test/github/moleculerjs/workflows)
 [![NPM version](https://badgen.net/npm/v/@moleculer/workflows)](https://www.npmjs.com/package/@moleculer/workflows)
 
-# @moleculer/workflows 
+# @moleculer/workflows
 Reliable & scalable workflow feature (like Temporal.io or Restate) for Moleculer framework.
 
 **This project is in work-in-progress. Be careful using it in production.**

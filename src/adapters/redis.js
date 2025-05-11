@@ -539,11 +539,12 @@ class RedisAdapter extends BaseAdapter {
 		this.sendJobEvent(workflow.name, job.id, "finished");
 		this.sendJobEvent(workflow.name, job.id, "completed");
 
-		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
-		await this.commandClient.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
+		const pipeline = this.commandClient.pipeline();
+		pipeline.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
+		pipeline.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
 
 		if (this.opts.removeOnComplete) {
-			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
+			pipeline.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
 		} else {
 			const fields = {
 				success: true,
@@ -553,17 +554,11 @@ class RedisAdapter extends BaseAdapter {
 			if (result != null) {
 				fields.result = this.serializer.serialize(result);
 			}
-
-			// Update job
-			await this.commandClient.hmset(this.getKey(workflow.name, C.QUEUE_JOB, job.id), fields);
-
-			// Push to completed queue
-			await this.commandClient.zadd(
-				this.getKey(workflow.name, C.QUEUE_COMPLETED),
-				fields.finishedAt,
-				job.id
-			);
+			pipeline.hmset(this.getKey(workflow.name, C.QUEUE_JOB, job.id), fields);
+			pipeline.zadd(this.getKey(workflow.name, C.QUEUE_COMPLETED), fields.finishedAt, job.id);
 		}
+
+		await pipeline.exec();
 
 		if (this.jobResultPromises.has(job.id)) {
 			const storePromise = this.jobResultPromises.get(job.id);
@@ -627,8 +622,9 @@ class RedisAdapter extends BaseAdapter {
 		this.sendJobEvent(workflow.name, job.id, "finished");
 		this.sendJobEvent(workflow.name, job.id, "failed");
 
-		await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
-		await this.commandClient.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
+		const pipeline = this.commandClient.pipeline();
+		pipeline.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
+		pipeline.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
 
 		if (err?.retryable) {
 			let retryFields = await this.commandClient.hmget(
@@ -669,7 +665,7 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		if (this.opts.removeOnFailed) {
-			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
+			pipeline.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
 		} else {
 			const fields = {
 				success: false,
@@ -684,16 +680,11 @@ class RedisAdapter extends BaseAdapter {
 
 			this.log("debug", workflow.name, job.id, `Job move to failed queue.`);
 
-			// Update job
-			await this.commandClient.hmset(this.getKey(workflow.name, C.QUEUE_JOB, job.id), fields);
-
-			// Push to failed queue
-			await this.commandClient.zadd(
-				this.getKey(workflow.name, C.QUEUE_FAILED),
-				fields.finishedAt,
-				job.id
-			);
+			pipeline.hmset(this.getKey(workflow.name, C.QUEUE_JOB, job.id), fields);
+			pipeline.zadd(this.getKey(workflow.name, C.QUEUE_FAILED), fields.finishedAt, job.id);
 		}
+
+		await pipeline.exec();
 
 		if (this.jobResultPromises.has(job.id)) {
 			const storePromise = this.jobResultPromises.get(job.id);
@@ -802,10 +793,9 @@ class RedisAdapter extends BaseAdapter {
 	 *
 	 * @param {string} signalName - The name of the signal.
 	 * @param {unknown} key - The key associated with the signal.
-	 * @param {unknown} opts - Additional options for waiting.
 	 * @returns {Promise<unknown>} Resolves with the signal payload.
 	 */
-	async waitForSignal(signalName, key, opts) {
+	async waitForSignal(signalName, key) {
 		const content = await this.commandClient.get(this.getKey(C.QUEUE_SIGNAL, signalName, key));
 		if (content) {
 			const json = this.serializer.deserialize(content);
@@ -1120,10 +1110,12 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	async cleanUp(workflowName, jobId) {
 		if (workflowName && jobId) {
-			await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB, jobId));
-			await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_LOCK, jobId));
-			await this.commandClient.del(this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId));
-			await this.commandClient.lrem(this.getKey(workflowName, C.QUEUE_WAITING), 1, jobId);
+			const pipeline = this.commandClient.pipeline();
+			pipeline.del(this.getKey(workflowName, C.QUEUE_JOB, jobId));
+			pipeline.del(this.getKey(workflowName, C.QUEUE_JOB_LOCK, jobId));
+			pipeline.del(this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId));
+			pipeline.lrem(this.getKey(workflowName, C.QUEUE_WAITING), 1, jobId);
+			await pipeline.exec();
 			this.log("info", workflowName, jobId, "Cleaned up job store.");
 		} else if (workflowName) {
 			await this.cleanDb(this.getKey(workflowName) + ":*");
@@ -1200,7 +1192,7 @@ class RedisAdapter extends BaseAdapter {
 			this.getKey(workflow.name, C.QUEUE_MAINTENANCE_LOCK),
 			this.broker.instanceID,
 			"EX",
-			this.opts.maintenanceTime * 2,
+			this.mixinOpts.maintenanceTime * 2,
 			"NX"
 		);
 		this.log("debug", workflow.name, null, "Lock maintenance", lockRes);
@@ -1231,28 +1223,24 @@ class RedisAdapter extends BaseAdapter {
 					`Found ${jobIds.length} delayed jobs:`,
 					jobIds
 				);
-				for (const jobId of jobIds) {
-					try {
+				try {
+					const pipeline = this.commandClient.pipeline();
+					for (const jobId of jobIds) {
 						const job = await this.getJob(workflow.name, jobId, ["id"]);
 						if (job) {
-							await this.commandClient.lpush(
-								this.getKey(workflow.name, C.QUEUE_WAITING),
-								jobId
-							);
+							pipeline.lpush(this.getKey(workflow.name, C.QUEUE_WAITING), jobId);
 						}
-						await this.commandClient.zrem(
-							this.getKey(workflow.name, C.QUEUE_DELAYED),
-							jobId
-						);
-					} catch (err) {
-						this.log(
-							"error",
-							workflow.name,
-							null,
-							"Error while moving delayed jobs to waiting queue",
-							err
-						);
+						pipeline.zrem(this.getKey(workflow.name, C.QUEUE_DELAYED), jobId);
 					}
+					await pipeline.exec();
+				} catch (err) {
+					this.log(
+						"error",
+						workflow.name,
+						null,
+						"Error while moving delayed jobs to waiting queue",
+						err
+					);
 				}
 			}
 		} catch (err) {
@@ -1395,13 +1383,11 @@ class RedisAdapter extends BaseAdapter {
 				const jobEventsKeys = jobIds.map(jobId =>
 					this.getKey(workflow.name, C.QUEUE_JOB_EVENTS, jobId)
 				);
-				await this.commandClient.del(jobKeys);
-				await this.commandClient.del(jobEventsKeys);
-				await this.commandClient.zremrangebyscore(
-					this.getKey(workflow.name, queueName),
-					0,
-					minDate
-				);
+				const pipeline = this.commandClient.pipeline();
+				pipeline.del(jobKeys);
+				pipeline.del(jobEventsKeys);
+				pipeline.zremrangebyscore(this.getKey(workflow.name, queueName), 0, minDate);
+				await pipeline.exec();
 
 				this.log(
 					"debug",
