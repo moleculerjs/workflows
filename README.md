@@ -92,11 +92,32 @@ broker.createService({
 });
 ```
 
-## Documentation
+## Options
+
+### WorkflowsMiddleware (Mixin) Options
+
+| Name                  | Type                                                      | Default         | Description                                                                                 |
+|-----------------------|-----------------------------------------------------------|-----------------|---------------------------------------------------------------------------------------------|
+| adapter               | string \| BaseAdapter \| RedisAdapterOptions           | (required)      | Adapter instance, name, or options for workflow storage.                                    |
+| schemaProperty        | string                                                    | "workflows"    | Service schema property name for workflows.                                                  |
+| workflowHandlerTrigger| string                                                    | "emitLocalWorkflowHandler" | Name of the method to trigger workflow handler.                                 |
+| jobEventType          | string                                                    |                 | How job events are emitted (e.g., "broadcast", "emit").                                   |
+
+### RedisAdapter Options
+
+| Name         | Type                                                      | Default     | Description                                                                                 |
+|--------------|-----------------------------------------------------------|-------------|---------------------------------------------------------------------------------------------|
+| redis        | RedisOptions \| { url: string } \| { cluster: { nodes: string[]; clusterOptions?: any } } | (required)  | Redis connection options, URL, or cluster configuration.                                    |
+| prefix       | string                                                    | "wf"       | Prefix for Redis keys.                                                                      |
+| serializer   | string                                                    | "JSON"     | Serializer to use for job data.                                                             |
+| drainDelay   | number                                                    | 5         | Blocking delay time (sec).                                                           |
+| lockDuration | number                                                    | 30000       | Lock duration (ms) for job processing.                                                      |
+
+<!-- ## Documentation
 You can find [here the documentation](docs/README.md).
 
 ## Benchmark
-There is some benchmark with all adapters. [You can find the results here.](benchmark/results/common/README.md)
+There is some benchmark with all adapters. [You can find the results here.](benchmark/results/common/README.md) -->
 
 ## License
 The project is available under the [MIT license](https://tldrlegal.com/license/mit-license).
