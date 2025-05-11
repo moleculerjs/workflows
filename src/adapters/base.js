@@ -548,6 +548,8 @@ class BaseAdapter {
 	 *
 	 */
 	async maintenance() {
+		if (!this.connected) return;
+
 		await Promise.all(
 			Array.from(this.workflows.values()).map(async wf => {
 				if (await this.lockMaintenance(wf)) {

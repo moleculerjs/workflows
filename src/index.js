@@ -26,7 +26,9 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 		adapter: "Redis",
 		schemaProperty: "workflows",
 		workflowHandlerTrigger: "emitLocalWorkflowHandler",
-		jobEventType: null
+		jobEventType: null,
+		signalExpiration: "1h",
+		maintenanceTime: 10
 	});
 
 	/** @type {ServiceBroker} */
