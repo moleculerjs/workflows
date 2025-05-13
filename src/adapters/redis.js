@@ -625,6 +625,7 @@ class RedisAdapter extends BaseAdapter {
 		const pipeline = this.commandClient.pipeline();
 		pipeline.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
 		pipeline.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
+		await pipeline.exec();
 
 		if (err?.retryable) {
 			let retryFields = await this.commandClient.hmget(
@@ -635,7 +636,8 @@ class RedisAdapter extends BaseAdapter {
 			const retryAttempts = parseInt(retryFields[1] ?? 0);
 
 			if (retries > 0 && retryAttempts < retries) {
-				await this.commandClient.hincrby(
+				const pipeline = this.commandClient.pipeline();
+				pipeline.hincrby(
 					this.getKey(workflow.name, C.QUEUE_JOB, job.id),
 					"retryAttempts",
 					1
@@ -649,23 +651,21 @@ class RedisAdapter extends BaseAdapter {
 				);
 
 				const promoteAt = Date.now() + backoffTime;
-				await this.commandClient.hset(
+				pipeline.hset(
 					this.getKey(workflow.name, C.QUEUE_JOB, job.id),
 					"promoteAt",
 					promoteAt
 				);
-				await this.commandClient.zadd(
-					this.getKey(workflow.name, C.QUEUE_DELAYED),
-					promoteAt,
-					job.id
-				);
+				pipeline.zadd(this.getKey(workflow.name, C.QUEUE_DELAYED), promoteAt, job.id);
+
+				await pipeline.exec();
 
 				return;
 			}
 		}
 
 		if (this.opts.removeOnFailed) {
-			pipeline.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
+			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
 		} else {
 			const fields = {
 				success: false,
@@ -680,11 +680,11 @@ class RedisAdapter extends BaseAdapter {
 
 			this.log("debug", workflow.name, job.id, `Job move to failed queue.`);
 
+			const pipeline = this.commandClient.pipeline();
 			pipeline.hmset(this.getKey(workflow.name, C.QUEUE_JOB, job.id), fields);
 			pipeline.zadd(this.getKey(workflow.name, C.QUEUE_FAILED), fields.finishedAt, job.id);
+			await pipeline.exec();
 		}
-
-		await pipeline.exec();
 
 		if (this.jobResultPromises.has(job.id)) {
 			const storePromise = this.jobResultPromises.get(job.id);
