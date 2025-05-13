@@ -414,12 +414,12 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 				 *
 				 * @param {String} workflowName
 				 * @param {Object} payload
-				 * @param {string?} workflowId
+				 * @param {string?} jobId
 				 * @returns
 				 */
-				svc[mwOpts.channelHandlerTrigger] = (workflowName, payload, workflowId) => {
-					if (!workflowId) {
-						workflowId = broker.generateUid();
+				svc[mwOpts.channelHandlerTrigger] = (workflowName, payload, jobId) => {
+					if (!jobId) {
+						jobId = broker.generateUid();
 					}
 
 					svc.logger.debug(
@@ -437,8 +437,8 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						);
 					}
 
-					/** @type {Context} */
-					const ctx = Context.create(broker, null, payload, { workflowId });
+					/* TODO:
+					const ctx = adapter.createWorkflowContext(workflow, job, events);
 
 					// Shorthand definition
 					if (typeof svc.schema[mwOpts.schemaProperty][workflowName] === "function")
@@ -452,6 +452,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						svc, // Attach reference to service
 						ctx
 					);
+					*/
 				};
 			}
 		},

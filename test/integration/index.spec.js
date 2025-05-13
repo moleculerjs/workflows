@@ -3,6 +3,7 @@ const WorkflowsMiddleware = require("../../src");
 
 describe("Workflows Common Test", () => {
 	let broker;
+	let FLOWS = [];
 
 	const cleanup = async () => {
 		await broker.wf.cleanup("test.silent");
@@ -11,6 +12,7 @@ describe("Workflows Common Test", () => {
 		await broker.wf.cleanup("test.context");
 		await broker.wf.cleanup("test.state");
 		await broker.wf.cleanup("test.signal");
+		await broker.wf.cleanup("test.serial");
 		await broker.wf.cleanup("test.long");
 
 		await broker.wf.removeSignal("signal.first", 12345);
@@ -58,10 +60,20 @@ describe("Workflows Common Test", () => {
 						return { result: "OK", signalData };
 					}
 				},
+				serial: {
+					async handler(ctx) {
+						FLOWS.push("START-" + ctx.params.id);
+						await new Promise(resolve => setTimeout(resolve, 100));
+						FLOWS.push("STOP-" + ctx.params.id);
+						return `Processed ${ctx.params.id}`;
+					}
+				},
 				long: {
 					concurrency: 5,
 					async handler(ctx) {
+						FLOWS.push("START-" + ctx.params.id);
 						await new Promise(resolve => setTimeout(resolve, 1000));
+						FLOWS.push("STOP-" + ctx.params.id);
 						return `Processed ${ctx.params.id}`;
 					}
 				}
@@ -70,6 +82,10 @@ describe("Workflows Common Test", () => {
 
 		await broker.start();
 		await cleanup();
+	});
+
+	beforeEach(() => {
+		FLOWS = [];
 	});
 
 	afterAll(async () => {
@@ -114,6 +130,37 @@ describe("Workflows Common Test", () => {
 		const job2 = await broker.wf.get("test.simple", job.id);
 		expect(job2).toStrictEqual({
 			id: expect.any(String),
+			createdAt: expect.any(Number),
+			payload: { name: "World" },
+			startedAt: expect.any(Number),
+			finishedAt: expect.any(Number),
+			duration: expect.any(Number),
+			success: true,
+			result: "Hello, World"
+		});
+
+		const events = await broker.wf.getEvents("test.simple", job.id);
+		expect(events).toStrictEqual([
+			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "started" },
+			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "finished" }
+		]);
+	});
+
+	it("should execute a simple workflow with specified jobId and return the expected result", async () => {
+		const job = await broker.wf.run("test.simple", { name: "World" }, { jobId: "myJobId" });
+		expect(job).toStrictEqual({
+			id: "myJobId",
+			createdAt: expect.any(Number),
+			payload: { name: "World" },
+			promise: expect.any(Function)
+		});
+
+		const result = await job.promise();
+		expect(result).toBe("Hello, World");
+
+		const job2 = await broker.wf.get("test.simple", job.id);
+		expect(job2).toStrictEqual({
+			id: "myJobId",
 			createdAt: expect.any(Number),
 			payload: { name: "World" },
 			startedAt: expect.any(Number),
@@ -177,6 +224,20 @@ describe("Workflows Common Test", () => {
 
 		const job2 = await broker.wf.get("test.state", job.id);
 		expect(job2.state).toBe("IN_PROGRESS");
+
+		const events = await broker.wf.getEvents("test.state", job.id);
+		expect(events).toStrictEqual([
+			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "started" },
+			{
+				nodeID: broker.nodeID,
+				state: "IN_PROGRESS",
+				taskId: 1,
+				taskType: "state",
+				ts: expect.any(Number),
+				type: "task"
+			},
+			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "finished" }
+		]);
 	});
 
 	it("should set workflow status correctly (object)", async () => {
@@ -191,6 +252,20 @@ describe("Workflows Common Test", () => {
 
 		const job2 = await broker.wf.get("test.state", job.id);
 		expect(job2.state).toStrictEqual({ progress: 50, msg: "IN_PROGRESS" });
+
+		const events = await broker.wf.getEvents("test.state", job.id);
+		expect(events).toStrictEqual([
+			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "started" },
+			{
+				nodeID: broker.nodeID,
+				state: { progress: 50, msg: "IN_PROGRESS" },
+				taskId: 1,
+				taskType: "state",
+				ts: expect.any(Number),
+				type: "task"
+			},
+			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "finished" }
+		]);
 	});
 
 	it("should handle workflow signals correctly", async () => {
@@ -212,18 +287,127 @@ describe("Workflows Common Test", () => {
 
 		const result = await job.promise();
 		expect(result).toStrictEqual({ result: "OK", signalData: { user: "John" } });
+
+		const events = await broker.wf.getEvents("test.signal", job.id);
+		expect(events).toStrictEqual([
+			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "started" },
+			{
+				nodeID: broker.nodeID,
+				state: "beforeSignal",
+				taskId: 1,
+				taskType: "state",
+				ts: expect.any(Number),
+				type: "task"
+			},
+			{
+				duration: 500,
+				nodeID: broker.nodeID,
+				result: { user: "John" },
+				signalKey: 12345,
+				signalName: "signal.first",
+				taskId: 2,
+				taskType: "signal",
+				ts: expect.any(Number),
+				type: "task"
+			},
+			{
+				nodeID: broker.nodeID,
+				state: "afterSignal",
+				taskId: 3,
+				taskType: "state",
+				ts: expect.any(Number),
+				type: "task"
+			},
+			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "finished" }
+		]);
 	});
 
-	it("should handle concurrent workflows", async () => {
-		const promises = [];
-		for (let i = 0; i < 5; i++) {
-			promises.push((await broker.wf.run("test.long", { id: i })).promise());
-		}
+	describe("Workflow concurrency", () => {
+		it("should execute jobs one-by-one", async () => {
+			const promises = [];
+			for (let i = 0; i < 5; i++) {
+				promises.push((await broker.wf.run("test.serial", { id: i })).promise());
+			}
 
-		const results = await Promise.all(promises);
-		expect(results.length).toBe(5);
-		results.forEach((result, index) => {
-			expect(result).toBe(`Processed ${index}`);
+			const results = await Promise.all(promises);
+			expect(results.length).toBe(5);
+			results.forEach((result, index) => {
+				expect(result).toBe(`Processed ${index}`);
+			});
+			expect(FLOWS).toEqual([
+				"START-0",
+				"STOP-0",
+				"START-1",
+				"STOP-1",
+				"START-2",
+				"STOP-2",
+				"START-3",
+				"STOP-3",
+				"START-4",
+				"STOP-4"
+			]);
+		});
+
+		it("should handle concurrent workflows", async () => {
+			const promises = [];
+			for (let i = 0; i < 5; i++) {
+				promises.push((await broker.wf.run("test.long", { id: i })).promise());
+			}
+
+			const results = await Promise.all(promises);
+			expect(results.length).toBe(5);
+			results.forEach((result, index) => {
+				expect(result).toBe(`Processed ${index}`);
+			});
+
+			expect(FLOWS).toEqual([
+				"START-0",
+				"START-1",
+				"START-2",
+				"START-3",
+				"START-4",
+				"STOP-0",
+				"STOP-1",
+				"STOP-2",
+				"STOP-3",
+				"STOP-4"
+			]);
+		});
+
+		it("should handle concurrent workflows", async () => {
+			const promises = [];
+			for (let i = 0; i < 10; i++) {
+				promises.push((await broker.wf.run("test.long", { id: i })).promise());
+			}
+
+			const results = await Promise.all(promises);
+			expect(results.length).toBe(10);
+			results.forEach((result, index) => {
+				expect(result).toBe(`Processed ${index}`);
+			});
+
+			expect(FLOWS).toEqual([
+				"START-0",
+				"START-1",
+				"START-2",
+				"START-3",
+				"START-4",
+				"STOP-0",
+				"STOP-1",
+				"STOP-2",
+				"STOP-3",
+				"STOP-4",
+				"START-5",
+				"START-6",
+				"START-7",
+				"START-8",
+				"START-9",
+				"STOP-5",
+				"STOP-6",
+				"STOP-7",
+				"STOP-8",
+				"STOP-9"
+			]);
 		});
 	});
 });
