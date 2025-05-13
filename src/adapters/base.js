@@ -327,7 +327,7 @@ class BaseAdapter {
 			return result;
 		};
 
-		ctx.wf.run = async (name, fn) => {
+		ctx.wf.task = async (name, fn) => {
 			taskId++;
 			const startTime = Date.now();
 

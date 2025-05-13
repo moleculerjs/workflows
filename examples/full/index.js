@@ -127,7 +127,7 @@ broker.createService({
 				await ctx.broadcast("user.registered", user);
 
 				// Other non-moleculer related workflow task
-				await ctx.wf.run("httpPost", async () => {
+				await ctx.wf.task("httpPost", async () => {
 					await fetch("https://...", { method: "POST", data: "" });
 				});
 
@@ -169,7 +169,7 @@ broker.createService({
 				// Check the validity
 				const user = ctx.call("users.find", { verificationToken: ctx.params.token });
 				if (user) {
-					this.broker.wf.sendSignal("email.verification", user.id, { a: 5 });
+					this.broker.wf.triggerSignal("email.verification", user.id, { a: 5 });
 				}
 			}
 		},

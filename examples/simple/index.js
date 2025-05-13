@@ -14,8 +14,6 @@ const WorkflowsMiddleware = require("../../index").Middleware;
 
 let c = 1;
 
-let attempt = 0;
-
 let lastJobId;
 
 // console.log(process.argv);
@@ -96,8 +94,6 @@ const broker = new ServiceBroker({
 				}
 			],
 			async action(broker, args) {
-				attempt = 0;
-
 				const { options } = args;
 				console.log(args);
 				const jobOpts = {
@@ -366,7 +362,7 @@ if (!isNoService) {
 					await ctx.emit("test.event");
 					await ctx.wf.setState("afterEvent");
 
-					const post = await ctx.wf.run("fetch", async () => {
+					const post = await ctx.wf.task("fetch", async () => {
 						const res = await fetch("https://jsonplaceholder.typicode.com/posts/1");
 						return await res.json();
 					});
@@ -396,12 +392,13 @@ if (!isNoService) {
 			wf2: {
 				fullName: "wf2",
 				concurrency: 10,
-				handler(ctx) {
-					attempt++;
-					if (attempt < 3) {
+				async handler(ctx) {
+					const job = await this.broker.wf.get(ctx.wf.name, ctx.wf.jobId);
+					// console.log("Job", job);
+					if (!job.retryAttempts || job.retryAttempts < 3) {
 						throw new MoleculerRetryableError("Simulated failure");
 					}
-					return `Success on attempt ${attempt}`;
+					return `Success on attempt ${job.retryAttempts}`;
 				}
 			}
 		},

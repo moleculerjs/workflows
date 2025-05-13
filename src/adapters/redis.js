@@ -834,9 +834,12 @@ class RedisAdapter extends BaseAdapter {
 
 		const job = {
 			id: jobId,
-			payload,
 			createdAt: Date.now()
 		};
+
+		if (payload != null) {
+			job.payload = payload;
+		}
 
 		if (opts.retries) {
 			job.retries = opts.retries;
@@ -913,15 +916,16 @@ class RedisAdapter extends BaseAdapter {
 
 		this.sendJobEvent(workflowName, job.id, "created");
 
+		// Store Job finished promise
+		let storePromise = {};
+		storePromise.promise = new Promise((resolve, reject) => {
+			storePromise.resolve = resolve;
+			storePromise.reject = reject;
+		});
+
+		this.jobResultPromises.set(jobId, storePromise);
+
 		job.promise = () => {
-			let storePromise = {};
-			storePromise.promise = new Promise((resolve, reject) => {
-				storePromise.resolve = resolve;
-				storePromise.reject = reject;
-			});
-
-			this.jobResultPromises.set(jobId, storePromise);
-
 			this.signalSubClient?.subscribe(this.getKey(workflowName, C.FINISHED));
 
 			return storePromise.promise;
@@ -956,19 +960,19 @@ class RedisAdapter extends BaseAdapter {
 	deserializeJob(job) {
 		const res = { ...job };
 		if (job.payload != null) {
-			res.payload = this.serializer.deserialize(job.payload);
+			res.payload = job.payload !== "" ? this.serializer.deserialize(job.payload) : null;
 		}
 		if (job.repeat != null) {
 			res.repeat = this.serializer.deserialize(job.repeat);
 		}
 		if (job.result != null) {
-			res.result = this.serializer.deserialize(job.result);
+			res.result = job.result !== "" ? this.serializer.deserialize(job.result) : null;
 		}
 		if (job.error != null) {
-			res.error = this.serializer.deserialize(job.error);
+			res.error = job.error !== "" ? this.serializer.deserialize(job.error) : null;
 		}
 		if (job.state != null) {
-			res.state = this.serializer.deserialize(job.state);
+			res.state = job.state !== "" ? this.serializer.deserialize(job.state) : null;
 		}
 		if (job.createdAt != null) {
 			res.createdAt = Number(job.createdAt);
@@ -987,6 +991,12 @@ class RedisAdapter extends BaseAdapter {
 		}
 		if (job.stalledCounter != null) {
 			res.stalledCounter = Number(job.stalledCounter);
+		}
+		if (job.duration != null) {
+			res.duration = Number(job.duration);
+		}
+		if (job.success) {
+			res.success = job.success === "true" || job.success === true;
 		}
 		return res;
 	}
