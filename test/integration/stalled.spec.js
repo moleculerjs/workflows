@@ -12,17 +12,8 @@ describe("Workflows Stalled Job Test", () => {
 
 	beforeAll(async () => {
 		broker = new ServiceBroker({
-			//logger: true,
-			logger: {
-				type: "Console",
-				options: {
-					formatter: "short",
-					level: {
-						WORKFLOWS: "debug",
-						"*": "info"
-					}
-				}
-			},
+			logger: false,
+
 			middlewares: [
 				WorkflowsMiddleware({
 					adapter: { type: "Redis", options: { lockExpiration: 5000 } },
@@ -58,7 +49,7 @@ describe("Workflows Stalled Job Test", () => {
 	});
 
 	afterAll(async () => {
-		//await cleanup();
+		await cleanup();
 		await broker.stop();
 	});
 
@@ -93,7 +84,7 @@ describe("Workflows Stalled Job Test", () => {
 
 		await broker.start();
 
-		// Wait for stalled putting back (2+1 rounds) & job execution
+		// Wait for stalled putting back (2 rounds) & job execution
 		await new Promise(resolve => setTimeout(resolve, 15 * 1000));
 
 		const job2 = await broker.wf.get("stalled.fiveSec", job.id);

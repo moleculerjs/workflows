@@ -220,18 +220,18 @@ class RedisAdapter extends BaseAdapter {
 			await super.destroy();
 
 			if (this.commandClient) {
-				await this.commandClient.quit();
+				await this.closeClient(this.commandClient);
 				this.commandClient = null;
 			}
 
 			if (this.signalSubClient) {
-				await this.signalSubClient.quit();
+				await this.closeClient(this.signalSubClient);
 				this.signalSubClient = null;
 			}
 
 			for (const client of this.jobClients.values()) {
 				if (client) {
-					await client.quit();
+					await this.closeClient(client);
 				}
 			}
 		} catch (err) {
@@ -284,6 +284,26 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
+	 * Close a Redis client.
+	 * @param {Redis} client
+	 */
+	async closeClient(client) {
+		if (client) {
+			try {
+				if (client.blocked) {
+					await client.disconnect();
+				} else {
+					await client.quit();
+				}
+			} catch (err) {
+				if (err.message !== "Connection is closed.") {
+					this.log("warn", null, null, "Error while closing Redis client", err.message);
+				}
+			}
+		}
+	}
+
+	/**
 	 * Start the job processor for the given workflow.
 	 *
 	 * @param {string} workflow - The name of the workflow.
@@ -303,11 +323,7 @@ class RedisAdapter extends BaseAdapter {
 	async stopJobProcessor(workflow) {
 		if (this.jobClients.has(workflow.name)) {
 			const client = this.jobClients.get(workflow.name);
-			try {
-				await client.quit();
-			} catch (err) {
-				this.log("warn", workflow.name, null, "Error while stopping job processor");
-			}
+			await this.closeClient(client);
 			client.stopped = true;
 		}
 	}
@@ -324,14 +340,14 @@ class RedisAdapter extends BaseAdapter {
 		// }
 
 		if (this.disconnecting || !this.connected) {
-			this.log("warn", workflow.name, null, "Adapter is disconnected");
+			this.log("debug", workflow.name, null, "Adapter is disconnected");
 			return;
 		}
 
 		// workflow.$isRunning = true;
 		const client = await this.isClientReady(workflow.name);
 		if (client.stopped) {
-			this.log("warn", workflow.name, null, "Job processor is stopped");
+			this.log("debug", workflow.name, null, "Job processor is stopped");
 			return;
 		}
 
