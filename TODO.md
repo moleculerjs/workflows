@@ -16,16 +16,18 @@
   - [ ] revert running
 
 - [ ] Performance improvement
+
 - [ ] Unit tests
-  - [ ] getKey
-  - [ ] adapter resolve
+  - [x] getKey
+    - [x] prefix
+  - [x] adapter resolve
+
 - [ ] Integration tests
   - [ ] Repeat jobs
-  - [ ] Delayed jobs
+  - [x] Delayed jobs
   - [ ] different serializer
-  - [ ] prefix
   - [ ] jobId collision
-  - [ ] jobEvents
+  - [x] jobEvents
   - [ ] Retries
     - [ ] skipping already executed tasks
       - [ ] ctx.call
@@ -40,7 +42,7 @@
   - [ ] removeOnCompleted
   - [ ] retention
   - [ ] job timeout
-  - [ ] parameter validation
+  - [x] parameter validation
   - [ ] middleware hooks
 - [ ] Metrics
 - [ ] Tracing

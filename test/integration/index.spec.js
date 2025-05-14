@@ -77,6 +77,14 @@ describe("Workflows Common Test", () => {
 						FLOWS.push("STOP-" + ctx.params.id);
 						return `Processed ${ctx.params.id}`;
 					}
+				},
+				valid: {
+					params: {
+						name: { type: "string" }
+					},
+					async handler(ctx) {
+						return `Hello, ${ctx.params.name}`;
+					}
 				}
 			}
 		});
@@ -173,6 +181,21 @@ describe("Workflows Common Test", () => {
 			success: true,
 			result: "Hello, World"
 		});
+	});
+
+	it("should return null if the job is removed", async () => {
+		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.any(Number),
+			payload: { name: "ephemeral" },
+			promise: expect.any(Function)
+		});
+
+		await broker.wf.remove("test.simple", job.id);
+
+		const job2 = await broker.wf.get("test.simple", job.id);
+		expect(job2).toBeNull();
 	});
 
 	it("should handle workflow errors correctly", async () => {
@@ -427,6 +450,73 @@ describe("Workflows Common Test", () => {
 			expect(FLOWS).toBeItemAfter("STOP-7", "START-7");
 			expect(FLOWS).toBeItemAfter("STOP-8", "START-8");
 			expect(FLOWS).toBeItemAfter("STOP-9", "START-9");
+		});
+	});
+
+	describe("Workflow parameter validation", () => {
+		it("should validate workflow parameters", async () => {
+			const job = await broker.wf.run("test.valid", { name: "John" });
+			expect(job).toStrictEqual({
+				id: expect.any(String),
+				createdAt: expect.any(Number),
+				payload: { name: "John" },
+				promise: expect.any(Function)
+			});
+
+			const result = await job.promise();
+			expect(result).toBe("Hello, John");
+
+			const job2 = await broker.wf.get("test.valid", job.id);
+			expect(job2).toStrictEqual({
+				id: expect.any(String),
+				createdAt: expect.any(Number),
+				payload: { name: "John" },
+				startedAt: expect.any(Number),
+				finishedAt: expect.any(Number),
+				duration: expect.withinRange(0, 100),
+				success: true,
+				result: "Hello, John"
+			});
+		});
+
+		it("should failed the job with validation error", async () => {
+			const job = await broker.wf.run("test.valid", { name: 123 });
+			expect(job).toStrictEqual({
+				id: expect.any(String),
+				createdAt: expect.any(Number),
+				payload: { name: 123 },
+				promise: expect.any(Function)
+			});
+
+			await expect(job.promise()).rejects.toThrow("Parameters validation error!");
+
+			const job2 = await broker.wf.get("test.valid", job.id);
+			expect(job2).toStrictEqual({
+				id: expect.any(String),
+				createdAt: expect.any(Number),
+				payload: { name: 123 },
+				startedAt: expect.any(Number),
+				finishedAt: expect.any(Number),
+				duration: expect.withinRange(0, 100),
+				success: false,
+				error: {
+					name: "ValidationError",
+					message: "Parameters validation error!",
+					code: 422,
+					type: "VALIDATION_ERROR",
+					nodeID: broker.nodeID,
+					data: [
+						{
+							type: "string",
+							actual: 123,
+							field: "name",
+							message: "The 'name' field must be a string."
+						}
+					],
+					stack: expect.any(String),
+					retryable: false
+				}
+			});
 		});
 	});
 });

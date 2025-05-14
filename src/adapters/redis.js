@@ -24,6 +24,24 @@ const { parseDuration, humanize, getCronNextTime } = require("../utils");
  * @typedef {import("./base").BaseDefaultOptions} BaseDefaultOptions Base adapter options
  */
 
+const JOB_FIELDS_JSON = ["payload", "repeat", "result", "error", "state"];
+
+const JOB_FIELDS_NUMERIC = [
+	"createdAt",
+	"startedAt",
+	"finishedAt",
+	"promoteAt",
+	"repeatCounter",
+	"stalledCounter",
+	"delay",
+	"timeout",
+	"duration",
+	"retries",
+	"retryAttempts"
+];
+
+const JOB_FIELDS = ["id", "parent", ...JOB_FIELDS_JSON, ...JOB_FIELDS_NUMERIC, "success"];
+
 /**
  * Redis Streams adapter
  *
@@ -942,12 +960,13 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	serializeJob(job) {
 		const res = { ...job };
-		if (job.payload) {
-			res.payload = this.serializer.serialize(job.payload);
+
+		for (const field of JOB_FIELDS_JSON) {
+			if (job[field] != null) {
+				res[field] = this.serializer.serialize(job[field]);
+			}
 		}
-		if (job.repeat) {
-			res.repeat = this.serializer.serialize(job.repeat);
-		}
+
 		return res;
 	}
 
@@ -959,45 +978,23 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	deserializeJob(job) {
 		const res = { ...job };
-		if (job.payload != null) {
-			res.payload = job.payload !== "" ? this.serializer.deserialize(job.payload) : null;
+
+		for (const field of JOB_FIELDS_JSON) {
+			if (job[field] != null) {
+				res[field] = job[field] !== "" ? this.serializer.deserialize(job[field]) : null;
+			}
 		}
-		if (job.repeat != null) {
-			res.repeat = this.serializer.deserialize(job.repeat);
+
+		for (const field of JOB_FIELDS_NUMERIC) {
+			if (job[field] != null) {
+				res[field] = job[field] !== "" ? Number(job[field]) : null;
+			}
 		}
-		if (job.result != null) {
-			res.result = job.result !== "" ? this.serializer.deserialize(job.result) : null;
-		}
-		if (job.error != null) {
-			res.error = job.error !== "" ? this.serializer.deserialize(job.error) : null;
-		}
-		if (job.state != null) {
-			res.state = job.state !== "" ? this.serializer.deserialize(job.state) : null;
-		}
-		if (job.createdAt != null) {
-			res.createdAt = Number(job.createdAt);
-		}
-		if (job.startedAt != null) {
-			res.startedAt = Number(job.startedAt);
-		}
-		if (job.finishedAt != null) {
-			res.finishedAt = Number(job.finishedAt);
-		}
-		if (job.promoteAt != null) {
-			res.promoteAt = Number(job.promoteAt);
-		}
-		if (job.repeatCounter != null) {
-			res.repeatCounter = Number(job.repeatCounter);
-		}
-		if (job.stalledCounter != null) {
-			res.stalledCounter = Number(job.stalledCounter);
-		}
-		if (job.duration != null) {
-			res.duration = Number(job.duration);
-		}
+
 		if (job.success) {
 			res.success = job.success === "true" || job.success === true;
 		}
+
 		return res;
 	}
 
