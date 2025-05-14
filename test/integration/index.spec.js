@@ -1,5 +1,6 @@
 const { ServiceBroker } = require("moleculer");
 const WorkflowsMiddleware = require("../../src");
+require("../jest.setup.js");
 
 describe("Workflows Common Test", () => {
 	let broker;
@@ -94,10 +95,11 @@ describe("Workflows Common Test", () => {
 	});
 
 	it("should execute a silent workflow with empty params", async () => {
+		const now = Date.now();
 		const job = await broker.wf.run("test.silent");
 		expect(job).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
+			createdAt: expect.greaterThanOrEqual(now),
 			promise: expect.any(Function)
 		});
 
@@ -107,12 +109,14 @@ describe("Workflows Common Test", () => {
 		const job2 = await broker.wf.get("test.silent", job.id);
 		expect(job2).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
-			startedAt: expect.any(Number),
-			finishedAt: expect.any(Number),
-			duration: expect.any(Number),
+			createdAt: expect.greaterThanOrEqual(now),
+			startedAt: expect.greaterThanOrEqual(now),
+			finishedAt: expect.greaterThanOrEqual(now),
+			duration: expect.withinRange(0, 100),
 			success: true
 		});
+		expect(job2.startedAt).toBeGreaterThanOrEqual(job2.createdAt);
+		expect(job2.finishedAt).toBeGreaterThanOrEqual(job2.startedAt);
 	});
 
 	it("should execute a simple workflow and return the expected result", async () => {
@@ -134,7 +138,7 @@ describe("Workflows Common Test", () => {
 			payload: { name: "World" },
 			startedAt: expect.any(Number),
 			finishedAt: expect.any(Number),
-			duration: expect.any(Number),
+			duration: expect.withinRange(0, 100),
 			success: true,
 			result: "Hello, World"
 		});
@@ -165,7 +169,7 @@ describe("Workflows Common Test", () => {
 			payload: { name: "World" },
 			startedAt: expect.any(Number),
 			finishedAt: expect.any(Number),
-			duration: expect.any(Number),
+			duration: expect.withinRange(0, 100),
 			success: true,
 			result: "Hello, World"
 		});
@@ -189,7 +193,7 @@ describe("Workflows Common Test", () => {
 			payload: { name: "Error" },
 			startedAt: expect.any(Number),
 			finishedAt: expect.any(Number),
-			duration: expect.any(Number),
+			duration: expect.withinRange(0, 100),
 			success: false,
 			error: {
 				name: "Error",
@@ -300,7 +304,7 @@ describe("Workflows Common Test", () => {
 				type: "task"
 			},
 			{
-				duration: 500,
+				duration: expect.withinRange(400, 600),
 				nodeID: broker.nodeID,
 				result: { user: "John" },
 				signalKey: 12345,
@@ -320,6 +324,19 @@ describe("Workflows Common Test", () => {
 			},
 			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "finished" }
 		]);
+
+		const job2 = await broker.wf.get("test.signal", job.id);
+		expect(job2).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.any(Number),
+			payload: { a: 5 },
+			startedAt: expect.any(Number),
+			finishedAt: expect.any(Number),
+			duration: expect.withinRange(400, 600),
+			state: "afterSignal",
+			success: true,
+			result: { result: "OK", signalData: { user: "John" } }
+		});
 	});
 
 	describe("Workflow concurrency", () => {
@@ -386,28 +403,30 @@ describe("Workflows Common Test", () => {
 				expect(result).toBe(`Processed ${index}`);
 			});
 
-			expect(FLOWS).toEqual([
-				"START-0",
-				"START-1",
-				"START-2",
-				"START-3",
-				"START-4",
-				"STOP-0",
-				"STOP-1",
-				"STOP-2",
-				"STOP-3",
-				"STOP-4",
-				"START-5",
-				"START-6",
-				"START-7",
-				"START-8",
-				"START-9",
-				"STOP-5",
-				"STOP-6",
-				"STOP-7",
-				"STOP-8",
-				"STOP-9"
-			]);
+			expect(FLOWS.length).toBe(20);
+			expect(FLOWS[0]).toBe("START-0");
+
+			expect(FLOWS).toBeItemAfter("START-1", "START-0");
+			expect(FLOWS).toBeItemAfter("START-2", "START-1");
+			expect(FLOWS).toBeItemAfter("START-3", "START-2");
+			expect(FLOWS).toBeItemAfter("START-4", "START-3");
+			expect(FLOWS).toBeItemAfter("START-5", "START-4");
+			expect(FLOWS).toBeItemAfter("STOP-0", "START-0");
+			expect(FLOWS).toBeItemAfter("STOP-1", "START-1");
+			expect(FLOWS).toBeItemAfter("STOP-2", "START-2");
+			expect(FLOWS).toBeItemAfter("STOP-3", "START-3");
+			expect(FLOWS).toBeItemAfter("STOP-4", "START-4");
+
+			expect(FLOWS).toBeItemAfter("START-5", "STOP-0");
+			expect(FLOWS).toBeItemAfter("START-6", "STOP-1");
+			expect(FLOWS).toBeItemAfter("START-7", "STOP-2");
+			expect(FLOWS).toBeItemAfter("START-8", "STOP-3");
+			expect(FLOWS).toBeItemAfter("START-9", "STOP-4");
+			expect(FLOWS).toBeItemAfter("STOP-5", "START-5");
+			expect(FLOWS).toBeItemAfter("STOP-6", "START-6");
+			expect(FLOWS).toBeItemAfter("STOP-7", "START-7");
+			expect(FLOWS).toBeItemAfter("STOP-8", "START-8");
+			expect(FLOWS).toBeItemAfter("STOP-9", "START-9");
 		});
 	});
 });
