@@ -15,6 +15,7 @@ describe("Workflows Common Test", () => {
 		await broker.wf.cleanup("test.signal");
 		await broker.wf.cleanup("test.serial");
 		await broker.wf.cleanup("test.long");
+		await broker.wf.cleanup("test.valid");
 
 		await broker.wf.removeSignal("signal.first", 12345);
 	};

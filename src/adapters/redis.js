@@ -77,7 +77,7 @@ class RedisAdapter extends BaseAdapter {
 		/** @type {RedisOpts & BaseDefaultOptions} */
 		this.opts = _.defaultsDeep(this.opts, {
 			drainDelay: 5,
-			lockDuration: 30 * 1000,
+			lockExpiration: 30 * 1000,
 			redis: {
 				retryStrategy: times => Math.min(times * 500, 5000)
 			}
@@ -216,17 +216,28 @@ class RedisAdapter extends BaseAdapter {
 		this.disconnecting = true;
 		this.connected = false;
 
-		await super.destroy();
+		try {
+			await super.destroy();
 
-		if (this.commandClient) {
-			await this.commandClient.quit();
-			this.commandClient = null;
-		}
+			if (this.commandClient) {
+				await this.commandClient.quit();
+				this.commandClient = null;
+			}
 
-		if (this.signalSubClient) {
-			await this.signalSubClient.quit();
-			this.signalSubClient = null;
+			if (this.signalSubClient) {
+				await this.signalSubClient.quit();
+				this.signalSubClient = null;
+			}
+
+			for (const client of this.jobClients.values()) {
+				if (client) {
+					await client.quit();
+				}
+			}
+		} catch (err) {
+			this.logger.warn("Error while disconnecting from Redis", err.message);
 		}
+		this.jobClients.clear();
 
 		this.disconnecting = false;
 	}
@@ -239,13 +250,13 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	async isClientReady(workflowName) {
 		return new Promise((resolve, reject) => {
-			let client = this.jobClients[workflowName];
+			let client = this.jobClients.get(workflowName);
 			if (client && client.status === "ready") {
 				resolve(client);
 			} else {
 				if (!client) {
 					client = this.createRedisClient();
-					this.jobClients[workflowName] = client;
+					this.jobClients.set(workflowName, client);
 				}
 
 				const handleReady = () => {
@@ -278,7 +289,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {string} workflow - The name of the workflow.
 	 */
 	startJobProcessor(workflow) {
-		if (!this.jobClients[workflow.name]) {
+		if (!this.jobClients.has(workflow.name)) {
 			this.runJobProcessor(workflow);
 		}
 	}
@@ -290,9 +301,14 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the job processor is stopped.
 	 */
 	async stopJobProcessor(workflow) {
-		if (this.jobClients[workflow.name]) {
-			await this.jobClients[workflow.name].quit();
-			this.jobClients[workflow.name].stopped = true;
+		if (this.jobClients.has(workflow.name)) {
+			const client = this.jobClients.get(workflow.name);
+			try {
+				await client.quit();
+			} catch (err) {
+				this.log("warn", workflow.name, null, "Error while stopping job processor");
+			}
+			client.stopped = true;
 		}
 	}
 
@@ -306,6 +322,11 @@ class RedisAdapter extends BaseAdapter {
 		// if (workflow.$isRunning) {
 		// 	return;
 		// }
+
+		if (this.disconnecting || !this.connected) {
+			this.log("warn", workflow.name, null, "Adapter is disconnected");
+			return;
+		}
 
 		// workflow.$isRunning = true;
 		const client = await this.isClientReady(workflow.name);
@@ -430,7 +451,7 @@ class RedisAdapter extends BaseAdapter {
 			this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
 			this.broker.instanceID,
 			"PX",
-			this.opts.lockDuration,
+			this.opts.lockExpiration,
 			"NX"
 		);
 		this.log("debug", workflow.name, jobId, "Lock result", lockRes);
@@ -438,12 +459,17 @@ class RedisAdapter extends BaseAdapter {
 		if (!lockRes) throw new WorkflowError(`Job ${jobId} is already locked.`);
 
 		const lockExtender = async () => {
+			if (this.disconnecting || !this.connected) {
+				clearInterval(timer);
+				return;
+			}
+
 			this.log("debug", workflow.name, jobId, "Extending lock");
 			const lockRes = await this.commandClient.set(
 				this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
 				this.broker.instanceID,
 				"PX",
-				this.opts.lockDuration,
+				this.opts.lockExpiration,
 				"XX"
 			);
 			if (!lockRes) {
@@ -453,10 +479,12 @@ class RedisAdapter extends BaseAdapter {
 		};
 
 		// Start lock extender
-		const timer = setInterval(() => lockExtender(), this.opts.lockDuration / 2);
+		const timer = setInterval(() => lockExtender(), this.opts.lockExpiration / 2);
 
 		return async () => {
 			clearInterval(timer);
+			if (this.disconnecting || !this.connected) return;
+
 			const unlockRes = await this.commandClient.del(
 				this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId)
 			);
@@ -530,6 +558,8 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the event is added.
 	 */
 	async addJobEvent(workflowName, jobId, event) {
+		if (!this.connected || this.disconnecting) return;
+
 		await this.commandClient.rpush(
 			this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId),
 			this.serializer.serialize({
@@ -550,6 +580,8 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the job is moved to the completed queue.
 	 */
 	async moveToCompleted(workflow, job, result, duration) {
+		if (!this.connected || this.disconnecting) return;
+
 		await this.addJobEvent(workflow.name, job.id, {
 			type: "finished"
 		});
@@ -628,6 +660,8 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the job is moved to the failed queue.
 	 */
 	async moveToFailed(workflow, job, err, duration) {
+		if (!this.connected || this.disconnecting) return;
+
 		if (typeof job == "string") {
 			job = await this.getJob(workflow.name, job, ["parent"]);
 		}

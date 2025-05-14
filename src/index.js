@@ -403,7 +403,6 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						wf.service = svc;
 
 						// Register thw workflow handler into the adapter
-						adapter.registerWorkflow(wf);
 						svc.$workflowList.push(wf);
 						logger.info(`Workflow '${wf.name}' is registered.`);
 					}
@@ -454,6 +453,20 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 					);
 					*/
 				};
+			}
+		},
+
+		/**
+		 * Service started lifecycle hook.
+		 * Need to register workflows.
+		 * @param {*} svc
+		 */
+		async serviceStarted(svc) {
+			if (!svc.$workflowList) return;
+
+			for (const wf of svc.$workflowList) {
+				// Register workflow into the adapter
+				adapter.registerWorkflow(wf);
 			}
 		},
 

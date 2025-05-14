@@ -111,7 +111,7 @@ broker.createService({
 | prefix       | string                                                    | "wf"       | Prefix for Redis keys.                                                                      |
 | serializer   | string                                                    | "JSON"     | Serializer to use for job data.                                                             |
 | drainDelay   | number                                                    | 5         | Blocking delay time (sec).                                                           |
-| lockDuration | number                                                    | 30000       | Lock duration (ms) for job processing.                                                      |
+| lockExpiration | number                                                    | 30000       | Lock duration (ms) for job processing.                                                      |
 
 <!-- ## Documentation
 You can find [here the documentation](docs/README.md).

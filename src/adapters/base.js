@@ -68,8 +68,6 @@ class BaseAdapter {
 		this.serializer = Serializers.resolve(this.opts.serializer);
 		this.serializer.init(this.broker);
 		this.logger.info("Workflows serializer:", this.broker.getConstructorName(this.serializer));
-
-		this.setNextMaintenance();
 	}
 
 	/**
@@ -159,6 +157,8 @@ class BaseAdapter {
 		this.workflows.forEach(workflow => {
 			this.startJobProcessor(workflow);
 		});
+
+		this.setNextMaintenance();
 	}
 
 	/**

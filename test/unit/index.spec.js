@@ -7,7 +7,7 @@ describe("Test Transporter resolver", () => {
 		expect(adapter).toBeInstanceOf(Adapters.Redis);
 		expect(adapter.opts).toEqual({
 			drainDelay: 5,
-			lockDuration: 30000,
+			lockExpiration: 30000,
 			redis: { retryStrategy: expect.any(Function) },
 			serializer: "JSON"
 		});

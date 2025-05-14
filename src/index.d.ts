@@ -56,7 +56,7 @@ export interface BaseDefaultOptions {
 export interface RedisAdapterOptions extends BaseDefaultOptions {
     redis: RedisOptions | { url: string } | { cluster: { nodes: string[]; clusterOptions?: any } };
     drainDelay?: number;
-    lockDuration?: number;
+    lockExpiration?: number;
 }
 
 export class BaseAdapter {
