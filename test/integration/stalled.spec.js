@@ -1,5 +1,6 @@
 const { ServiceBroker } = require("moleculer");
 const WorkflowsMiddleware = require("../../src");
+const { delay } = require("../utils");
 require("../jest.setup.js");
 
 describe("Workflows Stalled Job Test", () => {
@@ -16,8 +17,9 @@ describe("Workflows Stalled Job Test", () => {
 
 			middlewares: [
 				WorkflowsMiddleware({
-					adapter: { type: "Redis", options: { lockExpiration: 5000 } },
-					maintenanceTime: 3
+					adapter: "Redis",
+					maintenanceTime: 3,
+					lockExpiration: 5
 				})
 			]
 		});
@@ -28,7 +30,7 @@ describe("Workflows Stalled Job Test", () => {
 				fiveSec: {
 					async handler(ctx) {
 						for (let i = 0; i < 5; i++) {
-							await new Promise(resolve => setTimeout(resolve, 1000));
+							await delay(1000);
 						}
 						return `It took 5 seconds`;
 					}
@@ -36,7 +38,7 @@ describe("Workflows Stalled Job Test", () => {
 				tenSec: {
 					async handler(ctx) {
 						for (let i = 0; i < 10; i++) {
-							await new Promise(resolve => setTimeout(resolve, 1000));
+							await delay(1000);
 						}
 						return `It took 10 seconds`;
 					}
@@ -75,17 +77,17 @@ describe("Workflows Stalled Job Test", () => {
 			id: expect.any(String)
 		});
 
-		await new Promise(resolve => setTimeout(resolve, 1000));
+		await delay(1000);
 
 		await broker.stop();
 
 		// Wait for lock expiration and stalled maintenance time
-		await new Promise(resolve => setTimeout(resolve, 7 * 1000));
+		await delay(7_000);
 
 		await broker.start();
 
 		// Wait for stalled putting back (2 rounds) & job execution
-		await new Promise(resolve => setTimeout(resolve, 15 * 1000));
+		await delay(15_000);
 
 		const job2 = await broker.wf.get("stalled.fiveSec", job.id);
 		expect(job2).toStrictEqual({

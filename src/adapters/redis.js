@@ -77,7 +77,6 @@ class RedisAdapter extends BaseAdapter {
 		/** @type {RedisOpts & BaseDefaultOptions} */
 		this.opts = _.defaultsDeep(this.opts, {
 			drainDelay: 5,
-			lockExpiration: 30 * 1000,
 			redis: {
 				retryStrategy: times => Math.min(times * 500, 5000)
 			}
@@ -466,8 +465,8 @@ class RedisAdapter extends BaseAdapter {
 		const lockRes = await this.commandClient.set(
 			this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
 			this.broker.instanceID,
-			"PX",
-			this.opts.lockExpiration,
+			"EX",
+			this.mixinOpts.lockExpiration,
 			"NX"
 		);
 		this.log("debug", workflow.name, jobId, "Lock result", lockRes);
@@ -484,8 +483,8 @@ class RedisAdapter extends BaseAdapter {
 			const lockRes = await this.commandClient.set(
 				this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
 				this.broker.instanceID,
-				"PX",
-				this.opts.lockExpiration,
+				"EX",
+				this.mixinOpts.lockExpiration,
 				"XX"
 			);
 			if (!lockRes) {
@@ -495,7 +494,7 @@ class RedisAdapter extends BaseAdapter {
 		};
 
 		// Start lock extender
-		const timer = setInterval(() => lockExtender(), this.opts.lockExpiration / 2);
+		const timer = setInterval(() => lockExtender(), (this.mixinOpts.lockExpiration / 2) * 1000);
 
 		return async () => {
 			clearInterval(timer);

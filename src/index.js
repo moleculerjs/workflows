@@ -28,7 +28,8 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 		workflowHandlerTrigger: "emitLocalWorkflowHandler",
 		jobEventType: null,
 		signalExpiration: "1h",
-		maintenanceTime: 10
+		maintenanceTime: 10,
+		lockExpiration: 30
 	});
 
 	/** @type {ServiceBroker} */

@@ -1,5 +1,7 @@
 const { ServiceBroker } = require("moleculer");
 const WorkflowsMiddleware = require("../../src");
+const { delay } = require("../utils");
+
 require("../jest.setup.js");
 
 describe("Workflows Common Test", () => {
@@ -65,7 +67,7 @@ describe("Workflows Common Test", () => {
 				serial: {
 					async handler(ctx) {
 						FLOWS.push("START-" + ctx.params.id);
-						await new Promise(resolve => setTimeout(resolve, 100));
+						await delay(100);
 						FLOWS.push("STOP-" + ctx.params.id);
 						return `Processed ${ctx.params.id}`;
 					}
@@ -74,7 +76,7 @@ describe("Workflows Common Test", () => {
 					concurrency: 5,
 					async handler(ctx) {
 						FLOWS.push("START-" + ctx.params.id);
-						await new Promise(resolve => setTimeout(resolve, 1000));
+						await delay(1000);
 						FLOWS.push("STOP-" + ctx.params.id);
 						return `Processed ${ctx.params.id}`;
 					}
@@ -301,14 +303,14 @@ describe("Workflows Common Test", () => {
 
 		const job = await broker.wf.run("test.signal", { a: 5 });
 
-		await broker.Promise.delay(500);
+		await delay(500);
 
 		const stateBefore = await broker.wf.getState("test.signal", job.id);
 		expect(stateBefore).toBe("beforeSignal");
 
 		await broker.wf.triggerSignal("signal.first", 12345, { user: "John" });
 
-		await broker.Promise.delay(500);
+		await delay(500);
 
 		const stateAfter = await broker.wf.getState("test.signal", job.id);
 		expect(stateAfter).toBe("afterSignal");

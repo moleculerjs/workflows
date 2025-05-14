@@ -102,6 +102,7 @@ broker.createService({
 | schemaProperty        | string                                                    | "workflows"    | Service schema property name for workflows.                                                  |
 | workflowHandlerTrigger| string                                                    | "emitLocalWorkflowHandler" | Name of the method to trigger workflow handler.                                 |
 | jobEventType          | string                                                    |                 | How job events are emitted (e.g., "broadcast", "emit").                                   |
+| lockExpiration | number                                                    | 30       | Job lock expiration time (sec).                                                      |
 
 ### RedisAdapter Options
 
@@ -111,7 +112,6 @@ broker.createService({
 | prefix       | string                                                    | "wf"       | Prefix for Redis keys.                                                                      |
 | serializer   | string                                                    | "JSON"     | Serializer to use for job data.                                                             |
 | drainDelay   | number                                                    | 5         | Blocking delay time (sec).                                                           |
-| lockExpiration | number                                                    | 30000       | Lock duration (ms) for job processing.                                                      |
 
 <!-- ## Documentation
 You can find [here the documentation](docs/README.md).

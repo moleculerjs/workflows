@@ -32,6 +32,7 @@ export interface Workflow {
 
     signalExpiration?: string;
     maintenanceTime?: number;
+    lockExpiration?: number;
 
     params?: Record<string, any>;
     handler: (ctx: WorkflowContext) => Promise<any>;
@@ -56,7 +57,6 @@ export interface BaseDefaultOptions {
 export interface RedisAdapterOptions extends BaseDefaultOptions {
     redis: RedisOptions | { url: string } | { cluster: { nodes: string[]; clusterOptions?: any } };
     drainDelay?: number;
-    lockExpiration?: number;
 }
 
 export class BaseAdapter {

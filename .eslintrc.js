@@ -10,7 +10,7 @@ module.exports = {
 	extends: ["eslint:recommended", "plugin:prettier/recommended"],
 	parserOptions: {
 		sourceType: "module",
-		ecmaVersion: 2020
+		ecmaVersion: "latest"
 	},
 	plugins: ["node", "promise"],
 	rules: {
