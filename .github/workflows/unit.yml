@@ -1,26 +1,25 @@
 name: Unit Test
 
-on: workflow_dispatch
-# on:
-#   push:
-#     branches:
-#       - '**'
-#     paths-ignore:
-#       - '.vscode/**'
-#       - 'benchmark/**'
-#       - 'docs/**'
-#       - 'examples/**'
-#       - '*.md'
+on:
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - '.vscode/**'
+      - 'benchmark/**'
+      - 'docs/**'
+      - 'examples/**'
+      - '*.md'
 
-#   pull_request:
-#     branches:
-#       - master
-#     paths-ignore:
-#       - '.vscode/**'
-#       - 'benchmark/**'
-#       - 'docs/**'
-#       - 'examples/**'
-#       - '*.md'
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - '.vscode/**'
+      - 'benchmark/**'
+      - 'docs/**'
+      - 'examples/**'
+      - '*.md'
 
 jobs:
   test:
