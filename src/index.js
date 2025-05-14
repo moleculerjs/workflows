@@ -313,100 +313,88 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 				svc.$workflowList = [];
 
 				// Process `workflows` in the schema
-				await broker.Promise.mapSeries(
-					Object.entries(svc.schema[mwOpts.schemaProperty]),
-					async ([name, def]) => {
-						/** @type {Partial<WorkFlow>} */
-						let wf;
+				for (const [name, def] of Object.entries(svc.schema[mwOpts.schemaProperty])) {
+					/** @type {Partial<WorkFlow>} */
+					let wf;
 
-						if (_.isFunction(def)) {
-							wf = {
-								handler: def
-							};
-						} else if (_.isPlainObject(def)) {
-							wf = _.cloneDeep(def);
-						} else {
-							throw new ServiceSchemaError(
-								`Invalid workflow definition in '${name}' workflow in '${svc.fullName}' service!`
-							);
-						}
-
-						if (!_.isFunction(wf.handler)) {
-							throw new ServiceSchemaError(
-								`Missing workflow handler on '${name}' workflow in '${svc.fullName}' service!`
-							);
-						}
-
-						wf.name = wf.fullName
-							? wf.fullName
-							: svc.fullName + "." + (wf.name || name);
-						adapter.checkWorkflowName(wf.name);
-
-						// Wrap the original handler
-						let handler = broker.Promise.method(wf.handler).bind(svc);
-
-						// Wrap the handler with custom middlewares
-						const handler2 = broker.middlewares.wrapHandler(
-							"localWorkflow",
-							handler,
-							wf
+					if (_.isFunction(def)) {
+						wf = {
+							handler: def
+						};
+					} else if (_.isPlainObject(def)) {
+						wf = _.cloneDeep(def);
+					} else {
+						throw new ServiceSchemaError(
+							`Invalid workflow definition in '${name}' workflow in '${svc.fullName}' service!`
 						);
+					}
 
-						wf.handler = handler2;
+					if (!_.isFunction(wf.handler)) {
+						throw new ServiceSchemaError(
+							`Missing workflow handler on '${name}' workflow in '${svc.fullName}' service!`
+						);
+					}
 
-						// Add metrics for the handler
-						if (broker.isMetricsEnabled()) {
-							wf.handler = async (...args) => {
-								const labels = { workflow: wf.name };
-								const timeEnd = broker.metrics.timer(
-									C.METRIC_WORKFLOWS_JOBS_TIME,
+					wf.name = wf.fullName ? wf.fullName : svc.fullName + "." + (wf.name || name);
+					adapter.checkWorkflowName(wf.name);
+
+					// Wrap the original handler
+					let handler = broker.Promise.method(wf.handler).bind(svc);
+
+					// Wrap the handler with custom middlewares
+					const handler2 = broker.middlewares.wrapHandler("localWorkflow", handler, wf);
+
+					wf.handler = handler2;
+
+					// Add metrics for the handler
+					if (broker.isMetricsEnabled()) {
+						wf.handler = async (...args) => {
+							const labels = { workflow: wf.name };
+							const timeEnd = broker.metrics.timer(
+								C.METRIC_WORKFLOWS_JOBS_TIME,
+								labels
+							);
+							broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_ACTIVE, labels);
+							try {
+								const result = await handler2(...args);
+								return result;
+							} catch (err) {
+								broker.metrics.increment(
+									C.METRIC_WORKFLOWS_JOBS_ERRORS_TOTAL,
 									labels
 								);
-								broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_ACTIVE, labels);
-								try {
-									const result = await handler2(...args);
-									return result;
-								} catch (err) {
-									broker.metrics.increment(
-										C.METRIC_WORKFLOWS_JOBS_ERRORS_TOTAL,
-										labels
-									);
-									throw err;
-								} finally {
-									timeEnd();
-									broker.metrics.decrement(
-										C.METRIC_WORKFLOWS_JOBS_ACTIVE,
-										labels
-									);
-									broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_TOTAL, labels);
-								}
-							};
-						}
-
-						if (wf.params) {
-							const handler3 = wf.handler;
-
-							const check = broker.validator.compile(wf.params);
-							wf.handler = async ctx => {
-								const res = await check(ctx.params != null ? ctx.params : {});
-								if (res === true) return handler3(ctx);
-								else {
-									throw new ValidationError(
-										"Parameters validation error!",
-										null,
-										res
-									);
-								}
-							};
-						}
-
-						wf.service = svc;
-
-						// Register thw workflow handler into the adapter
-						svc.$workflowList.push(wf);
-						logger.info(`Workflow '${wf.name}' is registered.`);
+								throw err;
+							} finally {
+								timeEnd();
+								broker.metrics.decrement(C.METRIC_WORKFLOWS_JOBS_ACTIVE, labels);
+								broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_TOTAL, labels);
+							}
+						};
 					}
-				);
+
+					if (wf.params) {
+						const handler3 = wf.handler;
+
+						const check = broker.validator.compile(wf.params);
+						wf.handler = async ctx => {
+							const res = await check(ctx.params != null ? ctx.params : {});
+							if (res === true) return handler3(ctx);
+							else {
+								throw new ValidationError(
+									"Parameters validation error!",
+									null,
+									res
+								);
+							}
+						};
+					}
+
+					wf.service = svc;
+
+					// Register thw workflow handler into the adapter
+					svc.$workflowList.push(wf);
+					logger.info(`Workflow '${wf.name}' is registered.`);
+				}
 
 				/**
 				 * Call a local channel event handler. Useful for unit tests.

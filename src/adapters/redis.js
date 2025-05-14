@@ -340,7 +340,7 @@ class RedisAdapter extends BaseAdapter {
 		// }
 
 		if (this.disconnecting || !this.connected) {
-			this.log("debug", workflow.name, null, "Adapter is disconnected");
+			this.log("debug", workflow.name, null, "Adapter is not connected or disconnecting.");
 			return;
 		}
 
@@ -378,7 +378,7 @@ class RedisAdapter extends BaseAdapter {
 			}
 		} catch (err) {
 			// Swallow error if disconnecting
-			if (!this.disconnecting) {
+			if (!this.disconnecting && err.message != "Connection is closed.") {
 				this.log("error", workflow.name, null, "Unable to watch job", err);
 			}
 		} finally {
