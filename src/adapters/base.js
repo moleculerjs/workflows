@@ -214,7 +214,7 @@ class BaseAdapter {
 		);
 
 		const getCurrentTaskEvent = () => {
-			const event = events?.find(e => e.type == "task" && e.taskId === taskId);
+			const event = events?.findLast(e => e.type == "task" && e.taskId === taskId);
 			if (event?.error) {
 				if (taskId == maxEventTaskId) {
 					// If it's the last task, we don't throw the error because it should retry to execute it.

@@ -406,15 +406,18 @@ class RedisAdapter extends BaseAdapter {
 
 		const jobEvents = await this.getJobEvents(workflow.name, jobId);
 
-		const now = Date.now();
+		if (!job.startedAt) {
+			job.startedAt = Date.now();
+		}
+
 		let unlock;
 		try {
 			unlock = await this.lock(workflow, jobId);
 
-			await this.commandClient.hset(
+			await this.commandClient.hsetnx(
 				this.getKey(workflow.name, C.QUEUE_JOB, jobId),
 				"startedAt",
-				now
+				job.startedAt
 			);
 
 			await this.addJobEvent(workflow.name, job.id, {
@@ -427,7 +430,7 @@ class RedisAdapter extends BaseAdapter {
 
 			const result = await this.callWorkflowHandler(workflow, job, jobEvents);
 
-			const duration = Date.now() - now;
+			const duration = Date.now() - job.startedAt;
 			this.log(
 				"debug",
 				workflow.name,
@@ -436,14 +439,14 @@ class RedisAdapter extends BaseAdapter {
 				result
 			);
 
-			await this.moveToCompleted(workflow, job, result, duration);
+			await this.moveToCompleted(workflow, job, result);
 		} catch (err) {
 			if (err instanceof WorkflowAlreadyLocked) {
 				this.log("debug", workflow.name, jobId, "Job is already locked.");
 				return;
 			}
 			this.log("error", workflow.name, jobId, "Job processing is failed.", err);
-			await this.moveToFailed(workflow, job, err, Date.now() - now);
+			await this.moveToFailed(workflow, job, err);
 		} finally {
 			this.removeRunningJob(workflow, jobId);
 
@@ -517,7 +520,7 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	async getJob(workflowName, jobId, fields) {
 		if (fields == null) {
-			fields = ["payload", "parent"];
+			fields = ["payload", "parent", "startedAt"];
 		}
 
 		const exists = await this.commandClient.exists(
@@ -591,10 +594,9 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {string} workflow - The name of the workflow.
 	 * @param {Object} job - The job object.
 	 * @param {*} result - The result of the job execution.
-	 * @param {number} duration - The duration of the job execution.
 	 * @returns {Promise<void>} Resolves when the job is moved to the completed queue.
 	 */
-	async moveToCompleted(workflow, job, result, duration) {
+	async moveToCompleted(workflow, job, result) {
 		if (!this.connected || this.disconnecting) return;
 
 		await this.addJobEvent(workflow.name, job.id, {
@@ -614,7 +616,7 @@ class RedisAdapter extends BaseAdapter {
 			const fields = {
 				success: true,
 				finishedAt: Date.now(),
-				duration
+				duration: Date.now() - job.startedAt
 			};
 			if (result != null) {
 				fields.result = this.serializer.serialize(result);
@@ -671,10 +673,9 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {string} workflow - The name of the workflow.
 	 * @param {Object|string} job - The job object.
 	 * @param {Error} err - The error that caused the job to fail.
-	 * @param {number} duration - The duration of the job execution.
 	 * @returns {Promise<void>} Resolves when the job is moved to the failed queue.
 	 */
-	async moveToFailed(workflow, job, err, duration) {
+	async moveToFailed(workflow, job, err) {
 		if (!this.connected || this.disconnecting) return;
 
 		if (typeof job == "string") {
@@ -737,7 +738,7 @@ class RedisAdapter extends BaseAdapter {
 			const fields = {
 				success: false,
 				finishedAt: Date.now(),
-				duration
+				duration: Date.now() - job.startedAt
 			};
 			if (err != null) {
 				fields.error = this.serializer.serialize(
