@@ -63,31 +63,113 @@ broker.start().then(async () => {
 });
 ```
 
-### Advanced Example
+### Advanced Example (User sign-up workflow)
 
 ```javascript
 broker.createService({
     name: "users",
     workflows: {
         signupWorkflow: {
+            // Max execution time
             timeout: "1 day",
+            // Retention of finished job history
             retention: "3 days",
+            // Concurrent executions
             concurrency: 3,
+            // Parameter validation
+            params: {
+                email: { type: "email" },
+                name: { type: "string" }
+            },
             async handler(ctx) {
-                const user = await ctx.call("users.register", ctx.params);
-                await ctx.wf.setState("REGISTERED");
+                // Create user
+                const user = await ctx.call("users.create", ctx.params);
+                
+                // Save the state of the job (It can be a string, number, or object)
+                await ctx.wf.setState("CREATED");
+
+                // Send verification email
                 await ctx.call("mail.send", { type: "welcome", user });
+
+                try {
+                    // Waiting for verification (max 1h)
+                    await ctx.wf.waitForSignal("email.verification", user.id, {
+                        timeout: "1 hour"
+                    });
+                    await ctx.wf.setState("VERIFIED");
+                } catch (err) {
+                    if (err.name == "WorkflowTaskTimeoutError") {
+                        // Registraion not verified in 1 hour, remove the user
+                        await ctx.call("user.remove", { id: user.id });
+                        return null;
+                    }
+
+                    // Other error should be thrown further
+                    throw err;
+                }
+
+                // Set user verified and save
+                user.verified = true;
+                await ctx.call("users.update", user);
+                
+                // Set the workflow state to done
+                await ctx.wf.setState("DONE");
+
                 return user;
             }
         }
     },
     actions: {
-        register(ctx) {
-            // User registration logic
-        },
-        sendMail(ctx) {
-            // Email sending logic
-        }
+        // ... common actions
+
+        // REST API to start the signup workflow job
+		register: {
+			rest: "POST /register",
+			async handler(ctx) {
+				const job = await this.broker.wf.run("users.signupWorkflow", ctx.params, {
+					jobId: ctx.requestID // optional
+					/* other options */
+				});
+				
+                // Here the workflow is running, the res is a state object
+				return {
+					// With the jobId, you can call the `checkSignupState` REST action
+					// to get the state of the execution on the frontend.
+					jobId: job.id
+				};
+
+				// or wait for the execution and return the result
+				// return await job.promise();
+			}
+		},
+
+        // REST API for verification URL in the sent e-mail
+		verify: {
+			rest: "POST /verify/:token",
+			async handler(ctx) {
+				// Check the validity
+				const user = ctx.call("users.find", { verificationToken: ctx.params.token });
+				if (user) {
+                    // Trigger the signal for the Workflow job to continue the execution
+					this.broker.wf.triggerSignal("email.verification", user.id);
+				}
+			}
+		},
+
+        // Check the signup process state. You can call it from the frontend
+        // and show the current state for the customer. The `jobId` sent back 
+        // in the "register" REST call.
+		checkRegisterState: {
+			rest: "GET /registerState/:jobId",
+			async handler(ctx) {
+				const res = await ctx.wf.getState({ jobId: ctx.params.jobId });
+				if (res.state == "DONE") {
+					return { state: res.state, user: res.result };
+				} else {
+					return { state: res.state, startedAt: res.startedAt };
+				}
+			}
+		}
     }
 });
 ```

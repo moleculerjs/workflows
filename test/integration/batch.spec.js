@@ -14,12 +14,12 @@ describe("Workflows Batch Test (on single node)", () => {
 	beforeAll(async () => {
 		broker = new ServiceBroker({
 			logger: false,
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: "Redis", schemaProperty: "WF" })]
 		});
 
 		broker.createService({
 			name: "batch",
-			workflows: {
+			WF: {
 				serial: {
 					async handler() {
 						return `Serial called`;
