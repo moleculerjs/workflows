@@ -9,7 +9,7 @@
 const _ = require("lodash");
 const BaseAdapter = require("./base");
 const { BrokerOptionsError } = require("moleculer").Errors;
-const { WorkflowError, WorkflowAlreadyLocked } = require("../errors");
+const { WorkflowError, WorkflowAlreadyLocked, WorkflowTimeoutError } = require("../errors");
 const C = require("../constants");
 const Redis = require("ioredis");
 const { parseDuration, humanize, getCronNextTime } = require("../utils");
@@ -481,6 +481,20 @@ class RedisAdapter extends BaseAdapter {
 				return;
 			}
 
+			// Check if the job is not finished (e.g timeout maintainer process is closed)
+			const finishedAt = await this.commandClient.hget(
+				this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+				"finishedAt"
+			);
+
+			if (finishedAt > 0) {
+				this.log("debug", workflow.name, jobId, "Job is finished. Unlocking...");
+				clearInterval(timer);
+				await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId));
+				return;
+			}
+
+			// Extend the lock
 			this.log("debug", workflow.name, jobId, "Extending lock");
 			const lockRes = await this.commandClient.set(
 				this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
@@ -678,7 +692,7 @@ class RedisAdapter extends BaseAdapter {
 		if (!this.connected || this.disconnecting) return;
 
 		if (typeof job == "string") {
-			job = await this.getJob(workflow.name, job, ["parent"]);
+			job = await this.getJob(workflow.name, job, ["parent", "startedAt"]);
 		}
 
 		await this.addJobEvent(workflow.name, job.id, {
@@ -1364,6 +1378,59 @@ class RedisAdapter extends BaseAdapter {
 			}
 		} catch (err) {
 			this.log("error", workflow.name, null, "Error while processing delayed jobs", err);
+		}
+	}
+
+	/**
+	 * Check active jobs and if they timed out, move to failed jobs.
+	 *
+	 * @param {Object} workflow - The workflow object.
+	 * @returns {Promise<void>} Resolves when delayed jobs are processed.
+	 */
+	async maintenanceActiveJobs(workflow) {
+		this.log("debug", workflow.name, null, "Maintenance active jobs...");
+		try {
+			const now = Date.now();
+			const activeJobIds = await this.commandClient.lrange(
+				this.getKey(workflow.name, C.QUEUE_ACTIVE),
+				0,
+				-1
+			);
+			if (activeJobIds.length > 0) {
+				for (const jobId of activeJobIds) {
+					const job = await this.getJob(workflow.name, jobId, ["startedAt", "timeout"]);
+					if (job) {
+						const timeout = parseDuration(
+							job.timeout != null ? job.timeout : workflow.timeout
+						);
+						if (timeout > 0) {
+							if (now - job.startedAt > timeout) {
+								this.log(
+									"debug",
+									workflow.name,
+									jobId,
+									`Job timed out (${humanize(timeout)}). Moving to failed queue.`
+								);
+								await this.moveToFailed(
+									workflow,
+									jobId,
+									new WorkflowTimeoutError("Job timed out", {
+										workflow: workflow.name,
+										jobId,
+										timeout
+									})
+								);
+								// Unlock manually
+								await this.commandClient.del(
+									this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId)
+								);
+							}
+						}
+					}
+				}
+			}
+		} catch (err) {
+			this.log("error", workflow.name, null, "Error while processing active jobs", err);
 		}
 	}
 

@@ -3,9 +3,6 @@ const maxDate = new Date("2030-01-01T00:00:00Z").getTime();
 
 expect.extend({
 	withinRange(actual, min, max) {
-		if (typeof actual !== "number") {
-			throw new Error("Actual value must be a number");
-		}
 		const pass = actual >= min && actual <= max;
 
 		return {
@@ -17,9 +14,6 @@ expect.extend({
 	},
 
 	greaterThan(actual, min) {
-		if (typeof actual !== "number") {
-			throw new Error("Actual value must be a number");
-		}
 		const pass = actual > min;
 
 		return {
@@ -31,9 +25,6 @@ expect.extend({
 	},
 
 	greaterThanOrEqual(actual, min) {
-		if (typeof actual !== "number") {
-			throw new Error("Actual value must be a number");
-		}
 		const pass = actual >= min;
 
 		return {
@@ -45,9 +36,6 @@ expect.extend({
 	},
 
 	epoch(actual) {
-		if (typeof actual !== "number") {
-			throw new Error("Actual value must be a number");
-		}
 		const pass = actual > minDate && actual < maxDate;
 
 		return {
@@ -59,10 +47,6 @@ expect.extend({
 	},
 
 	toBeItemAfter(array, item, afterItem) {
-		if (!Array.isArray(array)) {
-			throw new Error("First argument must be an array");
-		}
-
 		const itemIndex = array.indexOf(item);
 		const afterItemIndex = array.indexOf(afterItem);
 		if (itemIndex === -1 || afterItemIndex === -1) {

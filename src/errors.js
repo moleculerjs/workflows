@@ -6,7 +6,7 @@
 
 "use strict";
 
-const { MoleculerError } = require("moleculer").Errors;
+const { MoleculerError, MoleculerRetryableError } = require("moleculer").Errors;
 
 class WorkflowError extends MoleculerError {
 	constructor(message, code, type, data) {
@@ -14,9 +14,9 @@ class WorkflowError extends MoleculerError {
 	}
 }
 
-class WorkflowTimeoutError extends WorkflowError {
-	constructor(message, type, data) {
-		super(message, 500, type || "WORKFLOW_TIMEOUT_ERROR", data);
+class WorkflowTimeoutError extends MoleculerRetryableError {
+	constructor(message, data) {
+		super(message, 500, "WORKFLOW_TIMEOUT", data);
 	}
 }
 

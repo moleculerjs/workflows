@@ -557,6 +557,7 @@ class BaseAdapter {
 					try {
 						await this.maintenanceStalledJobs(wf);
 						await this.maintenanceDelayedJobs(wf);
+						await this.maintenanceActiveJobs(wf);
 
 						if (wf.retention) {
 							const retention = parseDuration(wf.retention);

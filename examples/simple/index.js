@@ -339,6 +339,7 @@ if (!isNoService) {
 				concurrency: 3,
 				maxStalledCount: 3,
 
+				timeout: "5m",
 				retention: "10m",
 
 				backoff: "exponential",
