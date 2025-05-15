@@ -1,6 +1,5 @@
 const { ServiceBroker } = require("moleculer");
 const WorkflowsMiddleware = require("../../src");
-const { delay } = require("../utils");
 require("../jest.setup.js");
 
 describe("Workflows Job ID collision Test", () => {

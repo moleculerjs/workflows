@@ -584,7 +584,7 @@ describe("Workflows Remote worker Test", () => {
 	});
 
 	afterAll(async () => {
-		// await cleanup();
+		await cleanup();
 		await broker.stop();
 		await worker.stop();
 	});

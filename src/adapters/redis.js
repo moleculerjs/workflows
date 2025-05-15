@@ -84,7 +84,7 @@ class RedisAdapter extends BaseAdapter {
 
 		this.jobClients = new Map();
 		this.commandClient = null;
-		this.signalSubClient = null;
+		this.subClient = null;
 
 		this.signalPromises = new Map();
 		this.jobResultPromises = new Map();
@@ -153,11 +153,11 @@ class RedisAdapter extends BaseAdapter {
 		return new Promise((resolve, reject) => {
 			const client = this.createRedisClient();
 
-			client.on("ready", () => {
-				this.signalSubClient = client;
+			client.on("ready", async () => {
+				this.subClient = client;
 				this.connected = true;
 
-				client.subscribe(this.getKey(C.QUEUE_SIGNAL));
+				await client.subscribe(this.getKey(C.QUEUE_SIGNAL));
 
 				resolve(client);
 				//this.logger.info("Workflows Redis adapter connected.");
@@ -168,7 +168,7 @@ class RedisAdapter extends BaseAdapter {
 			});
 			client.on("end", () => {
 				this.connected = false;
-				this.signalSubClient = null;
+				this.subClient = null;
 				//this.logger.info("Workflows Redis adapter disconnected.");
 			});
 			client.on("message", (channel, message) => {
@@ -222,9 +222,9 @@ class RedisAdapter extends BaseAdapter {
 				this.commandClient = null;
 			}
 
-			if (this.signalSubClient) {
-				await this.closeClient(this.signalSubClient);
-				this.signalSubClient = null;
+			if (this.subClient) {
+				await this.closeClient(this.subClient);
+				this.subClient = null;
 			}
 
 			for (const client of this.jobClients.values()) {
@@ -1010,28 +1010,9 @@ class RedisAdapter extends BaseAdapter {
 			this.sendJobEvent(workflowName, job.id, "created");
 		}
 
-		// Store Job finished promise
-		let storePromise = {};
-		if (this.jobResultPromises.has(job.id)) {
-			storePromise = this.jobResultPromises.get(job.id);
-		} else {
-			storePromise.promise = new Promise((resolve, reject) => {
-				storePromise.resolve = resolve;
-				storePromise.reject = reject;
-			});
-
-			this.jobResultPromises.set(job.id, storePromise);
-		}
-
 		job.promise = async () => {
-			// If it's a rerun job and finished, return the result or error
-			if (isLoadedJob && job.finishedAt) {
-				if (job.success) return job.result;
-				throw this.broker.errorRegenerator.restore(job.error);
-			}
-
 			// Subscribe to the job finished event
-			this.signalSubClient?.subscribe(this.getKey(workflowName, C.FINISHED));
+			await this.subClient?.subscribe(this.getKey(workflowName, C.FINISHED));
 
 			// Get the Job to check the status
 			const job2 = await this.getJob(workflowName, job.id, [
@@ -1041,13 +1022,31 @@ class RedisAdapter extends BaseAdapter {
 				"result"
 			]);
 
+			if (!job2) {
+				this.log("warn", workflowName, job.id, "Job not found");
+				throw new WorkflowError("Job not found", 404, "JOB_NOT_FOUND", { jobId: job.id });
+			}
+
 			// If the job is finished, return the result or error
-			if (job2 && job2.finishedAt) {
+			if (job2.finishedAt) {
 				if (job2.success) return job2.result;
 				throw this.broker.errorRegenerator.restore(job2.error);
 			}
 
-			// If not, return the promise
+			// Check that Job promise is stored
+			if (this.jobResultPromises.has(job.id)) {
+				return this.jobResultPromises.get(job.id).promise;
+			}
+
+			// Store Job finished promise
+			const storePromise = {};
+			storePromise.promise = new Promise((resolve, reject) => {
+				storePromise.resolve = resolve;
+				storePromise.reject = reject;
+			});
+
+			this.jobResultPromises.set(job.id, storePromise);
+
 			return storePromise.promise;
 		};
 
