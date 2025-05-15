@@ -1,5 +1,6 @@
 # TODO
 
+- [ ] **rename repo to "workflows"**
 - [ ] jobId collision policy
   - [ ] reject
   - [ ] skip
@@ -28,16 +29,16 @@
   - [ ] different serializer
   - [ ] jobId collision
   - [x] jobEvents
-  - [ ] Retries
-    - [ ] skipping already executed tasks
-      - [ ] ctx.call
-      - [ ] ctx.emit
-      - [ ] ctx.broadcast
+  - [x] Retries
+    - [x] skipping already executed tasks
+      - [x] ctx.call
+      - [x] ctx.emit
+      - [x] ctx.broadcast
       - [ ] ctx.mcall
-      - [ ] ctx.wf.task
-  - [ ] multi nodes
-  - [ ] stalled jobs
-  - [ ] lock extending
+      - [x] ctx.wf.task
+  - [x] multi nodes
+  - [x] stalled jobs
+  - [x] lock extending
   - [ ] removeOnFailed
   - [ ] removeOnCompleted
   - [ ] retention
