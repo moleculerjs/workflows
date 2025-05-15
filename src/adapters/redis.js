@@ -922,8 +922,19 @@ class RedisAdapter extends BaseAdapter {
 					job = await this.getJob(workflowName, job.id, true);
 					isLoadedJob = true;
 				} else if (this.mwOpts.jobIdCollision == "rerun") {
-					job = await this.getJob(workflowName, job.id, true);
-					isLoadedJob = job.finishedAt == null;
+					const foundJob = await this.getJob(workflowName, job.id, true);
+					if (foundJob.finishedAt) {
+						job.createdAt = foundJob.createdAt;
+
+						// Remove previous job data
+						await this.commandClient.hdel(
+							this.getKey(workflowName, C.QUEUE_JOB, job.id),
+							["startedAt", "duration", "finishedAt", "success", "error", "result"]
+						);
+					} else {
+						isLoadedJob = true;
+						job = foundJob;
+					}
 				}
 			}
 		}
@@ -1023,7 +1034,6 @@ class RedisAdapter extends BaseAdapter {
 			]);
 
 			if (!job2) {
-				this.log("warn", workflowName, job.id, "Job not found");
 				throw new WorkflowError("Job not found", 404, "JOB_NOT_FOUND", { jobId: job.id });
 			}
 

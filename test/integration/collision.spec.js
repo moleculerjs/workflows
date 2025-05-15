@@ -1,5 +1,6 @@
 const { ServiceBroker } = require("moleculer");
 const WorkflowsMiddleware = require("../../src");
+const { delay } = require("../utils.js");
 require("../jest.setup.js");
 
 describe("Workflows Job ID collision Test", () => {
@@ -33,11 +34,13 @@ describe("Workflows Job ID collision Test", () => {
 			workflows: {
 				good: {
 					async handler() {
+						await delay(100);
 						return "OK";
 					}
 				},
 				bad: {
 					async handler() {
+						await delay(100);
 						throw new Error("Some error");
 					}
 				}
@@ -204,16 +207,21 @@ describe("Workflows Job ID collision Test", () => {
 		it("should rerun the same job after finished", async () => {
 			await createBroker("rerun");
 
-			const job1 = await broker.wf.run("collision.good", { a: 8 }, { jobId: "j4" });
-			expect(job1.id).toBe("j4");
+			const job = await broker.wf.run("collision.good", { a: 8 }, { jobId: "j4" });
+			expect(job.id).toBe("j4");
 
-			await job1.promise();
+			await job.promise();
 
+			const job1 = await broker.wf.get("collision.good", "j4");
 			expect(job1).toStrictEqual({
 				id: "j4",
 				createdAt: expect.epoch(),
 				payload: { a: 8 },
-				promise: expect.any(Function)
+				startedAt: expect.epoch(),
+				duration: expect.any(Number),
+				finishedAt: expect.epoch(),
+				result: "OK",
+				success: true
 			});
 
 			const job2 = await broker.wf.run("collision.good", { a: 8 }, { jobId: "j4" });
@@ -223,11 +231,6 @@ describe("Workflows Job ID collision Test", () => {
 				id: "j4",
 				createdAt: expect.epoch(),
 				payload: { a: 8 },
-				startedAt: expect.epoch(),
-				duration: expect.any(Number),
-				finishedAt: expect.epoch(),
-				result: "OK",
-				success: true,
 				promise: expect.any(Function)
 			});
 
@@ -239,9 +242,9 @@ describe("Workflows Job ID collision Test", () => {
 				id: "j4",
 				createdAt: expect.epoch(),
 				payload: { a: 8 },
-				startedAt: expect.epoch(),
+				startedAt: expect.greaterThan(job1.startedAt),
 				duration: expect.any(Number),
-				finishedAt: expect.epoch(),
+				finishedAt: expect.greaterThan(job1.finishedAt),
 				result: "OK",
 				success: true
 			});

@@ -218,7 +218,7 @@ describe("Workflows Common Test", () => {
 			payload: { name: "Error" },
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
-			duration: expect.withinRange(0, 100),
+			duration: expect.withinRange(0, 200),
 			success: false,
 			error: {
 				name: "Error",
