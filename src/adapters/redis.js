@@ -97,9 +97,10 @@ class RedisAdapter extends BaseAdapter {
 	 *
 	 * @param {ServiceBroker} broker - The Moleculer Service Broker instance.
 	 * @param {LoggerInstance} logger - The logger instance.
+	 * @param {WorkflowsMiddlewareOptions} mwOpts - Middleware options.
 	 */
-	init(broker, logger, mixinOpts) {
-		super.init(broker, logger, mixinOpts);
+	init(broker, logger, mwOpts) {
+		super.init(broker, logger, mwOpts);
 
 		if (this.opts.prefix) {
 			this.prefix = this.opts.prefix + ":";
@@ -469,7 +470,7 @@ class RedisAdapter extends BaseAdapter {
 			this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
 			this.broker.instanceID,
 			"EX",
-			this.mixinOpts.lockExpiration,
+			this.mwOpts.lockExpiration,
 			"NX"
 		);
 		this.log("debug", workflow.name, jobId, "Lock result", lockRes);
@@ -487,7 +488,7 @@ class RedisAdapter extends BaseAdapter {
 				this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
 				this.broker.instanceID,
 				"EX",
-				this.mixinOpts.lockExpiration,
+				this.mwOpts.lockExpiration,
 				"XX"
 			);
 			if (!lockRes) {
@@ -497,7 +498,7 @@ class RedisAdapter extends BaseAdapter {
 		};
 
 		// Start lock extender
-		const timer = setInterval(() => lockExtender(), (this.mixinOpts.lockExpiration / 2) * 1000);
+		const timer = setInterval(() => lockExtender(), (this.mwOpts.lockExpiration / 2) * 1000);
 
 		return async () => {
 			clearInterval(timer);
@@ -610,7 +611,7 @@ class RedisAdapter extends BaseAdapter {
 		pipeline.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
 		pipeline.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
 
-		if (this.opts.removeOnComplete) {
+		if (workflow.removeOnCompleted) {
 			pipeline.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
 		} else {
 			const fields = {
@@ -654,7 +655,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {number} The backoff time in milliseconds.
 	 */
 	getBackoffTime(workflow, retryAttempts) {
-		const backoff = workflow.backoff;
+		const backoff = workflow.backoff || "fixed";
 		const delay = parseDuration(workflow.backoffDelay) ?? 100;
 		if (typeof backoff === "function") {
 			return backoff(retryAttempts);
@@ -732,7 +733,7 @@ class RedisAdapter extends BaseAdapter {
 			}
 		}
 
-		if (this.opts.removeOnFailed) {
+		if (workflow.removeOnFailed) {
 			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
 		} else {
 			const fields = {
@@ -823,7 +824,7 @@ class RedisAdapter extends BaseAdapter {
 
 		this.log("debug", null, null, "Trigger signal", content.toString());
 
-		const exp = parseDuration(this.mixinOpts.signalExpiration);
+		const exp = parseDuration(this.mwOpts.signalExpiration);
 		if (exp != null && exp > 0) {
 			await this.commandClient.set(
 				this.getKey(C.QUEUE_SIGNAL, signalName, key),
@@ -1251,7 +1252,7 @@ class RedisAdapter extends BaseAdapter {
 			this.getKey(workflow.name, C.QUEUE_MAINTENANCE_LOCK),
 			this.broker.instanceID,
 			"EX",
-			this.mixinOpts.maintenanceTime * 2,
+			this.mwOpts.maintenanceTime * 2,
 			"NX"
 		);
 		this.log("debug", workflow.name, null, "Lock maintenance", lockRes);

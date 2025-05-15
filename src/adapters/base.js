@@ -57,11 +57,12 @@ class BaseAdapter {
 	 *
 	 * @param {import("moleculer").ServiceBroker} broker
 	 * @param {import("moleculer").LoggerInstance} logger
+	 * @param {WorkflowsMiddlewareOptions} mwOpts - Middleware options.
 	 */
-	init(broker, logger, mixinOpts) {
+	init(broker, logger, mwOpts) {
 		this.broker = broker;
 		this.logger = logger;
-		this.mixinOpts = mixinOpts;
+		this.mwOpts = mwOpts;
 
 		// create an instance of serializer (default to JSON)
 		/** @type {Serializer} */
@@ -540,7 +541,7 @@ class BaseAdapter {
 
 		this.maintenanceTimer = setTimeout(
 			() => this.maintenance(),
-			circa(this.mixinOpts.maintenanceTime * 1000)
+			circa(this.mwOpts.maintenanceTime * 1000)
 		);
 	}
 
@@ -600,7 +601,7 @@ class BaseAdapter {
 	 * @param {String} type
 	 */
 	sendJobEvent(workflowName, jobId, type) {
-		if (this.mixinOpts?.jobEventType) {
+		if (this.mwOpts?.jobEventType) {
 			const eventName = `job.${workflowName}.${type}`;
 
 			const payload = {
@@ -609,7 +610,7 @@ class BaseAdapter {
 				job: jobId
 			};
 
-			this.broker[this.mixinOpts.jobEventType](eventName, payload);
+			this.broker[this.mwOpts.jobEventType](eventName, payload);
 		}
 	}
 

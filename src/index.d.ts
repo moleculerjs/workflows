@@ -11,14 +11,19 @@ export interface WorkflowsMiddlewareOptions {
     schemaProperty?: string;
     workflowHandlerTrigger?: string;
     jobEventType?: string;
+
+    signalExpiration?: string;
+    maintenanceTime?: number;
+    lockExpiration?: number;
 }
 
 export interface Workflow {
     name?: string;
+    fullName?: string;
     timeout?: string | number;
     retention?: string | number;
     concurrency?: number;
-    retries?: number;
+    /*retries?: number;
     retryPolicy?: {
         enabled?: boolean;
         retries?: number;
@@ -27,12 +32,9 @@ export interface Workflow {
         factor?: number;
         backoff?: "fixed" | "exponential" | ((retryAttempts: number) => number);
     };
+	*/
     backoff?: "fixed" | "exponential" | ((retryAttempts: number) => number);
     backoffDelay?: number;
-
-    signalExpiration?: string;
-    maintenanceTime?: number;
-    lockExpiration?: number;
 
     params?: Record<string, any>;
     handler: (ctx: WorkflowContext) => Promise<any>;
