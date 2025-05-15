@@ -117,7 +117,8 @@ describe("Workflows Job ID collision Test", () => {
 			const job1 = await broker.wf.run("collision.good", { a: 6 }, { jobId: "j2" });
 			expect(job1.id).toBe("j2");
 
-			await job1.promise();
+			const res = await job1.promise();
+			expect(res).toBe("OK");
 
 			expect(job1).toStrictEqual({
 				id: "j2",
@@ -141,7 +142,8 @@ describe("Workflows Job ID collision Test", () => {
 				promise: expect.any(Function)
 			});
 
-			await job2.promise();
+			const res2 = await job2.promise();
+			expect(res2).toBe("OK");
 
 			const job3 = await broker.wf.get("collision.good", "j2");
 

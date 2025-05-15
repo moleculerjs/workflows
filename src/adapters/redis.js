@@ -1027,7 +1027,7 @@ class RedisAdapter extends BaseAdapter {
 
 		job.promise = () => {
 			if (isLoadedJob && job.finishedAt) {
-				return Promise.resolve();
+				return job.error ? Promise.reject(job.error) : Promise.resolve(job.result);
 			}
 
 			this.signalSubClient?.subscribe(this.getKey(workflowName, C.FINISHED));
