@@ -113,6 +113,22 @@ broker.createService({
 | serializer   | string                                                    | "JSON"     | Serializer to use for job data.                                                             |
 | drainDelay   | number                                                    | 5         | Blocking delay time (sec).                                                           |
 
+### Workflow options
+| Name         | Type   | Default     | Description  |
+|--------------|--------|--------------|-------------|
+| name        | String  | service name + workflow name  | Name of workflow.                |
+| fullName        | String  | optional  | Full name of workflow. If you don't want to prepend the service name for the workflow.name                |
+| params        | object | optional | Job parameter validation schema               |
+| removeOnCompleted        | boolean  | false  | Remove the job when it's completed.       |
+| removeOnFailed        | boolean  | false  | Remove the job when it's failed.       |
+| concurrency        | number  | 1  | Number of concurrent running jobs.        |
+| retention        | string or number  | null  | Retention time of job history.       |
+| backoff        | string\|Function  | "fixed" | Retry backoff strategy. Available: "fixed", "exponention" or a custom Function       |
+| backoffDelay        | number  | 100  | Backoff delay for fixed and exponential strategy.       |
+| maxStalledCount        | number  | null  | Number of maximum put back the stalled job. 0 or null value disables it.       |
+
+
+
 <!-- ## Documentation
 You can find [here the documentation](docs/README.md).
 
