@@ -820,7 +820,7 @@ class RedisAdapter extends BaseAdapter {
 			payload
 		});
 
-		this.log("debug", null, null, "Trigger signal", content.toString());
+		this.log("debug", signalName, key, "Trigger signal", content.toString());
 
 		const exp = parseDuration(this.mwOpts.signalExpiration);
 		if (exp != null && exp > 0) {
@@ -850,7 +850,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the signal is triggered.
 	 */
 	async removeSignal(signalName, key) {
-		this.log("debug", null, null, "Remove signal", signalName, key);
+		this.log("debug", signalName, key, "Remove signal", signalName, key);
 
 		await this.commandClient.del(this.getKey(C.QUEUE_SIGNAL, signalName, key));
 	}
@@ -1023,15 +1023,31 @@ class RedisAdapter extends BaseAdapter {
 			this.jobResultPromises.set(job.id, storePromise);
 		}
 
-		job.promise = () => {
+		job.promise = async () => {
+			// If it's a rerun job and finished, return the result or error
 			if (isLoadedJob && job.finishedAt) {
-				return job.error
-					? Promise.reject(this.broker.errorRegenerator.restore(job.error))
-					: Promise.resolve(job.result);
+				if (job.success) return job.result;
+				throw this.broker.errorRegenerator.restore(job.error);
 			}
 
+			// Subscribe to the job finished event
 			this.signalSubClient?.subscribe(this.getKey(workflowName, C.FINISHED));
 
+			// Get the Job to check the status
+			const job2 = await this.getJob(workflowName, job.id, [
+				"success",
+				"finishedAt",
+				"error",
+				"result"
+			]);
+
+			// If the job is finished, return the result or error
+			if (job2 && job2.finishedAt) {
+				if (job2.success) return job2.result;
+				throw this.broker.errorRegenerator.restore(job2.error);
+			}
+
+			// If not, return the promise
 			return storePromise.promise;
 		};
 

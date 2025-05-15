@@ -522,3 +522,231 @@ describe("Workflows Common Test", () => {
 		});
 	});
 });
+
+describe("Workflows Remote worker Test", () => {
+	let broker, worker;
+	let FLOWS = [];
+
+	const cleanup = async () => {
+		await broker.wf.cleanup("remote.good");
+		await broker.wf.cleanup("remote.bad");
+		await broker.wf.cleanup("remote.signal");
+
+		await broker.wf.removeSignal("signal.remote", 9999);
+	};
+
+	beforeAll(async () => {
+		broker = new ServiceBroker({
+			logger: false,
+			nodeID: "broker",
+			transporter: "Redis",
+			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+		});
+
+		worker = new ServiceBroker({
+			logger: false,
+			nodeID: "worker",
+			transporter: "Redis",
+			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+		});
+
+		worker.createService({
+			name: "remote",
+			workflows: {
+				good: {
+					async handler() {
+						return "OK";
+					}
+				},
+				bad: {
+					async handler() {
+						throw new Error("Some error");
+					}
+				},
+				signal: {
+					async handler(ctx) {
+						await ctx.wf.setState("beforeSignal");
+						const signalData = await ctx.wf.waitForSignal("signal.remote", 9999);
+						await ctx.wf.setState("afterSignal");
+						return { result: "OK", signalData };
+					}
+				}
+			}
+		});
+
+		await broker.start();
+		await worker.start();
+		await cleanup();
+	});
+
+	beforeEach(() => {
+		FLOWS = [];
+	});
+
+	afterAll(async () => {
+		// await cleanup();
+		await broker.stop();
+		await worker.stop();
+	});
+
+	it("should execute a simple workflow and return the expected result", async () => {
+		const job = await broker.wf.run("remote.good", { name: "John" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "John" },
+			promise: expect.any(Function)
+		});
+
+		const result = await job.promise();
+		expect(result).toBe("OK");
+
+		const job2 = await broker.wf.get("remote.good", job.id);
+		expect(job2).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "John" },
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
+			duration: expect.withinRange(0, 100),
+			success: true,
+			result: "OK"
+		});
+
+		const events = await broker.wf.getEvents("remote.good", job.id);
+		expect(events).toStrictEqual([
+			{ nodeID: "worker", ts: expect.epoch(), type: "started" },
+			{ nodeID: "worker", ts: expect.epoch(), type: "finished" }
+		]);
+	});
+
+	it("should execute a simple workflow and return the expected result later", async () => {
+		const job = await broker.wf.run("remote.good", { name: "John" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "John" },
+			promise: expect.any(Function)
+		});
+
+		await delay(1000);
+
+		// We call the promise after a delay that the job is already finished
+		const result = await job.promise();
+		expect(result).toBe("OK");
+
+		const job2 = await broker.wf.get("remote.good", job.id);
+		expect(job2).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "John" },
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
+			duration: expect.withinRange(0, 100),
+			success: true,
+			result: "OK"
+		});
+
+		const events = await broker.wf.getEvents("remote.good", job.id);
+		expect(events).toStrictEqual([
+			{ nodeID: "worker", ts: expect.epoch(), type: "started" },
+			{ nodeID: "worker", ts: expect.epoch(), type: "finished" }
+		]);
+	});
+
+	it("should handle workflow errors correctly", async () => {
+		const job = await broker.wf.run("remote.bad", { name: "Error" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "Error" },
+			promise: expect.any(Function)
+		});
+
+		await expect(job.promise()).rejects.toThrow("Some error");
+
+		const job2 = await broker.wf.get("remote.bad", job.id);
+		expect(job2).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "Error" },
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
+			duration: expect.withinRange(0, 100),
+			success: false,
+			error: {
+				name: "Error",
+				message: "Some error",
+				nodeID: "worker",
+				stack: expect.any(String)
+			}
+		});
+	});
+
+	it("should handle workflow signals correctly", async () => {
+		await broker.wf.removeSignal("signal.remote", 9999);
+
+		const job = await broker.wf.run("remote.signal", { a: 5 });
+
+		await delay(500);
+
+		const stateBefore = await broker.wf.getState("remote.signal", job.id);
+		expect(stateBefore).toBe("beforeSignal");
+
+		await broker.wf.triggerSignal("signal.remote", 9999, { user: "John" });
+
+		await delay(500);
+
+		const stateAfter = await broker.wf.getState("remote.signal", job.id);
+		expect(stateAfter).toBe("afterSignal");
+
+		const result = await job.promise();
+		expect(result).toStrictEqual({ result: "OK", signalData: { user: "John" } });
+
+		const events = await broker.wf.getEvents("remote.signal", job.id);
+		expect(events).toStrictEqual([
+			{ nodeID: "worker", ts: expect.epoch(), type: "started" },
+			{
+				nodeID: "worker",
+				state: "beforeSignal",
+				taskId: 1,
+				taskType: "state",
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
+				duration: expect.withinRange(400, 600),
+				nodeID: "worker",
+				result: { user: "John" },
+				signalKey: 9999,
+				signalName: "signal.remote",
+				taskId: 2,
+				taskType: "signal",
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
+				nodeID: "worker",
+				state: "afterSignal",
+				taskId: 3,
+				taskType: "state",
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{ nodeID: "worker", ts: expect.epoch(), type: "finished" }
+		]);
+
+		const job2 = await broker.wf.get("remote.signal", job.id);
+		expect(job2).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { a: 5 },
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
+			duration: expect.withinRange(400, 600),
+			state: "afterSignal",
+			success: true,
+			result: { result: "OK", signalData: { user: "John" } }
+		});
+	});
+});

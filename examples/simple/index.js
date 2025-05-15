@@ -436,7 +436,7 @@ if (!isNoService) {
 		}
 	});
 } else {
-	broker.createService({
+	/*broker.createService({
 		name: "job-events",
 
 		events: {
@@ -446,7 +446,7 @@ if (!isNoService) {
 				}
 			}
 		}
-	});
+	});*/
 }
 
 // Start server
