@@ -39,9 +39,9 @@
   - [x] multi nodes
   - [x] stalled jobs
   - [x] lock extending
-  - [ ] removeOnFailed
-  - [ ] removeOnCompleted
-  - [ ] retention
+  - [x] removeOnFailed
+  - [x] removeOnCompleted
+  - [x] retention
   - [ ] job timeout
   - [x] parameter validation
   - [ ] middleware hooks

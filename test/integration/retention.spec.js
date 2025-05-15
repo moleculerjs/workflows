@@ -11,7 +11,7 @@ describe("Workflows Retention Test", () => {
 		await broker.wf.cleanup("retention.bad");
 	};
 
-	const createBroker = async retention => {
+	const createBroker = async wfOpts => {
 		broker = new ServiceBroker({
 			logger: false,
 			/*logger: {
@@ -31,13 +31,13 @@ describe("Workflows Retention Test", () => {
 			name: "retention",
 			workflows: {
 				good: {
-					retention,
+					...wfOpts,
 					async handler() {
 						return "OK";
 					}
 				},
 				bad: {
-					retention,
+					...wfOpts,
 					async handler() {
 						throw new Error("Some error");
 					}
@@ -54,52 +54,92 @@ describe("Workflows Retention Test", () => {
 		await broker.stop();
 	});
 
-	it("should remove completed job after retention time", async () => {
-		await createBroker("10 sec");
-		const job = await broker.wf.run("retention.good");
-		expect(job.id).toEqual(expect.any(String));
-		await job.promise();
+	describe("Retention time", () => {
+		it("should remove completed job after retention time", async () => {
+			await createBroker({ retention: "10 sec" });
+			const job = await broker.wf.run("retention.good");
+			expect(job.id).toEqual(expect.any(String));
+			await job.promise();
 
-		const job2 = await broker.wf.get("retention.good", job.id);
-		expect(job2).toStrictEqual({
-			id: expect.any(String),
-			createdAt: expect.epoch(),
-			startedAt: expect.epoch(),
-			finishedAt: expect.epoch(),
-			duration: expect.withinRange(0, 100),
-			success: true,
-			result: "OK"
+			const job2 = await broker.wf.get("retention.good", job.id);
+			expect(job2).toStrictEqual({
+				id: expect.any(String),
+				createdAt: expect.epoch(),
+				startedAt: expect.epoch(),
+				finishedAt: expect.epoch(),
+				duration: expect.withinRange(0, 100),
+				success: true,
+				result: "OK"
+			});
+
+			await delay(15_000);
+
+			const job3 = await broker.wf.get("retention.good", job.id);
+			expect(job3).toBeNull();
+		}, 20_000);
+
+		it("should remove failed job after retention time", async () => {
+			await createBroker({ retention: "10 sec" });
+			const job = await broker.wf.run("retention.bad");
+			expect(job.id).toEqual(expect.any(String));
+			await expect(job.promise()).rejects.toThrow("Some error");
+
+			const job2 = await broker.wf.get("retention.bad", job.id);
+			expect(job2).toStrictEqual({
+				id: expect.any(String),
+				createdAt: expect.epoch(),
+				startedAt: expect.epoch(),
+				finishedAt: expect.epoch(),
+				duration: expect.withinRange(0, 100),
+				success: false,
+				error: expect.objectContaining({
+					message: "Some error",
+					name: "Error"
+				})
+			});
+
+			await delay(15_000);
+
+			const job3 = await broker.wf.get("retention.bad", job.id);
+			expect(job3).toBeNull();
+		}, 20_000);
+	});
+
+	describe("Remove on completed", () => {
+		it("should remove completed job after finished", async () => {
+			await createBroker({ removeOnCompleted: true });
+			const goodJob = await broker.wf.run("retention.good");
+			expect(goodJob.id).toEqual(expect.any(String));
+			await goodJob.promise();
+
+			const goodJob2 = await broker.wf.get("retention.good", goodJob.id);
+			expect(goodJob2).toBeNull();
+
+			const badJob = await broker.wf.run("retention.bad");
+			expect(badJob.id).toEqual(expect.any(String));
+			await expect(badJob.promise()).rejects.toThrow("Some error");
+
+			const badJob2 = await broker.wf.get("retention.bad", badJob.id);
+			expect(badJob2).toBeDefined();
 		});
+	});
 
-		await delay(15_000);
+	describe("Remove on failed", () => {
+		it("should remove failed job after finished", async () => {
+			await createBroker({ removeOnFailed: true });
+			const goodJob = await broker.wf.run("retention.good");
+			expect(goodJob.id).toEqual(expect.any(String));
+			await goodJob.promise();
 
-		const job3 = await broker.wf.get("retention.good", job.id);
-		expect(job3).toBeNull();
-	}, 20_000);
+			const goodJob2 = await broker.wf.get("retention.good", goodJob.id);
+			expect(goodJob2).toBeDefined();
 
-	it("should remove failed job after retention time", async () => {
-		await createBroker("10 sec");
-		const job = await broker.wf.run("retention.bad");
-		expect(job.id).toEqual(expect.any(String));
-		await expect(job.promise()).rejects.toThrow("Some error");
+			const badJob = await broker.wf.run("retention.bad");
+			expect(badJob.id).toEqual(expect.any(String));
+			await expect(badJob.promise()).rejects.toThrow("Some error");
 
-		const job2 = await broker.wf.get("retention.bad", job.id);
-		expect(job2).toStrictEqual({
-			id: expect.any(String),
-			createdAt: expect.epoch(),
-			startedAt: expect.epoch(),
-			finishedAt: expect.epoch(),
-			duration: expect.withinRange(0, 100),
-			success: false,
-			error: expect.objectContaining({
-				message: "Some error",
-				name: "Error"
-			})
+			const badJob2 = await broker.wf.get("retention.bad", badJob.id);
+			expect(badJob2).toBeNull();
 		});
-
-		await delay(15_000);
-
-		const job3 = await broker.wf.get("retention.bad", job.id);
-		expect(job3).toBeNull();
-	}, 20_000);
+	});
 });
