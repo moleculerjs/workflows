@@ -40,7 +40,7 @@ describe("Workflows Delayed Test", () => {
 		const job = await broker.wf.run("delayed.simple", { name: "John" }, { delay: "15s" });
 		expect(job).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			delay: 15000,
 			payload: { name: "John" },
 			promoteAt: expect.greaterThanOrEqual(now + 15000),
@@ -53,7 +53,7 @@ describe("Workflows Delayed Test", () => {
 		const job2 = await broker.wf.get("delayed.simple", job.id);
 		expect(job2).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			payload: { name: "John" },
 			delay: 15000,
 			promoteAt: expect.greaterThanOrEqual(now + 15000),

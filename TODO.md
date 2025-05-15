@@ -24,7 +24,7 @@
   - [x] adapter resolve
 
 - [ ] Integration tests
-  - [ ] Repeat jobs
+  - [x] Repeat jobs
   - [x] Delayed jobs
   - [ ] different serializer
   - [ ] jobId collision

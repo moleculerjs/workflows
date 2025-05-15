@@ -1,3 +1,6 @@
+const minDate = new Date("2020-01-01T00:00:00Z").getTime();
+const maxDate = new Date("2030-01-01T00:00:00Z").getTime();
+
 expect.extend({
 	withinRange(actual, min, max) {
 		if (typeof actual !== "number") {
@@ -13,6 +16,20 @@ expect.extend({
 		};
 	},
 
+	greaterThan(actual, min) {
+		if (typeof actual !== "number") {
+			throw new Error("Actual value must be a number");
+		}
+		const pass = actual > min;
+
+		return {
+			pass,
+			message: pass
+				? () => `expected ${actual} not less than ${min}`
+				: () => `expected ${actual} to be greater than ${min}`
+		};
+	},
+
 	greaterThanOrEqual(actual, min) {
 		if (typeof actual !== "number") {
 			throw new Error("Actual value must be a number");
@@ -24,6 +41,20 @@ expect.extend({
 			message: pass
 				? () => `expected ${actual} not less than ${min}`
 				: () => `expected ${actual} to be greater than or equal ${min}`
+		};
+	},
+
+	epoch(actual) {
+		if (typeof actual !== "number") {
+			throw new Error("Actual value must be a number");
+		}
+		const pass = actual > minDate && actual < maxDate;
+
+		return {
+			pass,
+			message: pass
+				? () => `expected ${actual} not to be a valid epoch`
+				: () => `expected ${actual} to be a valid epoch`
 		};
 	},
 

@@ -1,6 +1,7 @@
 const { ServiceBroker } = require("moleculer");
 const WorkflowsMiddleware = require("../../src");
 const { MoleculerRetryableError } = require("moleculer").Errors;
+require("../jest.setup.js");
 
 describe("Workflows Retries Test", () => {
 	let broker;

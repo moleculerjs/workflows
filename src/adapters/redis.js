@@ -939,7 +939,8 @@ class RedisAdapter extends BaseAdapter {
 				const endDate = new Date(opts.repeat.endDate).getTime();
 				if (endDate < Date.now()) {
 					throw new WorkflowError(
-						"Repeatable job is expired at " + opts.repeat.endDate,
+						"Repeatable job is expired at " +
+							new Date(opts.repeat.endDate).toISOString(),
 						400,
 						"REPEAT_JOB_EXPIRED",
 						{
@@ -1074,6 +1075,7 @@ class RedisAdapter extends BaseAdapter {
 
 			const nextJob = { ...job };
 			delete nextJob.repeat;
+			nextJob.createdAt = Date.now();
 			nextJob.parent = job.id;
 
 			if (job.repeat.cron) {
@@ -1114,13 +1116,13 @@ class RedisAdapter extends BaseAdapter {
 
 						return;
 					}
-
-					nextJob.repeatCounter = await this.commandClient.hincrby(
-						this.getKey(workflowName, C.QUEUE_JOB, job.id),
-						"repeatCounter",
-						1
-					);
 				}
+
+				nextJob.repeatCounter = await this.commandClient.hincrby(
+					this.getKey(workflowName, C.QUEUE_JOB, job.id),
+					"repeatCounter",
+					1
+				);
 
 				const promoteAt = getCronNextTime(job.repeat.cron, Date.now(), job.repeat.tz);
 				if (!nextJob.promoteAt || nextJob.promoteAt < promoteAt) {

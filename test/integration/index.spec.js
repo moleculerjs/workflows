@@ -1,7 +1,6 @@
 const { ServiceBroker } = require("moleculer");
 const WorkflowsMiddleware = require("../../src");
 const { delay } = require("../utils");
-
 require("../jest.setup.js");
 
 describe("Workflows Common Test", () => {
@@ -134,7 +133,7 @@ describe("Workflows Common Test", () => {
 		const job = await broker.wf.run("test.simple", { name: "World" });
 		expect(job).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			payload: { name: "World" },
 			promise: expect.any(Function)
 		});
@@ -145,10 +144,10 @@ describe("Workflows Common Test", () => {
 		const job2 = await broker.wf.get("test.simple", job.id);
 		expect(job2).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			payload: { name: "World" },
-			startedAt: expect.any(Number),
-			finishedAt: expect.any(Number),
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
 			duration: expect.withinRange(0, 100),
 			success: true,
 			result: "Hello, World"
@@ -156,8 +155,8 @@ describe("Workflows Common Test", () => {
 
 		const events = await broker.wf.getEvents("test.simple", job.id);
 		expect(events).toStrictEqual([
-			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "started" },
-			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "finished" }
+			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
+			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "finished" }
 		]);
 	});
 
@@ -165,7 +164,7 @@ describe("Workflows Common Test", () => {
 		const job = await broker.wf.run("test.simple", { name: "World" }, { jobId: "myJobId" });
 		expect(job).toStrictEqual({
 			id: "myJobId",
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			payload: { name: "World" },
 			promise: expect.any(Function)
 		});
@@ -176,10 +175,10 @@ describe("Workflows Common Test", () => {
 		const job2 = await broker.wf.get("test.simple", job.id);
 		expect(job2).toStrictEqual({
 			id: "myJobId",
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			payload: { name: "World" },
-			startedAt: expect.any(Number),
-			finishedAt: expect.any(Number),
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
 			duration: expect.withinRange(0, 100),
 			success: true,
 			result: "Hello, World"
@@ -190,7 +189,7 @@ describe("Workflows Common Test", () => {
 		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
 		expect(job).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			payload: { name: "ephemeral" },
 			promise: expect.any(Function)
 		});
@@ -205,7 +204,7 @@ describe("Workflows Common Test", () => {
 		const job = await broker.wf.run("test.error", { name: "Error" });
 		expect(job).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			payload: { name: "Error" },
 			promise: expect.any(Function)
 		});
@@ -215,10 +214,10 @@ describe("Workflows Common Test", () => {
 		const job2 = await broker.wf.get("test.error", job.id);
 		expect(job2).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			payload: { name: "Error" },
-			startedAt: expect.any(Number),
-			finishedAt: expect.any(Number),
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
 			duration: expect.withinRange(0, 100),
 			success: false,
 			error: {
@@ -257,16 +256,16 @@ describe("Workflows Common Test", () => {
 
 		const events = await broker.wf.getEvents("test.state", job.id);
 		expect(events).toStrictEqual([
-			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "started" },
+			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
 			{
 				nodeID: broker.nodeID,
 				state: "IN_PROGRESS",
 				taskId: 1,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
-			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "finished" }
+			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "finished" }
 		]);
 	});
 
@@ -285,16 +284,16 @@ describe("Workflows Common Test", () => {
 
 		const events = await broker.wf.getEvents("test.state", job.id);
 		expect(events).toStrictEqual([
-			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "started" },
+			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
 			{
 				nodeID: broker.nodeID,
 				state: { progress: 50, msg: "IN_PROGRESS" },
 				taskId: 1,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
-			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "finished" }
+			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "finished" }
 		]);
 	});
 
@@ -320,13 +319,13 @@ describe("Workflows Common Test", () => {
 
 		const events = await broker.wf.getEvents("test.signal", job.id);
 		expect(events).toStrictEqual([
-			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "started" },
+			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
 			{
 				nodeID: broker.nodeID,
 				state: "beforeSignal",
 				taskId: 1,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -337,7 +336,7 @@ describe("Workflows Common Test", () => {
 				signalName: "signal.first",
 				taskId: 2,
 				taskType: "signal",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -345,19 +344,19 @@ describe("Workflows Common Test", () => {
 				state: "afterSignal",
 				taskId: 3,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
-			{ nodeID: broker.nodeID, ts: expect.any(Number), type: "finished" }
+			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "finished" }
 		]);
 
 		const job2 = await broker.wf.get("test.signal", job.id);
 		expect(job2).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
+			createdAt: expect.epoch(),
 			payload: { a: 5 },
-			startedAt: expect.any(Number),
-			finishedAt: expect.any(Number),
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
 			duration: expect.withinRange(400, 600),
 			state: "afterSignal",
 			success: true,
@@ -461,7 +460,7 @@ describe("Workflows Common Test", () => {
 			const job = await broker.wf.run("test.valid", { name: "John" });
 			expect(job).toStrictEqual({
 				id: expect.any(String),
-				createdAt: expect.any(Number),
+				createdAt: expect.epoch(),
 				payload: { name: "John" },
 				promise: expect.any(Function)
 			});
@@ -472,10 +471,10 @@ describe("Workflows Common Test", () => {
 			const job2 = await broker.wf.get("test.valid", job.id);
 			expect(job2).toStrictEqual({
 				id: expect.any(String),
-				createdAt: expect.any(Number),
+				createdAt: expect.epoch(),
 				payload: { name: "John" },
-				startedAt: expect.any(Number),
-				finishedAt: expect.any(Number),
+				startedAt: expect.epoch(),
+				finishedAt: expect.epoch(),
 				duration: expect.withinRange(0, 100),
 				success: true,
 				result: "Hello, John"
@@ -486,7 +485,7 @@ describe("Workflows Common Test", () => {
 			const job = await broker.wf.run("test.valid", { name: 123 });
 			expect(job).toStrictEqual({
 				id: expect.any(String),
-				createdAt: expect.any(Number),
+				createdAt: expect.epoch(),
 				payload: { name: 123 },
 				promise: expect.any(Function)
 			});
@@ -496,10 +495,10 @@ describe("Workflows Common Test", () => {
 			const job2 = await broker.wf.get("test.valid", job.id);
 			expect(job2).toStrictEqual({
 				id: expect.any(String),
-				createdAt: expect.any(Number),
+				createdAt: expect.epoch(),
 				payload: { name: 123 },
-				startedAt: expect.any(Number),
-				finishedAt: expect.any(Number),
+				startedAt: expect.epoch(),
+				finishedAt: expect.epoch(),
 				duration: expect.withinRange(0, 100),
 				success: false,
 				error: {

@@ -191,7 +191,7 @@ describe("Workflows Stalled Job Test", () => {
 	});
 
 	afterAll(async () => {
-		// await cleanup();
+		await cleanup();
 		await broker.stop();
 		await workerBroker.stop();
 	});
@@ -207,8 +207,8 @@ describe("Workflows Stalled Job Test", () => {
 
 		const events = await broker.wf.getEvents("stalled.tenSec", job.id);
 		expect(events).toStrictEqual([
-			{ nodeID: "worker", ts: expect.any(Number), type: "started" },
-			{ nodeID: "worker", ts: expect.any(Number), type: "finished" }
+			{ nodeID: "worker", ts: expect.epoch(), type: "started" },
+			{ nodeID: "worker", ts: expect.epoch(), type: "finished" }
 		]);
 	}, 15000);
 
@@ -234,9 +234,9 @@ describe("Workflows Stalled Job Test", () => {
 		const job2 = await broker.wf.get("stalled.fiveSec", job.id);
 		expect(job2).toStrictEqual({
 			id: expect.any(String),
-			createdAt: expect.any(Number),
-			startedAt: expect.any(Number),
-			finishedAt: expect.any(Number),
+			createdAt: expect.epoch(),
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
 			duration: expect.withinRange(15_000, 25_000),
 			success: true,
 			stalledCounter: 1,
@@ -245,10 +245,10 @@ describe("Workflows Stalled Job Test", () => {
 
 		const events = await broker.wf.getEvents("stalled.fiveSec", job.id);
 		expect(events).toStrictEqual([
-			{ nodeID: "worker", ts: expect.any(Number), type: "started" },
-			{ nodeID: "worker", ts: expect.any(Number), type: "stalled" },
-			{ nodeID: "worker", ts: expect.any(Number), type: "started" },
-			{ nodeID: "worker", ts: expect.any(Number), type: "finished" }
+			{ nodeID: "worker", ts: expect.epoch(), type: "started" },
+			{ nodeID: "worker", ts: expect.epoch(), type: "stalled" },
+			{ nodeID: "worker", ts: expect.epoch(), type: "started" },
+			{ nodeID: "worker", ts: expect.epoch(), type: "finished" }
 		]);
 	}, 25000);
 
@@ -292,9 +292,9 @@ describe("Workflows Stalled Job Test", () => {
 				email: "john.doe@example.com",
 				name: "John Doe"
 			},
-			createdAt: expect.any(Number),
-			startedAt: expect.any(Number),
-			finishedAt: expect.any(Number),
+			createdAt: expect.epoch(),
+			startedAt: expect.epoch(),
+			finishedAt: expect.epoch(),
 			duration: expect.withinRange(2500, 4500),
 			state: "DONE",
 			success: true,
@@ -314,7 +314,7 @@ describe("Workflows Stalled Job Test", () => {
 
 		const events = await broker.wf.getEvents("stalled.complex", job.id);
 		expect(events).toStrictEqual([
-			{ nodeID: "worker", ts: expect.any(Number), type: "started" },
+			{ nodeID: "worker", ts: expect.epoch(), type: "started" },
 			{
 				action: "users.checkEmail",
 				duration: expect.any(Number),
@@ -322,7 +322,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: true,
 				taskId: 1,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -330,7 +330,7 @@ describe("Workflows Stalled Job Test", () => {
 				state: "registering",
 				taskId: 2,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -340,7 +340,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: { email: "john.doe@example.com", id: 1, name: "John Doe" },
 				taskId: 3,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -348,7 +348,7 @@ describe("Workflows Stalled Job Test", () => {
 				state: "registered",
 				taskId: 4,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -358,7 +358,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: [null],
 				taskId: 5,
 				taskType: "eventEmit",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -367,7 +367,7 @@ describe("Workflows Stalled Job Test", () => {
 				taskId: 6,
 				taskType: "sleep",
 				time: 2000,
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -377,7 +377,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: true,
 				taskId: 7,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -385,7 +385,7 @@ describe("Workflows Stalled Job Test", () => {
 				state: "waiting_verification",
 				taskId: 8,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -395,7 +395,7 @@ describe("Workflows Stalled Job Test", () => {
 				signalName: "email.verification",
 				taskId: 9,
 				taskType: "signal",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -403,7 +403,7 @@ describe("Workflows Stalled Job Test", () => {
 				state: "VERIFIED",
 				taskId: 10,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -413,7 +413,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: true,
 				taskId: 11,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -423,7 +423,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: [[null]],
 				taskId: 12,
 				taskType: "actionBroadcast",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -432,7 +432,7 @@ describe("Workflows Stalled Job Test", () => {
 				run: "httpPost",
 				taskId: 13,
 				taskType: "custom",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -442,7 +442,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: true,
 				taskId: 14,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -450,12 +450,12 @@ describe("Workflows Stalled Job Test", () => {
 				state: "DONE",
 				taskId: 15,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
 				nodeID: "worker",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "finished"
 			}
 		]);
@@ -506,10 +506,10 @@ describe("Workflows Stalled Job Test", () => {
 				email: "john.doe@example.com",
 				name: "John Doe"
 			},
-			createdAt: expect.any(Number),
-			startedAt: expect.any(Number),
-			promoteAt: expect.any(Number),
-			finishedAt: expect.any(Number),
+			createdAt: expect.epoch(),
+			startedAt: expect.epoch(),
+			promoteAt: expect.epoch(),
+			finishedAt: expect.epoch(),
 			duration: expect.withinRange(5000, 10_000),
 			state: "DONE",
 			retries: 2,
@@ -533,7 +533,7 @@ describe("Workflows Stalled Job Test", () => {
 
 		const events = await broker.wf.getEvents("stalled.complex", job.id);
 		expect(events).toStrictEqual([
-			{ nodeID: "worker", ts: expect.any(Number), type: "started" },
+			{ nodeID: "worker", ts: expect.epoch(), type: "started" },
 			{
 				action: "users.checkEmail",
 				duration: expect.any(Number),
@@ -541,7 +541,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: true,
 				taskId: 1,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -549,7 +549,7 @@ describe("Workflows Stalled Job Test", () => {
 				state: "registering",
 				taskId: 2,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -559,7 +559,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: { email: "john.doe@example.com", id: 1, name: "John Doe" },
 				taskId: 3,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -567,7 +567,7 @@ describe("Workflows Stalled Job Test", () => {
 				state: "registered",
 				taskId: 4,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -577,7 +577,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: [null],
 				taskId: 5,
 				taskType: "eventEmit",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -586,7 +586,7 @@ describe("Workflows Stalled Job Test", () => {
 				taskId: 6,
 				taskType: "sleep",
 				time: 2000,
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -596,7 +596,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: true,
 				taskId: 7,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -604,7 +604,7 @@ describe("Workflows Stalled Job Test", () => {
 				state: "waiting_verification",
 				taskId: 8,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -614,7 +614,7 @@ describe("Workflows Stalled Job Test", () => {
 				signalName: "email.verification",
 				taskId: 9,
 				taskType: "signal",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -622,7 +622,7 @@ describe("Workflows Stalled Job Test", () => {
 				state: "VERIFIED",
 				taskId: 10,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -632,7 +632,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: true,
 				taskId: 11,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -642,7 +642,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: [[null]],
 				taskId: 12,
 				taskType: "actionBroadcast",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -651,7 +651,7 @@ describe("Workflows Stalled Job Test", () => {
 				run: "httpPost",
 				taskId: 13,
 				taskType: "custom",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task",
 				error: {
 					code: 500,
@@ -664,7 +664,7 @@ describe("Workflows Stalled Job Test", () => {
 			},
 			{
 				type: "failed",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				error: {
 					code: 500,
 					message: "HTTP error",
@@ -677,7 +677,7 @@ describe("Workflows Stalled Job Test", () => {
 			},
 			{
 				type: "started",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				nodeID: "worker"
 			},
 			{
@@ -686,7 +686,7 @@ describe("Workflows Stalled Job Test", () => {
 				run: "httpPost",
 				taskId: 13,
 				taskType: "custom",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -695,7 +695,7 @@ describe("Workflows Stalled Job Test", () => {
 				action: "mail.send",
 				taskId: 14,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task",
 				error: {
 					code: 500,
@@ -708,7 +708,7 @@ describe("Workflows Stalled Job Test", () => {
 			},
 			{
 				type: "failed",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				error: {
 					code: 500,
 					message: "SMTP error",
@@ -721,7 +721,7 @@ describe("Workflows Stalled Job Test", () => {
 			},
 			{
 				type: "started",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				nodeID: "worker"
 			},
 			{
@@ -731,7 +731,7 @@ describe("Workflows Stalled Job Test", () => {
 				result: true,
 				taskId: 14,
 				taskType: "actionCall",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
@@ -739,12 +739,12 @@ describe("Workflows Stalled Job Test", () => {
 				state: "DONE",
 				taskId: 15,
 				taskType: "state",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "task"
 			},
 			{
 				nodeID: "worker",
-				ts: expect.any(Number),
+				ts: expect.epoch(),
 				type: "finished"
 			}
 		]);

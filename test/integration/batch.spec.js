@@ -68,7 +68,7 @@ describe("Workflows Batch Test (on single node)", () => {
 	});
 });
 
-describe.only("Workflows Batch Test (on multiple nodes)", () => {
+describe("Workflows Batch Test (on multiple nodes)", () => {
 	let broker;
 	let workers = [];
 
