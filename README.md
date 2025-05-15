@@ -96,44 +96,36 @@ broker.createService({
 
 ### WorkflowsMiddleware (Mixin) Options
 
-| Name                  | Type                                                      | Default         | Description                                                                                 |
-|-----------------------|-----------------------------------------------------------|-----------------|---------------------------------------------------------------------------------------------|
-| adapter               | string \| BaseAdapter \| RedisAdapterOptions           | (required)      | Adapter instance, name, or options for workflow storage.                                    |
-| schemaProperty        | string                                                    | "workflows"    | Service schema property name for workflows.                                                  |
-| workflowHandlerTrigger| string                                                    | "emitLocalWorkflowHandler" | Name of the method to trigger workflow handler.                                 |
-| jobEventType          | string                                                    |                 | How job events are emitted (e.g., "broadcast", "emit").                                   |
-| lockExpiration | number                                                    | 30       | Job lock expiration time (sec).                                                      |
+| Name                  | Type                                                      | Description                                                                                 |
+|-----------------------|-----------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `adapter`               | `string` \| `BaseAdapter` \| `RedisAdapterOptions`           | Adapter instance, name, or options for workflow storage. **Default:** `"Redis"`                                    |
+| `schemaProperty`        | `string`                                                    | Service schema property name for workflows. **Default:** `"workflows"`                                                 |
+| `workflowHandlerTrigger`| `string`                                                    | Name of the method to trigger workflow handler. **Default:** `emitLocalWorkflowHandler`                                 |
+| `jobEventType`          | `string`                                                    | How job events are emitted (e.g., `broadcast, `emit`).                                 |
+| `lockExpiration` | `number`                                                    | Job lock expiration time (sec). **Default:** `30`                                                     |
 
 ### RedisAdapter Options
 
-| Name         | Type                                                      | Default     | Description                                                                                 |
-|--------------|-----------------------------------------------------------|-------------|---------------------------------------------------------------------------------------------|
-| redis        | RedisOptions \| { url: string } \| { cluster: { nodes: string[]; clusterOptions?: any } } | (required)  | Redis connection options, URL, or cluster configuration.                                    |
-| prefix       | string                                                    | "wf"       | Prefix for Redis keys.                                                                      |
-| serializer   | string                                                    | "JSON"     | Serializer to use for job data.                                                             |
-| drainDelay   | number                                                    | 5         | Blocking delay time (sec).                                                           |
+| Name         | Type                                                      | Description                                                                                 |
+|--------------|-----------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `redis`        | `RedisOptions` \| `{ url: string }` \| `{ cluster: { nodes: string[]; clusterOptions?: any } }` | Redis connection options, URL, or cluster configuration. **Default:** (required)                                   |
+| `prefix`       | `string`                                                    | Prefix for Redis keys. **Default:** `"wf"`                                                                     |
+| `serializer`   | `string`                                                    | Serializer to use for job data. **Default:** `JSON`                                                            |
+| `drainDelay`   | `number`                                                    | Blocking delay time (sec). **Default:** `5`                                                          |
 
 ### Workflow options
-| Name         | Type   | Default     | Description  |
-|--------------|--------|--------------|-------------|
-| name        | String  | service name + workflow name  | Name of workflow.                |
-| fullName        | String  | optional  | Full name of workflow. If you don't want to prepend the service name for the workflow.name                |
-| params        | object | optional | Job parameter validation schema               |
-| removeOnCompleted        | boolean  | false  | Remove the job when it's completed.       |
-| removeOnFailed        | boolean  | false  | Remove the job when it's failed.       |
-| concurrency        | number  | 1  | Number of concurrent running jobs.        |
-| retention        | string or number  | null  | Retention time of job history.       |
-| backoff        | string\|Function  | "fixed" | Retry backoff strategy. Available: "fixed", "exponention" or a custom Function       |
-| backoffDelay        | number  | 100  | Backoff delay for fixed and exponential strategy.       |
-| maxStalledCount        | number  | null  | Number of maximum put back the stalled job. 0 or null value disables it.       |
-
-
-
-<!-- ## Documentation
-You can find [here the documentation](docs/README.md).
-
-## Benchmark
-There is some benchmark with all adapters. [You can find the results here.](benchmark/results/common/README.md) -->
+| Name         | Type   | Description  |
+|--------------|--------|-------------|
+| `name`        | `String`  | Name of workflow. **Default:** service name + workflow name               |
+| `fullName`        | `String`  | Full name of workflow. If you don't want to prepend the service name for the workflow.name.               |
+| `params`        | `object` | Job parameter validation schema **Default:** optional              |
+| `removeOnCompleted`        | `boolean`  | Remove the job when it's completed. **Default:** `false`      |
+| `removeOnFailed`        | `boolean`  | Remove the job when it's failed. **Default:** `false`      |
+| `concurrency`        | `number`  | Number of concurrent running jobs. **Default:** `1`       |
+| `retention`        | `string` or `number`  | Retention time of job history. **Default:** `null`      |
+| `backoff`        | `string`\|`Function`  | Retry backoff strategy. Available: `fixed`, `exponention` or a custom Function **Default:** `fixed`      |
+| `backoffDelay`        | `number`  | Backoff delay for fixed and exponential strategy. **Default:** `100`      |
+| `maxStalledCount`        | `number`  | Number of maximum put back the stalled job. `0` or `null` value disables it. **Default:** `null`      |
 
 ## License
 The project is available under the [MIT license](https://tldrlegal.com/license/mit-license).
