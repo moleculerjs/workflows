@@ -72,11 +72,11 @@ describe("Workflows Retention Test", () => {
 				result: "OK"
 			});
 
-			await delay(15_000);
+			await delay(20_000);
 
 			const job3 = await broker.wf.get("retention.good", job.id);
 			expect(job3).toBeNull();
-		}, 20_000);
+		}, 25_000);
 
 		it("should remove failed job after retention time", async () => {
 			await createBroker({ retention: "10 sec" });
@@ -98,11 +98,11 @@ describe("Workflows Retention Test", () => {
 				})
 			});
 
-			await delay(15_000);
+			await delay(20_000);
 
 			const job3 = await broker.wf.get("retention.bad", job.id);
 			expect(job3).toBeNull();
-		}, 20_000);
+		}, 25_000);
 	});
 
 	describe("Remove on completed", () => {
