@@ -21,7 +21,6 @@
 
 - [ ] Integration tests
   - [ ] different serializer
-  - [ ] jobId collision
   - [ ] jobEvents
   - [ ] Retries (ctx.mcall)
   - [ ] job timeout

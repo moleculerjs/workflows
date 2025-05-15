@@ -1,7 +1,7 @@
 const { ServiceSchemaError } = require("moleculer").Errors;
 const Adapters = require("../../src/adapters");
 
-describe("Test Transporter resolver", () => {
+describe("Test Adapter resolver", () => {
 	it("should resolve null to Redis adapter", () => {
 		let adapter = Adapters.resolve();
 		expect(adapter).toBeInstanceOf(Adapters.Redis);
