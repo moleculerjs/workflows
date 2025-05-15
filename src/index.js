@@ -7,7 +7,7 @@
 "use strict";
 
 const _ = require("lodash");
-const { Context, METRIC } = require("moleculer");
+const { METRIC } = require("moleculer");
 const { BrokerOptionsError, ServiceSchemaError, MoleculerError, ValidationError } =
 	require("moleculer").Errors;
 const Adapters = require("./adapters");
@@ -29,7 +29,8 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 		jobEventType: null,
 		signalExpiration: "1h",
 		maintenanceTime: 10,
-		lockExpiration: 30
+		lockExpiration: 30,
+		jobIdCollision: "reject"
 	});
 
 	/** @type {ServiceBroker} */
@@ -38,8 +39,6 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 	let logger;
 	/** @type {BaseAdapter} */
 	let adapter;
-	/** @type {boolean} */
-	let started = false;
 
 	/**
 	 *
@@ -481,8 +480,6 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			logger.info("Workflows adapter is connecting...");
 			await adapter.connect();
 			logger.debug("Workflows adapter connected.");
-
-			started = true;
 		},
 
 		/**
@@ -492,8 +489,6 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			logger.info("Workflows adapter is disconnecting...");
 			await adapter.destroy();
 			logger.debug("Workflows adapter disconnected.");
-
-			started = false;
 		}
 	};
 };

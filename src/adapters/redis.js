@@ -899,103 +899,137 @@ class RedisAdapter extends BaseAdapter {
 	async createJob(workflowName, payload, opts) {
 		opts = opts || {};
 
-		const jobId = this.checkJobId(opts.jobId) ?? this.broker.generateUid();
+		let customJobId = !!opts.jobId;
 
-		const job = {
-			id: jobId,
+		let job = {
+			id: opts.jobId ? this.checkJobId(opts.jobId) : this.broker.generateUid(),
 			createdAt: Date.now()
 		};
 
-		if (payload != null) {
-			job.payload = payload;
-		}
+		let isLoadedJob = false;
 
-		if (opts.retries) {
-			job.retries = opts.retries;
-			job.retryAttempts = 0;
-		}
-
-		if (opts.timeout) {
-			job.timeout = parseDuration(opts.timeout);
-		}
-
-		if (opts.delay) {
-			job.delay = parseDuration(opts.delay);
-			job.promoteAt = Date.now() + job.delay;
-		}
-
-		if (opts.repeat) {
-			if (!opts.jobId) {
-				throw new WorkflowError(
-					"Job ID is required for repeatable jobs",
-					400,
-					"MISSING_REPEAT_JOB_ID"
-				);
-			}
-
-			job.repeat = opts.repeat;
-			job.repeatCounter = 0;
-
-			if (opts.repeat.endDate) {
-				const endDate = new Date(opts.repeat.endDate).getTime();
-				if (endDate < Date.now()) {
+		if (customJobId) {
+			// Job ID collision check
+			const exists = await this.commandClient.exists(
+				this.getKey(workflowName, C.QUEUE_JOB, job.id)
+			);
+			if (exists) {
+				if (this.mwOpts.jobIdCollision == "reject") {
 					throw new WorkflowError(
-						"Repeatable job is expired at " +
-							new Date(opts.repeat.endDate).toISOString(),
+						`Job ID '${job.id}' already exists.`,
 						400,
-						"REPEAT_JOB_EXPIRED",
-						{
-							jobId,
-							endDate: opts.repeat.endDate
-						}
+						"JOB_ID_EXISTS"
 					);
+				} else if (this.mwOpts.jobIdCollision == "skip") {
+					job = await this.getJob(workflowName, job.id, true);
+					isLoadedJob = true;
+				} else if (this.mwOpts.jobIdCollision == "rerun") {
+					job = await this.getJob(workflowName, job.id, true);
+					isLoadedJob = job.finishedAt == null;
 				}
 			}
 		}
 
-		// Save the Job to Redis
-		await this.commandClient.hmset(
-			this.getKey(workflowName, C.QUEUE_JOB, jobId),
-			this.serializeJob(job)
-		);
+		if (!isLoadedJob) {
+			if (payload != null) {
+				job.payload = payload;
+			}
 
-		if (job.repeat) {
-			// Repeatable job
-			this.log("debug", workflowName, job.id, "Repeatable job created.", job);
+			if (opts.retries) {
+				job.retries = opts.retries;
+				job.retryAttempts = 0;
+			}
 
-			await this.rescheduleJob(workflowName, job);
-		} else if (job.delay) {
-			// Delayed job
-			this.log(
-				"debug",
-				workflowName,
-				job.id,
-				`Delayed job created. Next run: ${new Date(job.promoteAt).toISOString()}`,
-				job
+			if (opts.timeout) {
+				job.timeout = parseDuration(opts.timeout);
+			}
+
+			if (opts.delay) {
+				job.delay = parseDuration(opts.delay);
+				job.promoteAt = Date.now() + job.delay;
+			}
+
+			if (opts.repeat) {
+				if (!opts.jobId) {
+					throw new WorkflowError(
+						"Job ID is required for repeatable jobs",
+						400,
+						"MISSING_REPEAT_JOB_ID"
+					);
+				}
+
+				job.repeat = opts.repeat;
+				job.repeatCounter = 0;
+
+				if (opts.repeat.endDate) {
+					const endDate = new Date(opts.repeat.endDate).getTime();
+					if (endDate < Date.now()) {
+						throw new WorkflowError(
+							"Repeatable job is expired at " +
+								new Date(opts.repeat.endDate).toISOString(),
+							400,
+							"REPEAT_JOB_EXPIRED",
+							{
+								jobId: job.id,
+								endDate: opts.repeat.endDate
+							}
+						);
+					}
+				}
+			}
+
+			// Save the Job to Redis
+			await this.commandClient.hmset(
+				this.getKey(workflowName, C.QUEUE_JOB, job.id),
+				this.serializeJob(job)
 			);
-			await this.commandClient.zadd(
-				this.getKey(workflowName, C.QUEUE_DELAYED),
-				job.promoteAt,
-				jobId
-			);
-		} else {
-			// Normal job
-			this.log("debug", workflowName, job.id, "Job created.", job);
-			await this.commandClient.lpush(this.getKey(workflowName, C.QUEUE_WAITING), jobId);
+
+			if (job.repeat) {
+				// Repeatable job
+				this.log("debug", workflowName, job.id, "Repeatable job created.", job);
+
+				await this.rescheduleJob(workflowName, job);
+			} else if (job.delay) {
+				// Delayed job
+				this.log(
+					"debug",
+					workflowName,
+					job.id,
+					`Delayed job created. Next run: ${new Date(job.promoteAt).toISOString()}`,
+					job
+				);
+				await this.commandClient.zadd(
+					this.getKey(workflowName, C.QUEUE_DELAYED),
+					job.promoteAt,
+					job.id
+				);
+			} else {
+				// Normal job
+				this.log("debug", workflowName, job.id, "Job created.", job);
+				await this.commandClient.lpush(this.getKey(workflowName, C.QUEUE_WAITING), job.id);
+			}
+
+			this.sendJobEvent(workflowName, job.id, "created");
 		}
-
-		this.sendJobEvent(workflowName, job.id, "created");
 
 		// Store Job finished promise
 		let storePromise = {};
-		storePromise.promise = new Promise((resolve, reject) => {
-			storePromise.resolve = resolve;
-			storePromise.reject = reject;
-		});
+		if (this.jobResultPromises.has(job.id)) {
+			storePromise = this.jobResultPromises.get(job.id);
+		} else {
+			storePromise.promise = new Promise((resolve, reject) => {
+				storePromise.resolve = resolve;
+				storePromise.reject = reject;
+			});
 
-		this.jobResultPromises.set(jobId, storePromise);
+			this.jobResultPromises.set(job.id, storePromise);
+		}
 
 		job.promise = () => {
+			if (isLoadedJob && job.finishedAt) {
+				return Promise.resolve();
+			}
+
 			this.signalSubClient?.subscribe(this.getKey(workflowName, C.FINISHED));
 
 			return storePromise.promise;

@@ -184,7 +184,10 @@ broker.createService({
 | `schemaProperty`        | `string`                                                    | Service schema property name for workflows. **Default:** `"workflows"`                                                 |
 | `workflowHandlerTrigger`| `string`                                                    | Name of the method to trigger workflow handler. **Default:** `emitLocalWorkflowHandler`                                 |
 | `jobEventType`          | `string`                                                    | How job events are emitted (e.g., `broadcast, `emit`).                                 |
+| `signalExpiration` | `string`                                                    | Signal expiration time. **Default:** `1h`                                                     |
+| `maintenanceTime` | `number`                                                    | Maintenance process time (sec). **Default:** `10`                                                     |
 | `lockExpiration` | `number`                                                    | Job lock expiration time (sec). **Default:** `30`                                                     |
+| `jobIdCollision` | `string`                                                    | Job ID collision policy. Available values: `reject`, `skip`, `rerun`, **Default:** `reject`                                                     |
 
 ### RedisAdapter Options
 

@@ -1,49 +1,38 @@
 # TODO
 
 - [ ] **rename repo to "workflows"**
-- [ ] jobId collision policy
-  - [ ] reject
-  - [ ] skip
-  - [ ] rerun
 
 - [ ] job timeout handling
+  - [ ] workflow property, maintenance process which gets active jobs and checks the startedAt property. If it's timed out, close as failed.
 - [ ] Signal wait timeout `WfSignalTimeoutError`
 - [ ] retries -> retryPolicy based on index.d.ts
+  - [ ] maxDelay
+  - [ ] exponentialFactor: 2
 
 - [ ] Better processing delayed/failed job (without waiting for maintenance time)
+  - [ ] After the jobId puts into the delayed queue, check the head/first eelment with ZRANGE. If the head is this jobId, we should notify allworkers about new maintenance time, publish a msg to workers
+
+- [ ] List functions
+  - [ ] `listCompletedJobs(workflowName)`
+  - [ ] `listFailedJobs(workflowName)`
+  - [ ] `listDelayedJobs(workflowName)`
+  - [ ] `listActiveJobs(workflowName)`
+  - [ ] `listWaitingJobs(workflowName)`
+
+- [ ] Integration tests
+  - [ ] different serializer
+  - [ ] jobId collision
+  - [ ] jobEvents
+  - [ ] Retries (ctx.mcall)
+  - [ ] job timeout
+  - [ ] middleware hooks
+
+- [ ] Metrics
+- [ ] Tracing
+
+- [ ] Performance improvement
 
 - [ ] SAGA
   - [ ] compensations
   - [ ] revert running
 
-- [ ] Performance improvement
-
-- [ ] Unit tests
-  - [x] getKey
-    - [x] prefix
-  - [x] adapter resolve
-
-- [ ] Integration tests
-  - [x] Repeat jobs
-  - [x] Delayed jobs
-  - [ ] different serializer
-  - [ ] jobId collision
-  - [x] jobEvents
-  - [x] Retries
-    - [x] skipping already executed tasks
-      - [x] ctx.call
-      - [x] ctx.emit
-      - [x] ctx.broadcast
-      - [ ] ctx.mcall
-      - [x] ctx.wf.task
-  - [x] multi nodes
-  - [x] stalled jobs
-  - [x] lock extending
-  - [x] removeOnFailed
-  - [x] removeOnCompleted
-  - [x] retention
-  - [ ] job timeout
-  - [x] parameter validation
-  - [ ] middleware hooks
-- [ ] Metrics
-- [ ] Tracing
