@@ -193,9 +193,7 @@ class RedisAdapter extends BaseAdapter {
 						const storePromise = this.jobResultPromises.get(jobId);
 						this.jobResultPromises.delete(jobId);
 						if (json.error) {
-							storePromise.reject(
-								this.broker.errorRegenerator.extractPlainError(json.error)
-							);
+							storePromise.reject(this.broker.errorRegenerator.restore(json.error));
 						} else {
 							storePromise.resolve(json.result);
 						}
@@ -1027,7 +1025,9 @@ class RedisAdapter extends BaseAdapter {
 
 		job.promise = () => {
 			if (isLoadedJob && job.finishedAt) {
-				return job.error ? Promise.reject(job.error) : Promise.resolve(job.result);
+				return job.error
+					? Promise.reject(this.broker.errorRegenerator.restore(job.error))
+					: Promise.resolve(job.result);
 			}
 
 			this.signalSubClient?.subscribe(this.getKey(workflowName, C.FINISHED));

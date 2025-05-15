@@ -28,6 +28,10 @@ describe("Workflows Events Test with 'emit'", () => {
 		await broker.wf.cleanup("events.good");
 	};
 
+	beforeEach(() => {
+		EVENTS = [];
+	});
+
 	beforeAll(async () => {
 		broker = new ServiceBroker({
 			logger: false,
@@ -66,9 +70,6 @@ describe("Workflows Events Test with 'emit'", () => {
 	});
 
 	it("should send job events from completed job", async () => {
-		EVENTS = [];
-		await delay(1000);
-
 		const job = await broker.wf.run("events.good", { name: "John" });
 		expect(job.id).toEqual(expect.any(String));
 		const result = await job.promise();
@@ -127,6 +128,7 @@ describe("Workflows Events Test with 'emit'", () => {
 			[
 				"job.events.bad.created",
 				"emit",
+				"broker",
 				{
 					job: job.id,
 					type: "created",
@@ -136,6 +138,7 @@ describe("Workflows Events Test with 'emit'", () => {
 			[
 				"job.events.bad.started",
 				"emit",
+				"worker",
 				{
 					job: job.id,
 					type: "started",
@@ -145,6 +148,7 @@ describe("Workflows Events Test with 'emit'", () => {
 			[
 				"job.events.bad.finished",
 				"emit",
+				"worker",
 				{
 					job: job.id,
 					type: "finished",
@@ -154,6 +158,7 @@ describe("Workflows Events Test with 'emit'", () => {
 			[
 				"job.events.bad.failed",
 				"emit",
+				"worker",
 				{
 					job: job.id,
 					type: "failed",
@@ -164,32 +169,52 @@ describe("Workflows Events Test with 'emit'", () => {
 	});
 });
 
-describe.skip("Workflows Events Test with 'broadcast'", () => {
-	let broker;
+describe("Workflows Events Test with 'broadcast'", () => {
+	let broker, worker;
 
 	const cleanup = async () => {
 		await broker.wf.cleanup("events.good");
 	};
 
+	beforeEach(() => {
+		EVENTS = [];
+	});
+
 	beforeAll(async () => {
 		broker = new ServiceBroker({
 			logger: false,
+			nodeID: "broker",
+			transporter: "Redis",
 			middlewares: [WorkflowsMiddleware({ adapter: "Redis", jobEventType: "broadcast" })]
 		});
 
-		broker.createService(svc);
+		broker.createService({
+			name: "eventHandler",
+			events: {
+				"job.**"(ctx) {
+					EVENTS.push([ctx.eventName, ctx.eventType, ctx.nodeID, ctx.params]);
+				}
+			}
+		});
+
+		worker = new ServiceBroker({
+			logger: false,
+			nodeID: "worker",
+			transporter: "Redis",
+			middlewares: [WorkflowsMiddleware({ adapter: "Redis", jobEventType: "broadcast" })]
+		});
+
+		worker.createService(svc);
 
 		await broker.start();
+		await worker.start();
 		await cleanup();
-	});
-
-	beforeEach(() => {
-		EVENTS = [];
 	});
 
 	afterAll(async () => {
 		await cleanup();
 		await broker.stop();
+		await worker.stop();
 	});
 
 	it("should send job events from completed job", async () => {
@@ -201,7 +226,8 @@ describe.skip("Workflows Events Test with 'broadcast'", () => {
 		expect(EVENTS).toEqual([
 			[
 				"job.events.good.created",
-				"broadcast",
+				"broadcastLocal",
+				"broker",
 				{
 					job: job.id,
 					type: "created",
@@ -211,6 +237,7 @@ describe.skip("Workflows Events Test with 'broadcast'", () => {
 			[
 				"job.events.good.started",
 				"broadcast",
+				"worker",
 				{
 					job: job.id,
 					type: "started",
@@ -220,6 +247,7 @@ describe.skip("Workflows Events Test with 'broadcast'", () => {
 			[
 				"job.events.good.finished",
 				"broadcast",
+				"worker",
 				{
 					job: job.id,
 					type: "finished",
@@ -229,6 +257,7 @@ describe.skip("Workflows Events Test with 'broadcast'", () => {
 			[
 				"job.events.good.completed",
 				"broadcast",
+				"worker",
 				{
 					job: job.id,
 					type: "completed",
@@ -246,7 +275,8 @@ describe.skip("Workflows Events Test with 'broadcast'", () => {
 		expect(EVENTS).toEqual([
 			[
 				"job.events.bad.created",
-				"broadcast",
+				"broadcastLocal",
+				"broker",
 				{
 					job: job.id,
 					type: "created",
@@ -256,6 +286,7 @@ describe.skip("Workflows Events Test with 'broadcast'", () => {
 			[
 				"job.events.bad.started",
 				"broadcast",
+				"worker",
 				{
 					job: job.id,
 					type: "started",
@@ -265,6 +296,7 @@ describe.skip("Workflows Events Test with 'broadcast'", () => {
 			[
 				"job.events.bad.finished",
 				"broadcast",
+				"worker",
 				{
 					job: job.id,
 					type: "finished",
@@ -274,6 +306,7 @@ describe.skip("Workflows Events Test with 'broadcast'", () => {
 			[
 				"job.events.bad.failed",
 				"broadcast",
+				"worker",
 				{
 					job: job.id,
 					type: "failed",
