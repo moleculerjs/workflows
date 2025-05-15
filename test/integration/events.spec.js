@@ -26,6 +26,7 @@ describe("Workflows Events Test with 'emit'", () => {
 
 	const cleanup = async () => {
 		await broker.wf.cleanup("events.good");
+		await broker.wf.cleanup("events.bad");
 	};
 
 	beforeEach(() => {
@@ -174,6 +175,7 @@ describe("Workflows Events Test with 'broadcast'", () => {
 
 	const cleanup = async () => {
 		await broker.wf.cleanup("events.good");
+		await broker.wf.cleanup("events.bad");
 	};
 
 	beforeEach(() => {
