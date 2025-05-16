@@ -19,7 +19,7 @@ describe("Workflows Delayed Test", () => {
 			name: "delayed",
 			workflows: {
 				simple: {
-					async handler(ctx) {
+					async handler() {
 						return `Hello, it's called`;
 					}
 				}

@@ -1671,6 +1671,51 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
+	 * List all completed job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listCompletedJobs(workflowName) {
+		return this.commandClient.zrange(this.getKey(workflowName, C.QUEUE_COMPLETED), 0, -1);
+	}
+
+	/**
+	 * List all failed job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listFailedJobs(workflowName) {
+		return this.commandClient.zrange(this.getKey(workflowName, C.QUEUE_FAILED), 0, -1);
+	}
+
+	/**
+	 * List all delayed job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listDelayedJobs(workflowName) {
+		return this.commandClient.zrange(this.getKey(workflowName, C.QUEUE_DELAYED), 0, -1);
+	}
+
+	/**
+	 * List all active job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listActiveJobs(workflowName) {
+		return this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_ACTIVE), 0, -1);
+	}
+
+	/**
+	 * List all waiting job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listWaitingJobs(workflowName) {
+		return this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_WAITING), 0, -1);
+	}
+
+	/**
 	 * Dump all Redis data for all workflows to JSON files.
 	 */
 	async dumpWorkflows(folder) {

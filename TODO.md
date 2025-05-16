@@ -7,13 +7,6 @@
 - [ ] Better processing delayed/failed job (without waiting for maintenance time)
   - [ ] After the jobId puts into the delayed queue, check the head/first eelment with ZRANGE. If the head is this jobId, we should notify allworkers about new maintenance time, publish a msg to workers
 
-- [ ] List functions
-  - [ ] `listCompletedJobs(workflowName)`
-  - [ ] `listFailedJobs(workflowName)`
-  - [ ] `listDelayedJobs(workflowName)`
-  - [ ] `listActiveJobs(workflowName)`
-  - [ ] `listWaitingJobs(workflowName)`
-
 - [ ] Integration tests
   - [ ] different serializer
   - [ ] Retries (ctx.mcall)

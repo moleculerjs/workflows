@@ -590,6 +590,51 @@ class BaseAdapter {
 	}
 
 	/**
+	 * List all completed job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listCompletedJobs(/*workflowName*/) {
+		throw new Error("Not implemented");
+	}
+
+	/**
+	 * List all failed job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listFailedJobs(/*workflowName*/) {
+		throw new Error("Not implemented");
+	}
+
+	/**
+	 * List all delayed job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listDelayedJobs(/*workflowName*/) {
+		throw new Error("Not implemented");
+	}
+
+	/**
+	 * List all active job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listActiveJobs(/*workflowName*/) {
+		throw new Error("Not implemented");
+	}
+
+	/**
+	 * List all waiting job IDs for a workflow.
+	 * @param {string} workflowName
+	 * @returns {Promise<string[]>}
+	 */
+	async listWaitingJobs(/*workflowName*/) {
+		throw new Error("Not implemented");
+	}
+
+	/**
 	 * Clean up the adapter store. Workflowname and jobId are optional.
 	 *
 	 * @param {string?} workflowName

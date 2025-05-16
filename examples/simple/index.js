@@ -9,6 +9,7 @@
 const { ServiceBroker } = require("moleculer");
 const { MoleculerRetryableError } = require("moleculer").Errors;
 const { inspect } = require("util");
+const _ = require("lodash");
 
 const WorkflowsMiddleware = require("../../index").Middleware;
 
@@ -318,10 +319,55 @@ const broker = new ServiceBroker({
 					description: "Name of the workflow. Default: 'test.wf1'"
 				}
 			],
-			async action(broker, args) {
+			async action(broker, args, { table, kleur, getBorderCharacters }) {
 				const { options } = args;
-				// console.log(args);
-				// TODO:
+				//console.log(args);
+
+				const tableConf = {
+					border: _.mapValues(getBorderCharacters("honeywell"), char => kleur.gray(char)),
+					columns: {
+						1: { alignment: "center" }
+					},
+					drawHorizontalLine: (index, count) => index == 0 || index == 1 || index == count
+				};
+
+				const rows = [[kleur.bold("Job ID"), kleur.bold("Status")]];
+
+				if (args.type == "completed" || args.type == "closed") {
+					const completed = await broker.wf.listCompletedJobs(
+						options.workflow || "test.wf1"
+					);
+					for (const jobId of completed) {
+						rows.push([jobId, kleur.green("Completed")]);
+					}
+				}
+				if (args.type == "failed" || args.type == "closed") {
+					const failed = await broker.wf.listFailedJobs(options.workflow || "test.wf1");
+					for (const jobId of failed) {
+						rows.push([jobId, kleur.red("Failed")]);
+					}
+				}
+
+				if (args.type == "active" || args.type == "live") {
+					const active = await broker.wf.listActiveJobs(options.workflow || "test.wf1");
+					for (const jobId of active) {
+						rows.push([jobId, kleur.magenta("Active")]);
+					}
+				}
+				if (args.type == "delayed" || args.type == "live") {
+					const delayed = await broker.wf.listDelayedJobs(options.workflow || "test.wf1");
+					for (const jobId of delayed) {
+						rows.push([jobId, kleur.yellow("Delayed")]);
+					}
+				}
+				if (args.type == "waiting" || args.type == "live") {
+					const waiting = await broker.wf.listWaitingJobs(options.workflow || "test.wf1");
+					for (const jobId of waiting) {
+						rows.push([jobId, kleur.cyan("Waiting")]);
+					}
+				}
+
+				console.log(table(rows, tableConf));
 			}
 		},
 
@@ -397,7 +443,7 @@ if (!isNoService) {
 					// await ctx.wf.setState("afterSleep-20s");
 
 					const signalRes = await ctx.wf.waitForSignal("test.signal", 123, {
-						timeout: "1m"
+						timeout: "1h"
 					});
 					this.logger.info("Signal result", signalRes);
 

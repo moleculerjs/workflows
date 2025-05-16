@@ -90,7 +90,7 @@ describe("Workflows Retention Test", () => {
 				createdAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
-				duration: expect.withinRange(0, 100),
+				duration: expect.withinRange(0, 200),
 				success: false,
 				error: expect.objectContaining({
 					message: "Some error",

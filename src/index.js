@@ -286,6 +286,66 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			};
 
 			/**
+			 * List completed jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listCompletedJobs = workflowName => {
+				adapter.checkWorkflowName(workflowName);
+
+				return adapter.listCompletedJobs(workflowName);
+			};
+
+			/**
+			 * List failed jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listFailedJobs = workflowName => {
+				adapter.checkWorkflowName(workflowName);
+
+				return adapter.listFailedJobs(workflowName);
+			};
+
+			/**
+			 * List delayed jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listDelayedJobs = workflowName => {
+				adapter.checkWorkflowName(workflowName);
+
+				return adapter.listDelayedJobs(workflowName);
+			};
+
+			/**
+			 * List active jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listActiveJobs = workflowName => {
+				adapter.checkWorkflowName(workflowName);
+
+				return adapter.listActiveJobs(workflowName);
+			};
+
+			/**
+			 * List waiting jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listWaitingJobs = workflowName => {
+				adapter.checkWorkflowName(workflowName);
+
+				return adapter.listWaitingJobs(workflowName);
+			};
+
+			/**
 			 * Delete all workflow jobs & history.
 			 *
 			 * @param {string} workflowName
