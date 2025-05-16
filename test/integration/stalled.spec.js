@@ -366,7 +366,16 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				taskId: 6,
-				taskType: "sleep",
+				taskType: "sleep-start",
+				time: 2000,
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
+				duration: expect.any(Number),
+				nodeID: "worker",
+				taskId: 7,
+				taskType: "sleep-end",
 				time: 2000,
 				ts: expect.epoch(),
 				type: "task"
@@ -376,7 +385,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				result: true,
-				taskId: 7,
+				taskId: 8,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task"
@@ -384,7 +393,7 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				nodeID: "worker",
 				state: "waiting_verification",
-				taskId: 8,
+				taskId: 9,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"
@@ -394,15 +403,27 @@ describe("Workflows Stalled Job Test", () => {
 				nodeID: "worker",
 				signalKey: 1,
 				signalName: "email.verification",
-				taskId: 9,
-				taskType: "signal",
+				timeout: "1 hour",
+				taskId: 10,
+				taskType: "signal-wait",
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
+				duration: expect.any(Number),
+				nodeID: "worker",
+				signalKey: 1,
+				signalName: "email.verification",
+				timeout: "1 hour",
+				taskId: 11,
+				taskType: "signal-end",
 				ts: expect.epoch(),
 				type: "task"
 			},
 			{
 				nodeID: "worker",
 				state: "VERIFIED",
-				taskId: 10,
+				taskId: 12,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"
@@ -412,7 +433,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				result: true,
-				taskId: 11,
+				taskId: 13,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task"
@@ -422,7 +443,7 @@ describe("Workflows Stalled Job Test", () => {
 				event: "user.verified",
 				nodeID: "worker",
 				result: [[null]],
-				taskId: 12,
+				taskId: 14,
 				taskType: "actionBroadcast",
 				ts: expect.epoch(),
 				type: "task"
@@ -431,7 +452,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				run: "httpPost",
-				taskId: 13,
+				taskId: 15,
 				taskType: "custom",
 				ts: expect.epoch(),
 				type: "task"
@@ -441,7 +462,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				result: true,
-				taskId: 14,
+				taskId: 16,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task"
@@ -449,7 +470,7 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				nodeID: "worker",
 				state: "DONE",
-				taskId: 15,
+				taskId: 17,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"
@@ -585,7 +606,16 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				taskId: 6,
-				taskType: "sleep",
+				taskType: "sleep-start",
+				time: 2000,
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
+				duration: expect.any(Number),
+				nodeID: "worker",
+				taskId: 7,
+				taskType: "sleep-end",
 				time: 2000,
 				ts: expect.epoch(),
 				type: "task"
@@ -595,7 +625,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				result: true,
-				taskId: 7,
+				taskId: 8,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task"
@@ -603,7 +633,7 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				nodeID: "worker",
 				state: "waiting_verification",
-				taskId: 8,
+				taskId: 9,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"
@@ -613,15 +643,27 @@ describe("Workflows Stalled Job Test", () => {
 				nodeID: "worker",
 				signalKey: 1,
 				signalName: "email.verification",
-				taskId: 9,
-				taskType: "signal",
+				taskId: 10,
+				taskType: "signal-wait",
+				timeout: "1 hour",
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
+				duration: expect.any(Number),
+				nodeID: "worker",
+				signalKey: 1,
+				signalName: "email.verification",
+				taskId: 11,
+				taskType: "signal-end",
+				timeout: "1 hour",
 				ts: expect.epoch(),
 				type: "task"
 			},
 			{
 				nodeID: "worker",
 				state: "VERIFIED",
-				taskId: 10,
+				taskId: 12,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"
@@ -631,7 +673,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				result: true,
-				taskId: 11,
+				taskId: 13,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task"
@@ -641,7 +683,7 @@ describe("Workflows Stalled Job Test", () => {
 				event: "user.verified",
 				nodeID: "worker",
 				result: [[null]],
-				taskId: 12,
+				taskId: 14,
 				taskType: "actionBroadcast",
 				ts: expect.epoch(),
 				type: "task"
@@ -650,7 +692,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				run: "httpPost",
-				taskId: 13,
+				taskId: 15,
 				taskType: "custom",
 				ts: expect.epoch(),
 				type: "task",
@@ -685,7 +727,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				run: "httpPost",
-				taskId: 13,
+				taskId: 15,
 				taskType: "custom",
 				ts: expect.epoch(),
 				type: "task"
@@ -694,7 +736,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				action: "mail.send",
-				taskId: 14,
+				taskId: 16,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task",
@@ -730,7 +772,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				result: true,
-				taskId: 14,
+				taskId: 16,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task"
@@ -738,7 +780,7 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				nodeID: "worker",
 				state: "DONE",
-				taskId: 15,
+				taskId: 17,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"

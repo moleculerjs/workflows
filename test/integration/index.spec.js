@@ -237,6 +237,9 @@ describe("Workflows Common Test", () => {
 		expect(result).toStrictEqual({
 			name: "test.context",
 			jobId: job.id,
+			retries: undefined,
+			retryAttempts: undefined,
+			timeout: undefined,
 			setState: expect.any(Function),
 			sleep: expect.any(Function),
 			task: expect.any(Function),
@@ -330,20 +333,30 @@ describe("Workflows Common Test", () => {
 				type: "task"
 			},
 			{
+				duration: expect.number(),
+				nodeID: broker.nodeID,
+				signalKey: 12345,
+				signalName: "signal.first",
+				taskId: 2,
+				taskType: "signal-wait",
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
 				duration: expect.withinRange(400, 600),
 				nodeID: broker.nodeID,
 				result: { user: "John" },
 				signalKey: 12345,
 				signalName: "signal.first",
-				taskId: 2,
-				taskType: "signal",
+				taskId: 3,
+				taskType: "signal-end",
 				ts: expect.epoch(),
 				type: "task"
 			},
 			{
 				nodeID: broker.nodeID,
 				state: "afterSignal",
-				taskId: 3,
+				taskId: 4,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"
@@ -717,20 +730,30 @@ describe("Workflows Remote worker Test", () => {
 				type: "task"
 			},
 			{
+				duration: expect.any(Number),
+				nodeID: "worker",
+				signalKey: 9999,
+				signalName: "signal.remote",
+				taskId: 2,
+				taskType: "signal-wait",
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
 				duration: expect.withinRange(400, 600),
 				nodeID: "worker",
 				result: { user: "John" },
 				signalKey: 9999,
 				signalName: "signal.remote",
-				taskId: 2,
-				taskType: "signal",
+				taskId: 3,
+				taskType: "signal-end",
 				ts: expect.epoch(),
 				type: "task"
 			},
 			{
 				nodeID: "worker",
 				state: "afterSignal",
-				taskId: 3,
+				taskId: 4,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"

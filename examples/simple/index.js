@@ -310,6 +310,22 @@ const broker = new ServiceBroker({
 		},
 
 		{
+			command: "jobs <type>",
+			alias: ["j"],
+			options: [
+				{
+					option: "-w, --workflow <workflowName>",
+					description: "Name of the workflow. Default: 'test.wf1'"
+				}
+			],
+			async action(broker, args) {
+				const { options } = args;
+				// console.log(args);
+				// TODO:
+			}
+		},
+
+		{
 			command: "cleanup",
 			alias: ["c"],
 			options: [
@@ -377,8 +393,8 @@ if (!isNoService) {
 					// 	await ctx.wf.setState("afterSleep-" + (i + 1));
 					// }
 
-					await ctx.wf.sleep("20s");
-					await ctx.wf.setState("afterSleep-20s");
+					// await ctx.wf.sleep("20s");
+					// await ctx.wf.setState("afterSleep-20s");
 
 					const signalRes = await ctx.wf.waitForSignal("test.signal", 123, {
 						timeout: "1m"
