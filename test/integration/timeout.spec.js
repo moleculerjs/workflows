@@ -8,6 +8,7 @@ describe("Workflows Timeout Test", () => {
 
 	const cleanup = async () => {
 		await broker.wf.cleanup("timeout.simple");
+		await broker.wf.removeSignal("signal.timeout", 1);
 	};
 
 	beforeAll(async () => {
@@ -39,8 +40,9 @@ describe("Workflows Timeout Test", () => {
 	afterAll(async () => {
 		// Just for a graceful shutdown
 		await broker.wf.triggerSignal("signal.timeout", 1);
+		await delay(1000);
 
-		//await cleanup();
+		await cleanup();
 		await broker.stop();
 	});
 
