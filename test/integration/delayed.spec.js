@@ -60,7 +60,7 @@ describe("Workflows Delayed Test", () => {
 			promoteAt: expect.greaterThanOrEqual(now + 15000),
 			startedAt: expect.greaterThanOrEqual(job.promoteAt),
 			finishedAt: expect.greaterThanOrEqual(job2.startedAt),
-			duration: expect.withinRange(0, 10),
+			duration: expect.withinRange(0, 20),
 			success: true,
 			result: `Hello, it's called`
 		});

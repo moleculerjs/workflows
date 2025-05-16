@@ -41,7 +41,7 @@ describe("Workflows Common Test", () => {
 					}
 				},
 				error: {
-					async handler(ctx) {
+					async handler() {
 						throw new Error("Workflow execution failed");
 					}
 				},
@@ -333,7 +333,7 @@ describe("Workflows Common Test", () => {
 				type: "task"
 			},
 			{
-				duration: expect.number(),
+				duration: expect.any(Number),
 				nodeID: broker.nodeID,
 				signalKey: 12345,
 				signalName: "signal.first",
@@ -539,7 +539,6 @@ describe("Workflows Common Test", () => {
 
 describe("Workflows Remote worker Test", () => {
 	let broker, worker;
-	let FLOWS = [];
 
 	const cleanup = async () => {
 		await broker.wf.cleanup("remote.good");
@@ -591,10 +590,6 @@ describe("Workflows Remote worker Test", () => {
 		await broker.start();
 		await worker.start();
 		await cleanup();
-	});
-
-	beforeEach(() => {
-		FLOWS = [];
 	});
 
 	afterAll(async () => {
