@@ -544,6 +544,7 @@ describe("Workflows Remote worker Test", () => {
 		await broker.wf.cleanup("remote.good");
 		await broker.wf.cleanup("remote.bad");
 		await broker.wf.cleanup("remote.signal");
+		await broker.wf.cleanup("remote.new");
 
 		await broker.wf.removeSignal("signal.remote", 9999);
 	};
@@ -767,6 +768,66 @@ describe("Workflows Remote worker Test", () => {
 			state: "afterSignal",
 			success: true,
 			result: { result: "OK", signalData: { user: "John" } }
+		});
+	});
+
+	describe("List functions", () => {
+		it("should list all completed jobIds", async () => {
+			const jobs = await broker.wf.listCompletedJobs("remote.good");
+			expect(jobs).toBeInstanceOf(Array);
+			expect(jobs.length).toBe(2);
+			expect(jobs[0]).toEqual(expect.any(String));
+		});
+
+		it("should list all failed jobIds", async () => {
+			const jobs = await broker.wf.listFailedJobs("remote.bad");
+			expect(jobs).toBeInstanceOf(Array);
+			expect(jobs.length).toBe(1);
+			expect(jobs[0]).toEqual(expect.any(String));
+		});
+
+		it("should return empty lists", async () => {
+			const jobs = await broker.wf.listActiveJobs("remote.good");
+			expect(jobs).toBeInstanceOf(Array);
+			expect(jobs.length).toBe(0);
+
+			const jobs2 = await broker.wf.listWaitingJobs("remote.good");
+			expect(jobs2).toBeInstanceOf(Array);
+			expect(jobs2.length).toBe(0);
+
+			const jobs3 = await broker.wf.listDelayedJobs("remote.good");
+			expect(jobs3).toBeInstanceOf(Array);
+			expect(jobs3.length).toBe(0);
+		});
+
+		it("should list waiting jobs", async () => {
+			const job1 = await broker.wf.run("remote.new", { name: "John" });
+			const jobs = await broker.wf.listWaitingJobs("remote.new");
+			expect(jobs).toBeInstanceOf(Array);
+			expect(jobs.length).toBe(1);
+			expect(jobs[0]).toBe(job1.id);
+		});
+
+		it("should list active jobs", async () => {
+			await broker.wf.removeSignal("signal.remote", 8888);
+
+			const job1 = await broker.wf.run("remote.signal", { name: "John" });
+
+			const jobs = await broker.wf.listActiveJobs("remote.signal");
+			expect(jobs).toBeInstanceOf(Array);
+			expect(jobs.length).toBe(1);
+			expect(jobs[0]).toBe(job1.id);
+
+			await broker.wf.triggerSignal("signal.remote", 8888);
+		});
+
+		it("should list delayed jobs", async () => {
+			const job1 = await broker.wf.run("remote.good", { name: "John" }, { delay: "5m" });
+
+			const jobs = await broker.wf.listDelayedJobs("remote.good");
+			expect(jobs).toBeInstanceOf(Array);
+			expect(jobs.length).toBe(1);
+			expect(jobs[0]).toBe(job1.id);
 		});
 	});
 });
