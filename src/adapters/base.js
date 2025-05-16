@@ -7,7 +7,11 @@
 "use strict";
 
 const _ = require("lodash");
-const { WorkflowError, WorkflowTaskMismatchError } = require("../errors");
+const {
+	WorkflowError,
+	WorkflowTaskMismatchError,
+	WorkflowSignalTimeoutError
+} = require("../errors");
 const { Serializers } = require("moleculer");
 const C = require("../constants");
 const { circa, parseDuration } = require("../utils");
@@ -206,7 +210,10 @@ class BaseAdapter {
 		const ctx = this.broker.ContextFactory.create(this.broker, null, job.payload, ctxOpts);
 		ctx.wf = {
 			name: workflow.name,
-			jobId: job.id
+			jobId: job.id,
+			retryAttempts: job.retryAttempts,
+			retries: job.retries,
+			timeout: job.timeout ?? workflow.timeout
 		};
 
 		const maxEventTaskId = Math.max(
@@ -247,7 +254,7 @@ class BaseAdapter {
 				);
 				if (event.error) {
 					const err = this.broker.errorRegenerator.restore(event.error);
-					err.stack = event.error.stack;
+					// err.stack = event.error.stack;
 					throw err;
 				}
 
@@ -295,12 +302,25 @@ class BaseAdapter {
 			taskId++;
 			const startTime = Date.now();
 
+			// Sleep-start event
 			const event = getCurrentTaskEvent();
-			if (event) return validateEvent(event, "sleep");
+			if (event) {
+				validateEvent(event, "sleep-start");
+			} else {
+				await taskEvent("sleep-start", { time }, startTime);
+			}
 
-			await new Promise(resolve => setTimeout(resolve, time));
+			// Sleep-end event
+			taskId++;
+			const event2 = getCurrentTaskEvent();
+			if (event2) return validateEvent(event2, "sleep-end");
 
-			await taskEvent("sleep", { time }, startTime);
+			let remaining = parseDuration(time) - (event ? startTime - event.ts : 0);
+			if (remaining > 0) {
+				await new Promise(resolve => setTimeout(resolve, remaining));
+			}
+
+			await taskEvent("sleep-end", { time }, startTime);
 		};
 
 		ctx.wf.setState = async state => {
@@ -318,14 +338,65 @@ class BaseAdapter {
 			taskId++;
 			const startTime = Date.now();
 
+			// Signal-wait event
 			const event = getCurrentTaskEvent();
-			if (event) return validateEvent(event, "signal");
+			if (event) {
+				validateEvent(event, "signal-wait");
+			} else {
+				await taskEvent(
+					"signal-wait",
+					{ signalName, signalKey: key, timeout: opts?.timeout },
+					startTime
+				);
+			}
 
-			const result = await this.waitForSignal(signalName, key, opts);
+			// Signal-end event
+			taskId++;
+			const event2 = getCurrentTaskEvent();
+			if (event2) return validateEvent(event2, "signal-end");
 
-			await taskEvent("signal", { result, signalName, signalKey: key }, startTime);
+			try {
+				const result = await Promise.race([
+					this.waitForSignal(signalName, key, opts),
+					new Promise((_, reject) => {
+						if (opts?.timeout) {
+							let remaining =
+								parseDuration(opts.timeout) -
+								(Date.now() - (event?.ts || startTime));
+							if (remaining <= 0) {
+								// Give a chance to waitForSignal to check the signal
+								remaining = 1000;
+							}
+							setTimeout(() => {
+								reject(
+									new WorkflowSignalTimeoutError(signalName, key, opts.timeout)
+								);
+							}, remaining);
+						}
+					})
+				]);
 
-			return result;
+				await taskEvent(
+					"signal-end",
+					{ result, signalName, signalKey: key, timeout: opts?.timeout },
+					startTime
+				);
+
+				return result;
+			} catch (err) {
+				await taskEvent(
+					"signal-end",
+					{
+						error: err ? this.broker.errorRegenerator.extractPlainError(err) : true,
+						signalName,
+						signalKey: key,
+						timeout: opts?.timeout
+					},
+					startTime
+				);
+
+				throw err;
+			}
 		};
 
 		ctx.wf.task = async (name, fn) => {

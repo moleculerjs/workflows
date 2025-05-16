@@ -1,10 +1,5 @@
 # TODO
 
-- [ ] **rename repo to "workflows"**
-
-- [ ] job timeout handling
-  - [ ] workflow property, maintenance process which gets active jobs and checks the startedAt property. If it's timed out, close as failed.
-- [ ] Signal wait timeout `WfSignalTimeoutError`
 - [ ] retries -> retryPolicy based on index.d.ts
   - [ ] maxDelay
   - [ ] exponentialFactor: 2
@@ -21,11 +16,9 @@
 
 - [ ] Integration tests
   - [ ] different serializer
-  - [ ] jobEvents
   - [ ] Retries (ctx.mcall)
-  - [ ] job timeout
   - [ ] middleware hooks
-
+  
 - [ ] Metrics
 - [ ] Tracing
 

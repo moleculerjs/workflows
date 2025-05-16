@@ -533,7 +533,7 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	async getJob(workflowName, jobId, fields) {
 		if (fields == null) {
-			fields = ["payload", "parent", "startedAt"];
+			fields = ["payload", "parent", "startedAt", "retries", "retryAttempts", "timeout"];
 		}
 
 		const exists = await this.commandClient.exists(
@@ -1398,34 +1398,45 @@ class RedisAdapter extends BaseAdapter {
 			);
 			if (activeJobIds.length > 0) {
 				for (const jobId of activeJobIds) {
-					const job = await this.getJob(workflow.name, jobId, ["startedAt", "timeout"]);
-					if (job) {
-						const timeout = parseDuration(
-							job.timeout != null ? job.timeout : workflow.timeout
-						);
-						if (timeout > 0) {
-							if (now - job.startedAt > timeout) {
-								this.log(
-									"debug",
-									workflow.name,
-									jobId,
-									`Job timed out (${humanize(timeout)}). Moving to failed queue.`
-								);
-								await this.moveToFailed(
-									workflow,
-									jobId,
-									new WorkflowTimeoutError("Job timed out", {
-										workflow: workflow.name,
+					try {
+						const job = await this.getJob(workflow.name, jobId, [
+							"startedAt",
+							"timeout"
+						]);
+						if (job && job.startedAt > 0) {
+							const timeout = parseDuration(
+								job.timeout != null ? job.timeout : workflow.timeout
+							);
+							if (timeout > 0) {
+								if (now - job.startedAt > timeout) {
+									this.log(
+										"debug",
+										workflow.name,
 										jobId,
-										timeout
-									})
-								);
-								// Unlock manually
-								await this.commandClient.del(
-									this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId)
-								);
+										`Job timed out (${humanize(timeout)}). Moving to failed queue.`
+									);
+									await this.moveToFailed(
+										workflow,
+										jobId,
+										new WorkflowTimeoutError(workflow.name, jobId, timeout)
+									);
+									// Unlock manually
+									await this.commandClient.del(
+										this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId)
+									);
+
+									this.removeRunningJob(workflow, jobId);
+								}
 							}
 						}
+					} catch (err) {
+						this.log(
+							"error",
+							workflow.name,
+							jobId,
+							"Error while timeout active job",
+							err
+						);
 					}
 				}
 			}

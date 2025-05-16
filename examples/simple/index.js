@@ -355,7 +355,7 @@ if (!isNoService) {
 
 				// Workflow handler
 				async handler(ctx) {
-					this.logger.info("WF handler start", ctx.params, ctx.wf.jobId);
+					this.logger.info("WF handler start", ctx.params, ctx.wf);
 
 					const res = await ctx.call("test.list");
 					await ctx.wf.setState("afterList");
@@ -377,10 +377,15 @@ if (!isNoService) {
 					// 	await ctx.wf.setState("afterSleep-" + (i + 1));
 					// }
 
-					await ctx.call("test.danger", { name: "John Doe" });
+					await ctx.wf.sleep("20s");
+					await ctx.wf.setState("afterSleep-20s");
 
-					const signalRes = await ctx.wf.waitForSignal("test.signal", 123);
+					const signalRes = await ctx.wf.waitForSignal("test.signal", 123, {
+						timeout: "1m"
+					});
 					this.logger.info("Signal result", signalRes);
+
+					await ctx.call("test.danger", { name: "John Doe" });
 
 					this.logger.info("WF handler end", ctx.wf.jobId);
 
