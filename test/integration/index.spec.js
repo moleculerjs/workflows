@@ -100,6 +100,7 @@ describe("Workflows Common Test", () => {
 	});
 
 	afterAll(async () => {
+		await broker.wf.adapter?.dumpWorkflows("./tmp");
 		await cleanup();
 		await broker.stop();
 	});
@@ -584,6 +585,7 @@ describe("Workflows Remote worker Test", () => {
 	});
 
 	afterAll(async () => {
+		await worker.wf.adapter?.dumpWorkflows("./tmp");
 		await cleanup();
 		await broker.stop();
 		await worker.stop();

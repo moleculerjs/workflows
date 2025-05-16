@@ -65,6 +65,7 @@ describe("Workflows Events Test with 'emit'", () => {
 	});
 
 	afterAll(async () => {
+		await worker.wf.adapter?.dumpWorkflows("./tmp");
 		await cleanup();
 		await broker.stop();
 		await worker.stop();
@@ -214,6 +215,7 @@ describe("Workflows Events Test with 'broadcast'", () => {
 	});
 
 	afterAll(async () => {
+		await worker.wf.adapter?.dumpWorkflows("./tmp");
 		await cleanup();
 		await broker.stop();
 		await worker.stop();

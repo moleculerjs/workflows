@@ -1,6 +1,5 @@
 const { ServiceBroker } = require("moleculer");
 const WorkflowsMiddleware = require("../../src");
-const { delay } = require("../utils.js");
 require("../jest.setup.js");
 
 describe("Workflows Signal Test", () => {
@@ -44,7 +43,8 @@ describe("Workflows Signal Test", () => {
 	});
 
 	afterAll(async () => {
-		//await cleanup();
+		await broker.wf.adapter?.dumpWorkflows("./tmp");
+		await cleanup();
 		await broker.stop();
 	});
 

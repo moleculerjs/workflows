@@ -1,9 +1,10 @@
 module.exports = {
+	QUEUE_CATEGORY_WF: "workflows",
+	QUEUE_CATEGORY_SIGNAL: "signals",
 	QUEUE_JOB: "job",
 	QUEUE_JOB_LOCK: "job-lock",
 	QUEUE_JOB_EVENTS: "job-events",
 	QUEUE_MAINTENANCE_LOCK: "maintenance-lock",
-	QUEUE_SIGNAL: "signal",
 	QUEUE_WAITING: "waiting",
 	QUEUE_ACTIVE: "active",
 	QUEUE_STALLED: "stalled",

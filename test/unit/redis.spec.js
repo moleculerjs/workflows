@@ -8,15 +8,20 @@ describe("RedisAdapter.getKey without custom prefix", () => {
 	adapter.init(broker, broker.logger, {});
 
 	it(`should generate key without type and id`, () => {
-		expect(adapter.getKey("wf1")).toBe("molwf:wf1");
+		expect(adapter.getKey("wf1")).toBe("molwf:workflows:wf1");
 	});
 
 	it(`should generate key with type`, () => {
-		expect(adapter.getKey("wf1", C.QUEUE_WAITING)).toBe("molwf:wf1:waiting");
+		expect(adapter.getKey("wf1", C.QUEUE_WAITING)).toBe("molwf:workflows:wf1:waiting");
 	});
 
 	it(`should generate key with type and id`, () => {
-		expect(adapter.getKey("wf1", C.QUEUE_JOB, "123")).toBe("molwf:wf1:job:123");
+		expect(adapter.getKey("wf1", C.QUEUE_JOB, "123")).toBe("molwf:workflows:wf1:job:123");
+	});
+
+	it(`should generate signal key`, () => {
+		expect(adapter.getSignalKey("test.signal", "123")).toBe("molwf:signals:test.signal:123");
+		expect(adapter.getSignalKey("test.signal", 123)).toBe("molwf:signals:test.signal:123");
 	});
 });
 
@@ -26,15 +31,22 @@ describe("RedisAdapter.getKey with broker namespace", () => {
 	adapter.init(broker, broker.logger, {});
 
 	it(`should generate key without type and id`, () => {
-		expect(adapter.getKey("wf1")).toBe("molwf-ns1:wf1");
+		expect(adapter.getKey("wf1")).toBe("molwf-ns1:workflows:wf1");
 	});
 
 	it(`should generate key with type`, () => {
-		expect(adapter.getKey("wf1", C.QUEUE_WAITING)).toBe("molwf-ns1:wf1:waiting");
+		expect(adapter.getKey("wf1", C.QUEUE_WAITING)).toBe("molwf-ns1:workflows:wf1:waiting");
 	});
 
 	it(`should generate key with type and id`, () => {
-		expect(adapter.getKey("wf1", C.QUEUE_JOB, "123")).toBe("molwf-ns1:wf1:job:123");
+		expect(adapter.getKey("wf1", C.QUEUE_JOB, "123")).toBe("molwf-ns1:workflows:wf1:job:123");
+	});
+
+	it(`should generate signal key`, () => {
+		expect(adapter.getSignalKey("test.signal", "123")).toBe(
+			"molwf-ns1:signals:test.signal:123"
+		);
+		expect(adapter.getSignalKey("test.signal", 123)).toBe("molwf-ns1:signals:test.signal:123");
 	});
 });
 
@@ -44,14 +56,19 @@ describe("RedisAdapter.getKey with custom prefix", () => {
 	adapter.init(broker, broker.logger, {});
 
 	it(`should generate key without type and id`, () => {
-		expect(adapter.getKey("wf1")).toBe("custom:wf1");
+		expect(adapter.getKey("wf1")).toBe("custom:workflows:wf1");
 	});
 
 	it(`should generate key with type`, () => {
-		expect(adapter.getKey("wf1", C.QUEUE_WAITING)).toBe("custom:wf1:waiting");
+		expect(adapter.getKey("wf1", C.QUEUE_WAITING)).toBe("custom:workflows:wf1:waiting");
 	});
 
 	it(`should generate key with type and id`, () => {
-		expect(adapter.getKey("wf1", C.QUEUE_JOB, "123")).toBe("custom:wf1:job:123");
+		expect(adapter.getKey("wf1", C.QUEUE_JOB, "123")).toBe("custom:workflows:wf1:job:123");
+	});
+
+	it(`should generate signal key`, () => {
+		expect(adapter.getSignalKey("test.signal", "123")).toBe("custom:signals:test.signal:123");
+		expect(adapter.getSignalKey("test.signal", 123)).toBe("custom:signals:test.signal:123");
 	});
 });

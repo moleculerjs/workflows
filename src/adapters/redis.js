@@ -9,6 +9,7 @@
 const _ = require("lodash");
 const BaseAdapter = require("./base");
 const { BrokerOptionsError } = require("moleculer").Errors;
+const { makeDirs } = require("moleculer").Utils;
 const { WorkflowError, WorkflowAlreadyLocked, WorkflowTimeoutError } = require("../errors");
 const C = require("../constants");
 const Redis = require("ioredis");
@@ -157,7 +158,7 @@ class RedisAdapter extends BaseAdapter {
 				this.subClient = client;
 				this.connected = true;
 
-				await client.subscribe(this.getKey(C.QUEUE_SIGNAL));
+				await client.subscribe(this.getKey(C.QUEUE_CATEGORY_SIGNAL));
 
 				resolve(client);
 				//this.logger.info("Workflows Redis adapter connected.");
@@ -172,7 +173,7 @@ class RedisAdapter extends BaseAdapter {
 				//this.logger.info("Workflows Redis adapter disconnected.");
 			});
 			client.on("message", (channel, message) => {
-				if (channel === this.getKey(C.QUEUE_SIGNAL)) {
+				if (channel === this.getKey(C.QUEUE_CATEGORY_SIGNAL)) {
 					const json = this.serializer.deserialize(message);
 					this.logger.debug("Signal received on Pub/Sub", json);
 					const pKey = json.signal + ":" + json.key;
@@ -839,21 +840,17 @@ class RedisAdapter extends BaseAdapter {
 		const exp = parseDuration(this.mwOpts.signalExpiration);
 		if (exp != null && exp > 0) {
 			await this.commandClient.set(
-				this.getKey(C.QUEUE_SIGNAL, signalName, key),
+				this.getSignalKey(signalName, key),
 				content,
 				"NX",
 				"PX",
 				exp
 			);
 		} else {
-			await this.commandClient.set(
-				this.getKey(C.QUEUE_SIGNAL, signalName, key),
-				content,
-				"NX"
-			);
+			await this.commandClient.set(this.getSignalKey(signalName, key), content, "NX");
 		}
 
-		await this.commandClient.publish(this.getKey(C.QUEUE_SIGNAL), content);
+		await this.commandClient.publish(this.getKey(C.QUEUE_CATEGORY_SIGNAL), content);
 	}
 
 	/**
@@ -866,7 +863,7 @@ class RedisAdapter extends BaseAdapter {
 	async removeSignal(signalName, key) {
 		this.log("debug", signalName, key, "Remove signal", signalName, key);
 
-		await this.commandClient.del(this.getKey(C.QUEUE_SIGNAL, signalName, key));
+		await this.commandClient.del(this.getSignalKey(signalName, key));
 	}
 
 	/**
@@ -877,7 +874,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<unknown>} Resolves with the signal payload.
 	 */
 	async waitForSignal(signalName, key) {
-		const content = await this.commandClient.get(this.getKey(C.QUEUE_SIGNAL, signalName, key));
+		const content = await this.commandClient.get(this.getSignalKey(signalName, key));
 		if (content) {
 			const json = this.serializer.deserialize(content);
 			if (key === json.key) {
@@ -1645,7 +1642,7 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Get Redis key for the given name and type.
+	 * Get Redis key (for Workflow) for the given name and type.
 	 *
 	 * @param {string} name - The name of the workflow or entity.
 	 * @param {string} type - The type of the key (e.g., job, lock, events).
@@ -1654,12 +1651,84 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	getKey(name, type, id) {
 		if (id) {
-			return `${this.prefix}${name}:${type}:${id}`;
+			return `${this.prefix}${C.QUEUE_CATEGORY_WF}:${name}:${type}:${id}`;
 		} else if (type) {
-			return `${this.prefix}${name}:${type}`;
+			return `${this.prefix}${C.QUEUE_CATEGORY_WF}:${name}:${type}`;
 		} else {
-			return `${this.prefix}${name}`;
+			return `${this.prefix}${C.QUEUE_CATEGORY_WF}:${name}`;
 		}
+	}
+
+	/**
+	 * Get Redis key for a signal.
+	 *
+	 * @param {*} signalName  The name of the signal
+	 * @param {*} key The key of the signal
+	 * @returns {string} The constructed Redis key for the signal.
+	 */
+	getSignalKey(signalName, key) {
+		return `${this.prefix}${C.QUEUE_CATEGORY_SIGNAL}:${signalName}:${key}`;
+	}
+
+	/**
+	 * Dump all Redis data for all workflows to JSON files.
+	 */
+	async dumpWorkflows(folder) {
+		makeDirs(folder);
+		for (const name of this.workflows.keys()) {
+			await this.dumpWorkflow(name, folder);
+		}
+	}
+
+	/**
+	 * Dump all Redis data for a workflow to a JSON file.
+	 *
+	 * @param {string} workflowName - The name of the workflow.
+	 * @returns {Promise<string>} Path to the dump file.
+	 */
+	async dumpWorkflow(workflowName, folder = ".") {
+		const fs = require("fs").promises;
+		const path = require("path");
+
+		const pattern = this.getKey(workflowName) + ":*";
+		const client = this.commandClient;
+		let cursor = "0";
+		let keys = [];
+		// Scan all keys matching the workflow pattern
+		do {
+			const res = await client.scan(cursor, "MATCH", pattern, "COUNT", 100);
+			cursor = res[0];
+			keys.push(...res[1]);
+		} while (cursor !== "0");
+
+		const dump = {};
+		for (const key of keys) {
+			const type = await client.type(key);
+			if (type === "list") {
+				dump[key] = await client.lrange(key, 0, -1);
+			} else if (type === "set") {
+				dump[key] = await client.smembers(key);
+			} else if (type === "hash") {
+				dump[key] = await client.hgetall(key);
+			} else if (type === "zset") {
+				const members = await client.zrange(key, 0, -1, "WITHSCORES");
+				// Convert flat array to [{member, score}]
+				const arr = [];
+				for (let i = 0; i < members.length; i += 2) {
+					arr.push({ member: members[i], score: Number(members[i + 1]) });
+				}
+				dump[key] = arr;
+			} else if (type === "string") {
+				dump[key] = await client.get(key);
+			} else {
+				dump[key] = null;
+			}
+		}
+
+		const fileName = path.join(folder, `dump-${workflowName}.json`);
+		await fs.writeFile(fileName, JSON.stringify(dump, null, 2), "utf8");
+		this.logger.info(`Workflow '${workflowName}' dumped to ${fileName}`);
+		return fileName;
 	}
 }
 

@@ -38,6 +38,8 @@ describe("Workflows Timeout Test", () => {
 	});
 
 	afterAll(async () => {
+		await broker.wf.adapter?.dumpWorkflows("./tmp");
+
 		// Just for a graceful shutdown
 		await broker.wf.triggerSignal("signal.timeout", 1);
 		await delay(1000);

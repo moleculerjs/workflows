@@ -5,15 +5,15 @@ const { delay } = require("../utils");
 require("../jest.setup.js");
 
 describe("Workflows Stalled Job Test", () => {
-	let broker, workerBroker;
+	let broker, worker;
 	let errorState = 0;
 	let FLOWS = [];
 
 	const cleanup = async () => {
-		await workerBroker.wf.cleanup("stalled.fiveSec");
-		await workerBroker.wf.cleanup("stalled.tenSec");
-		await workerBroker.wf.cleanup("stalled.complex");
-		await workerBroker.wf.removeSignal("email.verification", 1);
+		await worker.wf.cleanup("stalled.fiveSec");
+		await worker.wf.cleanup("stalled.tenSec");
+		await worker.wf.cleanup("stalled.complex");
+		await worker.wf.removeSignal("email.verification", 1);
 	};
 
 	beforeAll(async () => {
@@ -23,7 +23,7 @@ describe("Workflows Stalled Job Test", () => {
 			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
 		});
 
-		workerBroker = new ServiceBroker({
+		worker = new ServiceBroker({
 			nodeID: "worker",
 			logger: false,
 
@@ -36,7 +36,7 @@ describe("Workflows Stalled Job Test", () => {
 			]
 		});
 
-		workerBroker.createService({
+		worker.createService({
 			name: "stalled",
 			workflows: {
 				fiveSec: {
@@ -133,7 +133,7 @@ describe("Workflows Stalled Job Test", () => {
 			}
 		});
 
-		workerBroker.createService({
+		worker.createService({
 			name: "users",
 			actions: {
 				checkEmail() {
@@ -171,7 +171,7 @@ describe("Workflows Stalled Job Test", () => {
 			}
 		});
 
-		workerBroker.createService({
+		worker.createService({
 			name: "mail",
 			actions: {
 				send() {
@@ -186,14 +186,15 @@ describe("Workflows Stalled Job Test", () => {
 		});
 
 		await broker.start();
-		await workerBroker.start();
+		await worker.start();
 		await cleanup();
 	});
 
 	afterAll(async () => {
+		await worker.wf.adapter?.dumpWorkflows("./tmp");
 		await cleanup();
 		await broker.stop();
-		await workerBroker.stop();
+		await worker.stop();
 	});
 
 	it("should execute the one minute job without stalling (lock extended)", async () => {
@@ -221,12 +222,12 @@ describe("Workflows Stalled Job Test", () => {
 		// Wait for job to be started
 		await delay(1000);
 
-		await workerBroker.stop();
+		await worker.stop();
 
 		// Wait for lock expiration
 		await delay(7_000);
 
-		await workerBroker.start();
+		await worker.start();
 
 		const result = await job.promise();
 		expect(result).toBe(`It took 5 seconds`);
@@ -253,7 +254,7 @@ describe("Workflows Stalled Job Test", () => {
 	}, 25000);
 
 	it("should execute the complex flow with retry (skip tasks at replaying)", async () => {
-		await workerBroker.wf.removeSignal("email.verification", 1);
+		await worker.wf.removeSignal("email.verification", 1);
 		FLOWS = [];
 
 		const job = await broker.wf.run("stalled.complex", {
@@ -463,7 +464,7 @@ describe("Workflows Stalled Job Test", () => {
 
 	it("should execute the complex flow with 2 retries", async () => {
 		errorState = 2;
-		await workerBroker.wf.removeSignal("email.verification", 1);
+		await worker.wf.removeSignal("email.verification", 1);
 		FLOWS = [];
 
 		const job = await broker.wf.run(
