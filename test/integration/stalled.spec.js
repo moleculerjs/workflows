@@ -10,9 +10,9 @@ describe("Workflows Stalled Job Test", () => {
 	let FLOWS = [];
 
 	const cleanup = async () => {
-		await worker.wf.cleanup("stalled.fiveSec");
-		await worker.wf.cleanup("stalled.tenSec");
-		await worker.wf.cleanup("stalled.complex");
+		await worker.wf.cleanUp("stalled.fiveSec");
+		await worker.wf.cleanUp("stalled.tenSec");
+		await worker.wf.cleanUp("stalled.complex");
 		await worker.wf.removeSignal("email.verification", 1);
 	};
 
