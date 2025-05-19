@@ -166,17 +166,6 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			};
 
 			/**
-			 * Cleanup workflow jobs and history
-			 *
-			 * @param {String} workflowName
-			 * @returns
-			 */
-			broker.wf.cleanup = workflowName => {
-				adapter.checkWorkflowName(workflowName);
-				return adapter.cleanUp(workflowName);
-			};
-
-			/**
 			 * Trigger a named signal.
 			 *
 			 * @param {string} signalName
