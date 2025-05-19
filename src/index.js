@@ -378,6 +378,10 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						);
 					}
 
+					if (wf.enabled === false) {
+						continue;
+					}
+
 					if (!_.isFunction(wf.handler)) {
 						throw new ServiceSchemaError(
 							`Missing workflow handler on '${name}' workflow in '${svc.fullName}' service!`

@@ -41,7 +41,7 @@ const JOB_FIELDS_NUMERIC = [
 	"retryAttempts"
 ];
 
-const JOB_FIELDS = ["id", "parent", ...JOB_FIELDS_JSON, ...JOB_FIELDS_NUMERIC, "success"];
+const JOB_FIELDS = ["id", "parent", ...JOB_FIELDS_JSON, ...JOB_FIELDS_NUMERIC, "success", "nodeID"];
 
 /**
  * Redis Streams adapter
@@ -128,6 +128,17 @@ class RedisAdapter extends BaseAdapter {
 		await this.afterConnected();
 	}
 
+	async afterConnected() {
+		super.afterConnected();
+		// Start delayed maintenance timers for all registered workflows
+		if (this.workflows) {
+			for (const wf of this.workflows.values()) {
+				await this.subClient?.subscribe(this.getKey(wf.name, C.QUEUE_DELAYED));
+				this.setNextDelayedMaintenance(wf);
+			}
+		}
+	}
+
 	createCommandClient() {
 		return new Promise((resolve, reject) => {
 			const client = this.createRedisClient();
@@ -198,6 +209,12 @@ class RedisAdapter extends BaseAdapter {
 						} else {
 							storePromise.resolve(json.result);
 						}
+					}
+				} else if (channel.startsWith(this.prefix) && channel.endsWith(C.QUEUE_DELAYED)) {
+					const json = this.serializer.deserialize(message);
+					const wf = this.workflows.get(json.workflow);
+					if (wf) {
+						this.setNextDelayedMaintenance(wf, json.promoteAt);
 					}
 				}
 			});
@@ -630,6 +647,7 @@ class RedisAdapter extends BaseAdapter {
 			const fields = {
 				success: true,
 				finishedAt: Date.now(),
+				nodeID: this.broker.nodeID,
 				duration: Date.now() - job.startedAt
 			};
 			if (result != null) {
@@ -742,6 +760,9 @@ class RedisAdapter extends BaseAdapter {
 
 				await pipeline.exec();
 
+				// Publish promoteAt time to all workers
+				await this.sendDelayedJobPromoteAt(workflow.name, job.id, promoteAt);
+
 				return;
 			}
 		}
@@ -752,6 +773,7 @@ class RedisAdapter extends BaseAdapter {
 			const fields = {
 				success: false,
 				finishedAt: Date.now(),
+				nodeID: this.broker.nodeID,
 				duration: Date.now() - job.startedAt
 			};
 			if (err != null) {
@@ -940,7 +962,15 @@ class RedisAdapter extends BaseAdapter {
 						// Remove previous job data
 						await this.commandClient.hdel(
 							this.getKey(workflowName, C.QUEUE_JOB, job.id),
-							["startedAt", "duration", "finishedAt", "success", "error", "result"]
+							[
+								"startedAt",
+								"duration",
+								"finishedAt",
+								"nodeID",
+								"success",
+								"error",
+								"result"
+							]
 						);
 					} else {
 						isLoadedJob = true;
@@ -1023,6 +1053,9 @@ class RedisAdapter extends BaseAdapter {
 					job.promoteAt,
 					job.id
 				);
+
+				// Publish promoteAt time to all workers
+				await this.sendDelayedJobPromoteAt(workflowName, job.id, job.promoteAt);
 			} else {
 				// Normal job
 				this.log("debug", workflowName, job.id, "Job created.", job);
@@ -1072,6 +1105,62 @@ class RedisAdapter extends BaseAdapter {
 		};
 
 		return job;
+	}
+
+	/**
+	 * Send a delayed job promoteAt message to all workers.
+	 *
+	 * @param {string} workflowName
+	 * @param {string} jobId
+	 * @param {number} promoteAt
+	 */
+	async sendDelayedJobPromoteAt(workflowName, jobId, promoteAt) {
+		// Check if this job is at the head of the delayed queue
+		const head = await this.commandClient.zrange(
+			this.getKey(workflowName, C.QUEUE_DELAYED),
+			0,
+			0
+		);
+		if (head && head[0] === jobId) {
+			this.log(
+				"debug",
+				workflowName,
+				jobId,
+				"Publish delayed job promote time",
+				new Date(promoteAt).toISOString()
+			);
+			const msg = this.serializer.serialize({
+				workflow: workflowName,
+				promoteAt
+			});
+			await this.commandClient.publish(this.getKey(workflowName, C.QUEUE_DELAYED), msg);
+		}
+	}
+
+	/**
+	 * Set the next delayed jobs maintenance timer for a workflow.
+	 * @param {Object} wf - The workflow object.
+	 * @param {number} [nextTime] - Optional timestamp to schedule next maintenance.
+	 */
+	async setNextDelayedMaintenance(wf, nextTime) {
+		if (nextTime == null) {
+			const first = await this.commandClient.zrange(
+				this.getKey(wf.name, C.QUEUE_DELAYED),
+				0,
+				0,
+				"WITHSCORES"
+			);
+
+			if (first.length > 0) {
+				const promoteAt = parseInt(first[1]);
+				if (promoteAt > Date.now()) {
+					super.setNextDelayedMaintenance(wf, promoteAt);
+					return;
+				}
+			}
+		}
+
+		super.setNextDelayedMaintenance(wf, nextTime);
 	}
 
 	/**
@@ -1161,10 +1250,13 @@ class RedisAdapter extends BaseAdapter {
 							job
 						);
 
-						await this.commandClient.hset(
+						await this.commandClient.hmset(
 							this.getKey(workflowName, C.QUEUE_JOB, job.id),
-							"finishedAt",
-							Date.now()
+							{
+								finishedAt: Date.now(),
+								nodeID: this.broker.nodeID,
+								duration: Date.now() - job.startedAt
+							}
 						);
 						return;
 					}
@@ -1179,10 +1271,13 @@ class RedisAdapter extends BaseAdapter {
 							job
 						);
 
-						await this.commandClient.hset(
+						await this.commandClient.hmset(
 							this.getKey(workflowName, C.QUEUE_JOB, job.id),
-							"finishedAt",
-							Date.now()
+							{
+								finishedAt: Date.now(),
+								nodeID: this.broker.nodeID,
+								duration: Date.now() - job.startedAt
+							}
 						);
 
 						return;
@@ -1314,18 +1409,18 @@ class RedisAdapter extends BaseAdapter {
 	 * Acquire a maintenance lock for a workflow.
 	 *
 	 * @param {Object} workflow - The workflow object.
+	 * @param {number} lockTime - The time to hold the lock in milliseconds.
 	 * @returns {Promise<boolean>} Resolves with true if the lock is acquired, false otherwise.
 	 */
-	async lockMaintenance(workflow) {
+	async lockMaintenance(workflow, lockTime, lockName = C.QUEUE_MAINTENANCE_LOCK) {
 		// Set lock
 		const lockRes = await this.commandClient.set(
-			this.getKey(workflow.name, C.QUEUE_MAINTENANCE_LOCK),
+			this.getKey(workflow.name, lockName),
 			this.broker.instanceID,
-			"EX",
-			this.mwOpts.maintenanceTime * 2,
+			"PX",
+			lockTime / 2,
 			"NX"
 		);
-		this.log("debug", workflow.name, null, "Lock maintenance", lockRes);
 
 		return lockRes != null;
 	}
@@ -1346,18 +1441,17 @@ class RedisAdapter extends BaseAdapter {
 				now
 			);
 			if (jobIds.length > 0) {
-				this.log(
-					"debug",
-					workflow.name,
-					null,
-					`Found ${jobIds.length} delayed jobs:`,
-					jobIds
-				);
 				try {
 					const pipeline = this.commandClient.pipeline();
 					for (const jobId of jobIds) {
 						const job = await this.getJob(workflow.name, jobId, ["id"]);
 						if (job) {
+							this.log(
+								"debug",
+								workflow.name,
+								jobId,
+								"Moving delayed job to waiting queue."
+							);
 							pipeline.lpush(this.getKey(workflow.name, C.QUEUE_WAITING), jobId);
 						}
 						pipeline.zrem(this.getKey(workflow.name, C.QUEUE_DELAYED), jobId);
@@ -1566,13 +1660,6 @@ class RedisAdapter extends BaseAdapter {
 				minDate
 			);
 			if (jobIds.length > 0) {
-				this.log(
-					"debug",
-					workflow.name,
-					null,
-					`Found ${jobIds.length} completed jobs:`,
-					jobIds
-				);
 				const jobKeys = jobIds.map(jobId => this.getKey(workflow.name, C.QUEUE_JOB, jobId));
 				const jobEventsKeys = jobIds.map(jobId =>
 					this.getKey(workflow.name, C.QUEUE_JOB_EVENTS, jobId)
@@ -1608,11 +1695,9 @@ class RedisAdapter extends BaseAdapter {
 	 * @param {Object} workflow - The workflow object.
 	 * @returns {Promise<void>} Resolves when the lock is released.
 	 */
-	async unlockMaintenance(workflow) {
-		const unlockRes = await this.commandClient.del(
-			this.getKey(workflow.name, C.QUEUE_MAINTENANCE_LOCK)
-		);
-		this.log("debug", workflow.name, null, "Unlock maintenance", unlockRes);
+	async unlockMaintenance(workflow, lockName = C.QUEUE_MAINTENANCE_LOCK) {
+		const unlockRes = await this.commandClient.del(this.getKey(workflow.name, lockName));
+		this.log("debug", workflow.name, null, "Unlock maintenance", lockName, unlockRes);
 	}
 
 	/**

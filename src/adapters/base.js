@@ -130,6 +130,11 @@ class BaseAdapter {
 		this.workflows.set(workflow.name, workflow);
 		if (this.connected) {
 			this.startJobProcessor(workflow);
+			this.setNextDelayedMaintenance(workflow);
+
+			if (!this.maintenanceTimer) {
+				this.setNextMaintenance();
+			}
 		}
 	}
 
@@ -161,9 +166,12 @@ class BaseAdapter {
 	async afterConnected() {
 		this.workflows.forEach(workflow => {
 			this.startJobProcessor(workflow);
+			this.setNextDelayedMaintenance(workflow);
 		});
 
-		this.setNextMaintenance();
+		if (this.workflows.size > 0) {
+			this.setNextMaintenance();
+		}
 	}
 
 	/**
@@ -647,6 +655,34 @@ class BaseAdapter {
 	}
 
 	/**
+	 * Acquire a maintenance lock for a workflow.
+	 *
+	 * @param {Object} workflow - The workflow object.
+	 * @param {number} lockTime - The time to hold the lock in milliseconds.
+	 * @returns {Promise<boolean>} Resolves with true if the lock is acquired, false otherwise.
+	 */
+	async lockMaintenance(/*workflow, lockTime, lockName = C.QUEUE_MAINTENANCE_LOCK*/) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Release the maintenance lock for a workflow.
+	 *
+	 * @param {Object} workflow - The workflow object.
+	 * @returns {Promise<void>} Resolves when the lock is released.
+	 */
+	async unlockMaintenance(/*workflow, lockName = C.QUEUE_MAINTENANCE_LOCK*/) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	getRoundedNextTime(time) {
+		// Rounding next time + a small random time
+		return Math.floor(Date.now() / time) * time + time + Math.floor(Math.random() * 100);
+	}
+
+	/**
 	 * Calculate the next maintenance time. We use 'circa' to randomize the time a bit
 	 * and avoid that all adapters run the maintenance at the same time.
 	 */
@@ -655,24 +691,23 @@ class BaseAdapter {
 			clearTimeout(this.maintenanceTimer);
 		}
 
-		this.maintenanceTimer = setTimeout(
-			() => this.maintenance(),
-			circa(this.mwOpts.maintenanceTime * 1000)
-		);
+		const nextTime = this.getRoundedNextTime(this.mwOpts.maintenanceTime * 1000);
+		// console.log("Set next maintenance time:", new Date(nextTime).toISOString());
+
+		this.maintenanceTimer = setTimeout(() => this.maintenance(), nextTime - Date.now());
 	}
 
 	/**
-	 *
+	 * Run the maintenance tasks.
 	 */
 	async maintenance() {
 		if (!this.connected) return;
 
 		await Promise.all(
 			Array.from(this.workflows.values()).map(async wf => {
-				if (await this.lockMaintenance(wf)) {
+				if (await this.lockMaintenance(wf, this.mwOpts.maintenanceTime * 1000)) {
 					try {
 						await this.maintenanceStalledJobs(wf);
-						await this.maintenanceDelayedJobs(wf);
 						await this.maintenanceActiveJobs(wf);
 
 						if (wf.retention) {
@@ -701,13 +736,53 @@ class BaseAdapter {
 							}
 						}
 					} finally {
-						await this.unlockMaintenance(wf);
+						//await this.unlockMaintenance(wf);
 					}
 				}
 			})
 		);
 
 		this.setNextMaintenance();
+	}
+
+	async maintenanceDelayed(wf) {
+		if (
+			await this.lockMaintenance(
+				wf,
+				this.mwOpts.maintenanceTime * 1000,
+				C.QUEUE_MAINTENANCE_LOCK_DELAYED
+			)
+		) {
+			await this.maintenanceDelayedJobs(wf);
+		}
+		await this.unlockMaintenance(wf, C.QUEUE_MAINTENANCE_LOCK_DELAYED);
+		await this.setNextDelayedMaintenance(wf);
+	}
+
+	/**
+	 * Set the next delayed jobs maintenance timer for a workflow.
+	 * @param {Object} wf - The workflow object.
+	 * @param {number} [nextTime] - Optional timestamp to schedule next maintenance.
+	 */
+	setNextDelayedMaintenance(wf, nextTime) {
+		const now = Date.now();
+		if (!wf.$delayedNextTime || nextTime == null || nextTime < wf.$delayedNextTime) {
+			clearTimeout(wf.$delayedTimer);
+
+			let delay;
+			if (nextTime != null) {
+				delay = Math.max(0, nextTime - now + Math.floor(Math.random() * 50));
+				this.logger.debug(
+					"Set next delayed maintenance time:",
+					new Date(nextTime).toISOString()
+				);
+			} else {
+				const nextTime = this.getRoundedNextTime(this.mwOpts.maintenanceTime * 1000);
+				delay = nextTime - now;
+			}
+
+			wf.$delayedTimer = setTimeout(async () => this.maintenanceDelayed(wf), delay);
+		}
 	}
 
 	/**
@@ -733,6 +808,7 @@ class BaseAdapter {
 
 	/**
 	 * Check if the workflow name is valid.
+	 *
 	 * @param {String} workflowName
 	 */
 	checkWorkflowName(workflowName) {

@@ -447,7 +447,7 @@ if (!isNoService) {
 					});
 					this.logger.info("Signal result", signalRes);
 
-					await ctx.call("test.danger", { name: "John Doe" });
+					//await ctx.call("test.danger", { name: "John Doe" });
 
 					this.logger.info("WF handler end", ctx.wf.jobId);
 
@@ -459,6 +459,7 @@ if (!isNoService) {
 
 			wf2: {
 				fullName: "wf2",
+				enabled: false,
 				concurrency: 10,
 				async handler(ctx) {
 					const job = await this.broker.wf.get(ctx.wf.name, ctx.wf.jobId);
