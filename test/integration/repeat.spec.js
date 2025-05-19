@@ -92,6 +92,7 @@ describe("Workflows Repeat Test", () => {
 				promoteAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				duration: expect.withinRange(0, 500),
 				success: true,
 				result: "Worked",
@@ -121,6 +122,7 @@ describe("Workflows Repeat Test", () => {
 			id: expect.any(String),
 			createdAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: broker.nodeID,
 			repeat: { cron: "*/5 * * * * *", limit: 3 },
 			repeatCounter: 3
 		});
@@ -137,6 +139,7 @@ describe("Workflows Repeat Test", () => {
 				promoteAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				duration: expect.withinRange(0, 500),
 				success: true,
 				result: "Worked",
@@ -167,6 +170,7 @@ describe("Workflows Repeat Test", () => {
 			id: expect.any(String),
 			createdAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: broker.nodeID,
 			repeat: { cron: "*/5 * * * * *", endDate },
 			repeatCounter: expect.withinRange(4, 6)
 		});
@@ -183,6 +187,7 @@ describe("Workflows Repeat Test", () => {
 				promoteAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				duration: expect.withinRange(0, 500),
 				success: true,
 				result: "Worked",

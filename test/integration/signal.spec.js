@@ -72,7 +72,7 @@ describe("Workflows Signal Test", () => {
 			createdAt: expect.epoch(),
 			startedAt: expect.epoch(),
 			duration: expect.withinRange(10_000, 15_000),
-			finishedAt: expect.epoch(),
+			finishedAt: expect.epoch(), nodeID: broker.nodeID,
 			success: false,
 			error: expect.objectContaining({
 				name: "WorkflowSignalTimeoutError",
@@ -150,7 +150,7 @@ describe("Workflows Signal Test", () => {
 			retries: 2,
 			retryAttempts: 2,
 			promoteAt: expect.epoch(),
-			finishedAt: expect.epoch(),
+			finishedAt: expect.epoch(), nodeID: broker.nodeID,
 			success: false,
 			error: expect.objectContaining({
 				name: "WorkflowSignalTimeoutError",
@@ -282,7 +282,7 @@ describe("Workflows Signal Test", () => {
 			retries: 2,
 			retryAttempts: 1,
 			promoteAt: expect.epoch(),
-			finishedAt: expect.epoch(),
+			finishedAt: expect.epoch(), nodeID: broker.nodeID,
 			success: true,
 			result: "OK"
 		});
@@ -373,7 +373,7 @@ describe("Workflows Signal Test", () => {
 			createdAt: expect.epoch(),
 			startedAt: expect.epoch(),
 			duration: expect.withinRange(4_000, 10_000),
-			finishedAt: expect.epoch(),
+			finishedAt: expect.epoch(), nodeID: broker.nodeID,
 			success: true,
 			result: "OK"
 		});
@@ -431,7 +431,7 @@ describe("Workflows Signal Test", () => {
 			createdAt: expect.epoch(),
 			startedAt: expect.epoch(),
 			duration: expect.withinRange(0, 1000),
-			finishedAt: expect.epoch(),
+			finishedAt: expect.epoch(), nodeID: broker.nodeID,
 			success: true,
 			result: "OK"
 		});

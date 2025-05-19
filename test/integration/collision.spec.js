@@ -108,6 +108,7 @@ describe("Workflows Job ID collision Test", () => {
 				startedAt: expect.epoch(),
 				duration: expect.any(Number),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				result: "OK",
 				success: true
 			});
@@ -139,6 +140,7 @@ describe("Workflows Job ID collision Test", () => {
 				startedAt: expect.epoch(),
 				duration: expect.any(Number),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				result: "OK",
 				success: true,
 				promise: expect.any(Function)
@@ -156,6 +158,7 @@ describe("Workflows Job ID collision Test", () => {
 				startedAt: expect.epoch(),
 				duration: expect.any(Number),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				result: "OK",
 				success: true
 			});
@@ -199,6 +202,7 @@ describe("Workflows Job ID collision Test", () => {
 				startedAt: expect.epoch(),
 				duration: expect.any(Number),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				result: "OK",
 				success: true
 			});
@@ -220,6 +224,7 @@ describe("Workflows Job ID collision Test", () => {
 				startedAt: expect.epoch(),
 				duration: expect.any(Number),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				result: "OK",
 				success: true
 			});
@@ -245,6 +250,7 @@ describe("Workflows Job ID collision Test", () => {
 				startedAt: expect.greaterThan(job1.startedAt),
 				duration: expect.any(Number),
 				finishedAt: expect.greaterThan(job1.finishedAt),
+				nodeID: broker.nodeID,
 				result: "OK",
 				success: true
 			});

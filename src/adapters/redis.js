@@ -129,12 +129,11 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	async afterConnected() {
-		super.afterConnected();
+		await super.afterConnected();
 		// Start delayed maintenance timers for all registered workflows
 		if (this.workflows) {
 			for (const wf of this.workflows.values()) {
 				await this.subClient?.subscribe(this.getKey(wf.name, C.QUEUE_DELAYED));
-				this.setNextDelayedMaintenance(wf);
 			}
 		}
 	}
@@ -1144,14 +1143,14 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	async setNextDelayedMaintenance(wf, nextTime) {
 		if (nextTime == null) {
-			const first = await this.commandClient.zrange(
+			const first = await this.commandClient?.zrange(
 				this.getKey(wf.name, C.QUEUE_DELAYED),
 				0,
 				0,
 				"WITHSCORES"
 			);
 
-			if (first.length > 0) {
+			if (first?.length > 0) {
 				const promoteAt = parseInt(first[1]);
 				if (promoteAt > Date.now()) {
 					super.setNextDelayedMaintenance(wf, promoteAt);
@@ -1224,6 +1223,7 @@ class RedisAdapter extends BaseAdapter {
 					"repeat",
 					"repeatCounter",
 					"retries",
+					"startedAt",
 					"timeout"
 				]);
 
@@ -1254,8 +1254,7 @@ class RedisAdapter extends BaseAdapter {
 							this.getKey(workflowName, C.QUEUE_JOB, job.id),
 							{
 								finishedAt: Date.now(),
-								nodeID: this.broker.nodeID,
-								duration: Date.now() - job.startedAt
+								nodeID: this.broker.nodeID
 							}
 						);
 						return;
@@ -1275,8 +1274,7 @@ class RedisAdapter extends BaseAdapter {
 							this.getKey(workflowName, C.QUEUE_JOB, job.id),
 							{
 								finishedAt: Date.now(),
-								nodeID: this.broker.nodeID,
-								duration: Date.now() - job.startedAt
+								nodeID: this.broker.nodeID
 							}
 						);
 
@@ -1316,6 +1314,8 @@ class RedisAdapter extends BaseAdapter {
 					nextJob.promoteAt,
 					nextJob.id
 				);
+
+				await this.sendDelayedJobPromoteAt(workflowName, nextJob.id, nextJob.promoteAt);
 			}
 		} catch (err) {
 			this.log("error", workflowName, job.id, "Error while rescheduling job", err);
@@ -1414,7 +1414,7 @@ class RedisAdapter extends BaseAdapter {
 	 */
 	async lockMaintenance(workflow, lockTime, lockName = C.QUEUE_MAINTENANCE_LOCK) {
 		// Set lock
-		const lockRes = await this.commandClient.set(
+		const lockRes = await this.commandClient?.set(
 			this.getKey(workflow.name, lockName),
 			this.broker.instanceID,
 			"PX",
@@ -1696,7 +1696,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the lock is released.
 	 */
 	async unlockMaintenance(workflow, lockName = C.QUEUE_MAINTENANCE_LOCK) {
-		const unlockRes = await this.commandClient.del(this.getKey(workflow.name, lockName));
+		const unlockRes = await this.commandClient?.del(this.getKey(workflow.name, lockName));
 		this.log("debug", workflow.name, null, "Unlock maintenance", lockName, unlockRes);
 	}
 

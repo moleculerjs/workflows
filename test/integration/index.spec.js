@@ -123,6 +123,7 @@ describe("Workflows Common Test", () => {
 			createdAt: expect.greaterThanOrEqual(now),
 			startedAt: expect.greaterThanOrEqual(now),
 			finishedAt: expect.greaterThanOrEqual(now),
+			nodeID: broker.nodeID,
 			duration: expect.withinRange(0, 100),
 			success: true
 		});
@@ -149,6 +150,7 @@ describe("Workflows Common Test", () => {
 			payload: { name: "World" },
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: broker.nodeID,
 			duration: expect.withinRange(0, 100),
 			success: true,
 			result: "Hello, World"
@@ -180,6 +182,7 @@ describe("Workflows Common Test", () => {
 			payload: { name: "World" },
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: broker.nodeID,
 			duration: expect.withinRange(0, 100),
 			success: true,
 			result: "Hello, World"
@@ -219,6 +222,7 @@ describe("Workflows Common Test", () => {
 			payload: { name: "Error" },
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: broker.nodeID,
 			duration: expect.withinRange(0, 200),
 			success: false,
 			error: {
@@ -371,6 +375,7 @@ describe("Workflows Common Test", () => {
 			payload: { a: 5 },
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: broker.nodeID,
 			duration: expect.withinRange(400, 600),
 			state: "afterSignal",
 			success: true,
@@ -489,6 +494,7 @@ describe("Workflows Common Test", () => {
 				payload: { name: "John" },
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				duration: expect.withinRange(0, 100),
 				success: true,
 				result: "Hello, John"
@@ -513,6 +519,7 @@ describe("Workflows Common Test", () => {
 				payload: { name: 123 },
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				duration: expect.withinRange(0, 100),
 				success: false,
 				error: {
@@ -619,6 +626,7 @@ describe("Workflows Remote worker Test", () => {
 			payload: { name: "John" },
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: worker.nodeID,
 			duration: expect.withinRange(0, 100),
 			success: true,
 			result: "OK"
@@ -653,6 +661,7 @@ describe("Workflows Remote worker Test", () => {
 			payload: { name: "John" },
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: worker.nodeID,
 			duration: expect.withinRange(0, 100),
 			success: true,
 			result: "OK"
@@ -683,6 +692,7 @@ describe("Workflows Remote worker Test", () => {
 			payload: { name: "Error" },
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: worker.nodeID,
 			duration: expect.withinRange(0, 100),
 			success: false,
 			error: {
@@ -764,6 +774,7 @@ describe("Workflows Remote worker Test", () => {
 			payload: { a: 5 },
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: worker.nodeID,
 			duration: expect.withinRange(400, 600),
 			state: "afterSignal",
 			success: true,

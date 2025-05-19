@@ -84,6 +84,7 @@ describe("Workflows Timeout Test", () => {
 			startedAt: expect.epoch(),
 			duration: expect.withinRange(8_000, 15_000),
 			finishedAt: expect.epoch(),
+			nodeID: broker.nodeID,
 			success: false,
 			timeout: 10_000,
 			error: expect.objectContaining({
@@ -101,6 +102,7 @@ describe("Workflows Timeout Test", () => {
 			startedAt: expect.epoch(),
 			duration: expect.withinRange(25_000, 35_000),
 			finishedAt: expect.epoch(),
+			nodeID: broker.nodeID,
 			success: false,
 			error: expect.objectContaining({
 				name: "WorkflowTimeoutError",
@@ -133,6 +135,7 @@ describe("Workflows Timeout Test", () => {
 			duration: expect.withinRange(15_000, 45_000),
 			promoteAt: expect.epoch(),
 			finishedAt: expect.epoch(),
+			nodeID: broker.nodeID,
 			retries: 2,
 			retryAttempts: 2,
 			timeout: 10_000,

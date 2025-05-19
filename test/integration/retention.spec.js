@@ -67,6 +67,7 @@ describe("Workflows Retention Test", () => {
 				createdAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				duration: expect.withinRange(0, 100),
 				success: true,
 				result: "OK"
@@ -90,6 +91,7 @@ describe("Workflows Retention Test", () => {
 				createdAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
+				nodeID: broker.nodeID,
 				duration: expect.withinRange(0, 200),
 				success: false,
 				error: expect.objectContaining({

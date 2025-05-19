@@ -691,8 +691,13 @@ class BaseAdapter {
 			clearTimeout(this.maintenanceTimer);
 		}
 
-		const nextTime = this.getRoundedNextTime(this.mwOpts.maintenanceTime * 1000);
+		let nextTime = this.getRoundedNextTime(this.mwOpts.maintenanceTime * 1000);
 		// console.log("Set next maintenance time:", new Date(nextTime).toISOString());
+
+		// If next time is too close, set it to 1 second later
+		if (nextTime < Date.now() + 1000) {
+			nextTime = Date.now() + 1000;
+		}
 
 		this.maintenanceTimer = setTimeout(() => this.maintenance(), nextTime - Date.now());
 	}
@@ -754,8 +759,8 @@ class BaseAdapter {
 			)
 		) {
 			await this.maintenanceDelayedJobs(wf);
+			await this.unlockMaintenance(wf, C.QUEUE_MAINTENANCE_LOCK_DELAYED);
 		}
-		await this.unlockMaintenance(wf, C.QUEUE_MAINTENANCE_LOCK_DELAYED);
 		await this.setNextDelayedMaintenance(wf);
 	}
 
