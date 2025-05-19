@@ -7,8 +7,8 @@ describe("Workflows Batch Test (on single node)", () => {
 	let broker;
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("batch.serial");
-		await broker.wf.cleanup("batch.parallel");
+		await broker.wf.cleanUp("batch.serial");
+		await broker.wf.cleanUp("batch.parallel");
 	};
 
 	beforeAll(async () => {
@@ -74,7 +74,7 @@ describe("Workflows Batch Test (on multiple nodes)", () => {
 	let workers = [];
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("batch.multi");
+		await broker.wf.cleanUp("batch.multi");
 	};
 
 	beforeAll(async () => {

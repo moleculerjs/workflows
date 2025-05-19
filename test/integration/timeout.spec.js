@@ -7,7 +7,7 @@ describe("Workflows Timeout Test", () => {
 	let broker;
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("timeout.simple");
+		await broker.wf.cleanUp("timeout.simple");
 		await broker.wf.removeSignal("signal.timeout", 1);
 	};
 

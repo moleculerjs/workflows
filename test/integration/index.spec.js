@@ -8,15 +8,15 @@ describe("Workflows Common Test", () => {
 	let FLOWS = [];
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("test.silent");
-		await broker.wf.cleanup("test.simple");
-		await broker.wf.cleanup("test.error");
-		await broker.wf.cleanup("test.context");
-		await broker.wf.cleanup("test.state");
-		await broker.wf.cleanup("test.signal");
-		await broker.wf.cleanup("test.serial");
-		await broker.wf.cleanup("test.long");
-		await broker.wf.cleanup("test.valid");
+		await broker.wf.cleanUp("test.silent");
+		await broker.wf.cleanUp("test.simple");
+		await broker.wf.cleanUp("test.error");
+		await broker.wf.cleanUp("test.context");
+		await broker.wf.cleanUp("test.state");
+		await broker.wf.cleanUp("test.signal");
+		await broker.wf.cleanUp("test.serial");
+		await broker.wf.cleanUp("test.long");
+		await broker.wf.cleanUp("test.valid");
 
 		await broker.wf.removeSignal("signal.first", 12345);
 	};
@@ -541,10 +541,10 @@ describe("Workflows Remote worker Test", () => {
 	let broker, worker;
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("remote.good");
-		await broker.wf.cleanup("remote.bad");
-		await broker.wf.cleanup("remote.signal");
-		await broker.wf.cleanup("remote.new");
+		await broker.wf.cleanUp("remote.good");
+		await broker.wf.cleanUp("remote.bad");
+		await broker.wf.cleanUp("remote.signal");
+		await broker.wf.cleanUp("remote.new");
 
 		await broker.wf.removeSignal("signal.remote", 9999);
 	};

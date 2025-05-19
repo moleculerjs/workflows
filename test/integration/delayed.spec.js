@@ -6,7 +6,7 @@ describe("Workflows Delayed Test", () => {
 	let broker;
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("delayed.simple");
+		await broker.wf.cleanUp("delayed.simple");
 	};
 
 	beforeAll(async () => {

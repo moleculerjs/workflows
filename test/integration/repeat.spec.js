@@ -8,7 +8,7 @@ describe("Workflows Repeat Test", () => {
 	let FLOWS = [];
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("repeat.work");
+		await broker.wf.cleanUp("repeat.work");
 	};
 
 	beforeAll(async () => {

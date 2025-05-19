@@ -6,9 +6,9 @@ describe("Workflows Signal Test", () => {
 	let broker;
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("signal.good");
-		await broker.wf.cleanup("signal.time");
-		await broker.wf.cleanup("signal.bad");
+		await broker.wf.cleanUp("signal.good");
+		await broker.wf.cleanUp("signal.time");
+		await broker.wf.cleanUp("signal.bad");
 		await broker.wf.removeSignal("signal.test", 555);
 	};
 

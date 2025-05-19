@@ -8,7 +8,7 @@ describe("Workflows Retries Test", () => {
 	let attempt = 0;
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("retry.simple");
+		await broker.wf.cleanUp("retry.simple");
 	};
 
 	beforeAll(async () => {

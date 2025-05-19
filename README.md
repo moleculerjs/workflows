@@ -335,7 +335,7 @@ const jobIds = await broker.wf.listActiveJobs("users.signupWorkflow");
 const jobIds = await broker.wf.listWaitingJobs("users.signupWorkflow");
 ```
 
-#### `broker.wf.cleanup(workflowName)`
+#### `broker.wf.cleanUp(workflowName)`
 - **Description:** Retries a failed workflow job.
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -343,7 +343,7 @@ const jobIds = await broker.wf.listWaitingJobs("users.signupWorkflow");
 - **Returns:** `void`
 - **Example:**
 ```js
-const job = await broker.wf.cleanup("users.signupWorkflow");
+const job = await broker.wf.cleanUp("users.signupWorkflow");
 ```
 
 #### `broker.wf.remove(workflowName, jobId)`

@@ -7,8 +7,8 @@ describe("Workflows Retention Test", () => {
 	let broker;
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("retention.good");
-		await broker.wf.cleanup("retention.bad");
+		await broker.wf.cleanUp("retention.good");
+		await broker.wf.cleanUp("retention.bad");
 	};
 
 	const createBroker = async wfOpts => {

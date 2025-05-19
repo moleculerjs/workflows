@@ -7,8 +7,8 @@ describe("Workflows Job ID collision Test", () => {
 	let broker;
 
 	const cleanup = async () => {
-		await broker.wf.cleanup("collision.good");
-		await broker.wf.cleanup("collision.bad");
+		await broker.wf.cleanUp("collision.good");
+		await broker.wf.cleanUp("collision.bad");
 	};
 
 	const createBroker = async jobIdCollision => {
