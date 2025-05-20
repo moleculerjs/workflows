@@ -3,7 +3,7 @@ const WorkflowsMiddleware = require("../../src");
 require("../jest.setup.js");
 
 describe("Workflows Signal Test", () => {
-	let broker;
+	let broker, worker;
 
 	const cleanup = async () => {
 		await broker.wf.cleanUp("signal.good");
@@ -14,12 +14,20 @@ describe("Workflows Signal Test", () => {
 
 	beforeAll(async () => {
 		broker = new ServiceBroker({
+			nodeID: "master",
 			logger: false,
 			logLevel: "error",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis", maintenanceTime: 3 })]
+			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
 		});
 
-		broker.createService({
+		worker = new ServiceBroker({
+			nodeID: "worker",
+			logger: false,
+			logLevel: "error",
+			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+		});
+
+		worker.createService({
 			name: "signal",
 			workflows: {
 				good: {
@@ -39,12 +47,14 @@ describe("Workflows Signal Test", () => {
 		});
 
 		await broker.start();
+		await worker.start();
 		await cleanup();
 	});
 
 	afterAll(async () => {
-		await broker.wf.adapter?.dumpWorkflows("./tmp");
+		await worker.wf.adapter?.dumpWorkflows("./tmp");
 		await cleanup();
+		await worker.stop();
 		await broker.stop();
 	});
 
@@ -72,7 +82,8 @@ describe("Workflows Signal Test", () => {
 			createdAt: expect.epoch(),
 			startedAt: expect.epoch(),
 			duration: expect.withinRange(10_000, 15_000),
-			finishedAt: expect.epoch(), nodeID: broker.nodeID,
+			finishedAt: expect.epoch(),
+			nodeID: worker.nodeID,
 			success: false,
 			error: expect.objectContaining({
 				name: "WorkflowSignalTimeoutError",
@@ -82,9 +93,9 @@ describe("Workflows Signal Test", () => {
 
 		const events = await broker.wf.getEvents("signal.good", job1.id);
 		expect(events).toStrictEqual([
-			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
+			{ nodeID: worker.nodeID, ts: expect.epoch(), type: "started" },
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 1,
@@ -95,7 +106,7 @@ describe("Workflows Signal Test", () => {
 				timeout: "10s"
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 2,
@@ -110,7 +121,7 @@ describe("Workflows Signal Test", () => {
 				})
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "failed",
 				error: expect.objectContaining({
@@ -150,7 +161,8 @@ describe("Workflows Signal Test", () => {
 			retries: 2,
 			retryAttempts: 2,
 			promoteAt: expect.epoch(),
-			finishedAt: expect.epoch(), nodeID: broker.nodeID,
+			finishedAt: expect.epoch(),
+			nodeID: worker.nodeID,
 			success: false,
 			error: expect.objectContaining({
 				name: "WorkflowSignalTimeoutError",
@@ -160,9 +172,9 @@ describe("Workflows Signal Test", () => {
 
 		const events = await broker.wf.getEvents("signal.good", job1.id);
 		expect(events).toStrictEqual([
-			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
+			{ nodeID: worker.nodeID, ts: expect.epoch(), type: "started" },
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 1,
@@ -173,7 +185,7 @@ describe("Workflows Signal Test", () => {
 				timeout: "10s"
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 2,
@@ -188,7 +200,7 @@ describe("Workflows Signal Test", () => {
 				})
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "failed",
 				error: expect.objectContaining({
@@ -196,9 +208,9 @@ describe("Workflows Signal Test", () => {
 					message: expect.stringMatching(/Signal timed out/)
 				})
 			},
-			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
+			{ nodeID: worker.nodeID, ts: expect.epoch(), type: "started" },
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 2,
@@ -213,7 +225,7 @@ describe("Workflows Signal Test", () => {
 				})
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "failed",
 				error: expect.objectContaining({
@@ -221,9 +233,9 @@ describe("Workflows Signal Test", () => {
 					message: expect.stringMatching(/Signal timed out/)
 				})
 			},
-			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
+			{ nodeID: worker.nodeID, ts: expect.epoch(), type: "started" },
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 2,
@@ -238,7 +250,7 @@ describe("Workflows Signal Test", () => {
 				})
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "failed",
 				error: expect.objectContaining({
@@ -282,16 +294,17 @@ describe("Workflows Signal Test", () => {
 			retries: 2,
 			retryAttempts: 1,
 			promoteAt: expect.epoch(),
-			finishedAt: expect.epoch(), nodeID: broker.nodeID,
+			finishedAt: expect.epoch(),
+			nodeID: worker.nodeID,
 			success: true,
 			result: "OK"
 		});
 
 		const events = await broker.wf.getEvents("signal.good", job1.id);
 		expect(events).toStrictEqual([
-			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
+			{ nodeID: worker.nodeID, ts: expect.epoch(), type: "started" },
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 1,
@@ -302,7 +315,7 @@ describe("Workflows Signal Test", () => {
 				timeout: "10s"
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 2,
@@ -317,7 +330,7 @@ describe("Workflows Signal Test", () => {
 				})
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "failed",
 				error: expect.objectContaining({
@@ -325,9 +338,9 @@ describe("Workflows Signal Test", () => {
 					message: expect.stringMatching(/Signal timed out/)
 				})
 			},
-			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
+			{ nodeID: worker.nodeID, ts: expect.epoch(), type: "started" },
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 2,
@@ -338,7 +351,7 @@ describe("Workflows Signal Test", () => {
 				timeout: "10s"
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "finished"
 			}
@@ -373,16 +386,17 @@ describe("Workflows Signal Test", () => {
 			createdAt: expect.epoch(),
 			startedAt: expect.epoch(),
 			duration: expect.withinRange(4_000, 10_000),
-			finishedAt: expect.epoch(), nodeID: broker.nodeID,
+			finishedAt: expect.epoch(),
+			nodeID: worker.nodeID,
 			success: true,
 			result: "OK"
 		});
 
 		const events = await broker.wf.getEvents("signal.good", job1.id);
 		expect(events).toStrictEqual([
-			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
+			{ nodeID: worker.nodeID, ts: expect.epoch(), type: "started" },
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 1,
@@ -393,7 +407,7 @@ describe("Workflows Signal Test", () => {
 				timeout: "10s"
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 2,
@@ -404,7 +418,7 @@ describe("Workflows Signal Test", () => {
 				timeout: "10s"
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "finished"
 			}
@@ -431,16 +445,17 @@ describe("Workflows Signal Test", () => {
 			createdAt: expect.epoch(),
 			startedAt: expect.epoch(),
 			duration: expect.withinRange(0, 1000),
-			finishedAt: expect.epoch(), nodeID: broker.nodeID,
+			finishedAt: expect.epoch(),
+			nodeID: worker.nodeID,
 			success: true,
 			result: "OK"
 		});
 
 		const events = await broker.wf.getEvents("signal.good", job1.id);
 		expect(events).toStrictEqual([
-			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "started" },
+			{ nodeID: worker.nodeID, ts: expect.epoch(), type: "started" },
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 1,
@@ -451,7 +466,7 @@ describe("Workflows Signal Test", () => {
 				timeout: "10s"
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "task",
 				taskId: 2,
@@ -462,7 +477,7 @@ describe("Workflows Signal Test", () => {
 				timeout: "10s"
 			},
 			{
-				nodeID: broker.nodeID,
+				nodeID: worker.nodeID,
 				ts: expect.epoch(),
 				type: "finished"
 			}

@@ -173,8 +173,6 @@ class RedisAdapter extends BaseAdapter {
 				this.subClient = client;
 				this.connected = true;
 
-				await client.subscribe(this.getKey(C.QUEUE_CATEGORY_SIGNAL));
-
 				resolve(client);
 				//this.logger.info("Workflows Redis adapter connected.");
 			});
@@ -189,7 +187,7 @@ class RedisAdapter extends BaseAdapter {
 			});
 			client.on("messageBuffer", (channelBuf, message) => {
 				const channel = channelBuf.toString();
-				if (channel === this.getKey(C.QUEUE_CATEGORY_SIGNAL)) {
+				if (channel.startsWith(this.getKey(C.QUEUE_CATEGORY_SIGNAL + ":"))) {
 					const json = this.serializer.deserialize(message);
 					this.logger.debug("Signal received on Pub/Sub", json);
 					const pKey = json.signal + ":" + json.key;
@@ -874,7 +872,7 @@ class RedisAdapter extends BaseAdapter {
 			await this.commandClient.set(this.getSignalKey(signalName, key), content);
 		}
 
-		await this.commandClient.publish(this.getKey(C.QUEUE_CATEGORY_SIGNAL), content);
+		await this.commandClient.publish(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName), content);
 	}
 
 	/**
@@ -914,6 +912,8 @@ class RedisAdapter extends BaseAdapter {
 		if (found) {
 			return found.promise;
 		}
+
+		await this.subClient?.subscribe(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName));
 
 		const item = {};
 		item.promise = new Promise(resolve => (item.resolve = resolve));
@@ -1891,9 +1891,19 @@ class RedisAdapter extends BaseAdapter {
 
 		const deserializeData = value => {
 			if (_.isString(value) || Buffer.isBuffer(value)) {
-				return this.serializer.deserialize(value);
+				try {
+					return this.serializer.deserialize(value);
+				} catch (e) {
+					// If deserialization fails, return the original value
+					return value;
+				}
 			} else if (_.isObject(value)) {
-				return this.deserializeJob(value);
+				try {
+					return this.deserializeJob(value);
+				} catch (e) {
+					// If deserialization fails, return the original value
+					return value;
+				}
 			}
 
 			return value;

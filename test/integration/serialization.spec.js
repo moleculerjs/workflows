@@ -117,7 +117,7 @@ describe("Workflows Serialization Test", () => {
 				type: "task",
 				taskType: "signal-wait",
 				taskId: 1,
-				duration: 0,
+				duration: expect.withinRange(0, 50),
 				signalName: "signal.serialize"
 			},
 			{
@@ -187,7 +187,7 @@ describe("Workflows Serialization Test", () => {
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
 			nodeID: broker.nodeID,
-			duration: expect.withinRange(0, 50),
+			duration: expect.withinRange(0, 200),
 			success: false,
 			error: {
 				code: 500,

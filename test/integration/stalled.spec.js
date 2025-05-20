@@ -30,7 +30,7 @@ describe("Workflows Stalled Job Test", () => {
 			middlewares: [
 				WorkflowsMiddleware({
 					adapter: "Redis",
-					maintenanceTime: 3,
+					maintenanceTime: 4,
 					lockExpiration: 5
 				})
 			]
