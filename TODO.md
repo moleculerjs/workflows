@@ -4,9 +4,6 @@
   - [ ] maxDelay
   - [ ] exponentialFactor: 2
 
-- [ ] Integration tests
-  - [ ] Retries (ctx.mcall)
-  
 - [ ] Metrics
 - [ ] Tracing
 
