@@ -108,6 +108,9 @@ describe("Workflows Stalled Job Test", () => {
 						// Send event to Moleculer services
 						await ctx.broadcast("user.verified", user);
 
+						// Multi action call
+						await ctx.mcall([{ action: "users.multi1" }, { action: "users.multi2" }]);
+
 						// Other non-moleculer related workflow task
 						await ctx.wf.task("httpPost", async () => {
 							FLOWS.push("taskCall - httpPost");
@@ -158,6 +161,16 @@ describe("Workflows Stalled Job Test", () => {
 				remove() {
 					FLOWS.push("actionCall - users.remove");
 					return true;
+				},
+
+				multi1() {
+					FLOWS.push("actionCall - users.multi1");
+					return "multi1";
+				},
+
+				multi2() {
+					FLOWS.push("actionCall - users.multi2");
+					return "multi2";
 				}
 			},
 
@@ -311,6 +324,8 @@ describe("Workflows Stalled Job Test", () => {
 			"actionCall - mail.send",
 			"actionCall - users.update",
 			"broadcastCall - user.verified",
+			"actionCall - users.multi1",
+			"actionCall - users.multi2",
 			"taskCall - httpPost",
 			"actionCall - mail.send"
 		]);
@@ -453,8 +468,17 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				duration: expect.any(Number),
 				nodeID: "worker",
-				taskName: "httpPost",
+				result: ["multi1", "multi2"],
 				taskId: 15,
+				taskType: "actionMcall",
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
+				duration: expect.any(Number),
+				nodeID: "worker",
+				taskName: "httpPost",
+				taskId: 16,
 				taskType: "custom",
 				ts: expect.epoch(),
 				type: "task"
@@ -464,7 +488,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				result: true,
-				taskId: 16,
+				taskId: 17,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task"
@@ -472,7 +496,7 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				nodeID: "worker",
 				state: "DONE",
-				taskId: 17,
+				taskId: 18,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"
@@ -550,6 +574,8 @@ describe("Workflows Stalled Job Test", () => {
 			"actionCall - mail.send",
 			"actionCall - users.update",
 			"broadcastCall - user.verified",
+			"actionCall - users.multi1",
+			"actionCall - users.multi2",
 			"taskCall - httpPost",
 			"taskCall - httpPost", // Retried
 			"actionCall - mail.send",
@@ -694,8 +720,17 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				duration: expect.any(Number),
 				nodeID: "worker",
-				taskName: "httpPost",
+				result: ["multi1", "multi2"],
 				taskId: 15,
+				taskType: "actionMcall",
+				ts: expect.epoch(),
+				type: "task"
+			},
+			{
+				duration: expect.any(Number),
+				nodeID: "worker",
+				taskName: "httpPost",
+				taskId: 16,
 				taskType: "custom",
 				ts: expect.epoch(),
 				type: "task",
@@ -730,7 +765,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				taskName: "httpPost",
-				taskId: 15,
+				taskId: 16,
 				taskType: "custom",
 				ts: expect.epoch(),
 				type: "task"
@@ -739,7 +774,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				action: "mail.send",
-				taskId: 16,
+				taskId: 17,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task",
@@ -775,7 +810,7 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				nodeID: "worker",
 				result: true,
-				taskId: 16,
+				taskId: 17,
 				taskType: "actionCall",
 				ts: expect.epoch(),
 				type: "task"
@@ -783,7 +818,7 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				nodeID: "worker",
 				state: "DONE",
-				taskId: 17,
+				taskId: 18,
 				taskType: "state",
 				ts: expect.epoch(),
 				type: "task"

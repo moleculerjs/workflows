@@ -6,8 +6,6 @@
 
 - [ ] Integration tests
   - [ ] Retries (ctx.mcall)
-  - [ ] middleware hooks
-  - [ ] limiting maintenance execution at multiple workers
   
 - [ ] Metrics
 - [ ] Tracing
