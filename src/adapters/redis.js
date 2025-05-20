@@ -21,7 +21,6 @@ const { parseDuration, humanize, getCronNextTime } = require("../utils");
  * @typedef {import("ioredis").RedisOptions} RedisOptions
  * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
  * @typedef {import("moleculer").LoggerInstance} Logger Logger instance
- * @typedef {import("../index").Channel} Channel Base channel definition
  * @typedef {import("./base").BaseDefaultOptions} BaseDefaultOptions Base adapter options
  */
 
@@ -41,7 +40,7 @@ const JOB_FIELDS_NUMERIC = [
 	"retryAttempts"
 ];
 
-const JOB_FIELDS = ["id", "parent", ...JOB_FIELDS_JSON, ...JOB_FIELDS_NUMERIC, "success", "nodeID"];
+// const JOB_FIELDS = ["id", "parent", ...JOB_FIELDS_JSON, ...JOB_FIELDS_NUMERIC, "success", "nodeID"];
 
 /**
  * Redis Streams adapter
@@ -139,7 +138,7 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	createCommandClient() {
-		return new Promise((resolve, reject) => {
+		return new Promise(resolve => {
 			const client = this.createRedisClient();
 
 			client.on("ready", () => {
@@ -161,7 +160,7 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	createSignalClient() {
-		return new Promise((resolve, reject) => {
+		return new Promise(resolve => {
 			const client = this.createRedisClient();
 
 			client.on("ready", async () => {
@@ -1756,48 +1755,97 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
+	 * Format the result of zrange command to an array of objects.
+	 *
+	 * @param {*} list
+	 * @param {*} timeField
+	 * @returns
+	 */
+	formatZrangeResultToObject(list, timeField = "finishedAt") {
+		const arr = [];
+		for (let i = 0; i < list.length; i += 2) {
+			arr.push({
+				id: list[i],
+				[timeField]: Number(list[i + 1])
+			});
+		}
+
+		return arr;
+	}
+
+	/**
 	 * List all completed job IDs for a workflow.
 	 * @param {string} workflowName
-	 * @returns {Promise<string[]>}
+	 * @returns {Promise<any>}
 	 */
 	async listCompletedJobs(workflowName) {
-		return this.commandClient.zrange(this.getKey(workflowName, C.QUEUE_COMPLETED), 0, -1);
+		return this.formatZrangeResultToObject(
+			await this.commandClient.zrange(
+				this.getKey(workflowName, C.QUEUE_COMPLETED),
+				0,
+				-1,
+				"WITHSCORES"
+			)
+		);
 	}
 
 	/**
 	 * List all failed job IDs for a workflow.
 	 * @param {string} workflowName
-	 * @returns {Promise<string[]>}
+	 * @returns {Promise<any>}
 	 */
 	async listFailedJobs(workflowName) {
-		return this.commandClient.zrange(this.getKey(workflowName, C.QUEUE_FAILED), 0, -1);
+		return this.formatZrangeResultToObject(
+			await this.commandClient.zrange(
+				this.getKey(workflowName, C.QUEUE_FAILED),
+				0,
+				-1,
+				"WITHSCORES"
+			)
+		);
 	}
 
 	/**
 	 * List all delayed job IDs for a workflow.
 	 * @param {string} workflowName
-	 * @returns {Promise<string[]>}
+	 * @returns {Promise<any>}
 	 */
 	async listDelayedJobs(workflowName) {
-		return this.commandClient.zrange(this.getKey(workflowName, C.QUEUE_DELAYED), 0, -1);
+		return this.formatZrangeResultToObject(
+			await this.commandClient.zrange(
+				this.getKey(workflowName, C.QUEUE_DELAYED),
+				0,
+				-1,
+				"WITHSCORES"
+			),
+			"promoteAt"
+		);
 	}
 
 	/**
 	 * List all active job IDs for a workflow.
 	 * @param {string} workflowName
-	 * @returns {Promise<string[]>}
+	 * @returns {Promise<any>}
 	 */
 	async listActiveJobs(workflowName) {
-		return this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_ACTIVE), 0, -1);
+		return (
+			await this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_ACTIVE), 0, -1)
+		).map(jobId => {
+			return { id: jobId };
+		});
 	}
 
 	/**
 	 * List all waiting job IDs for a workflow.
 	 * @param {string} workflowName
-	 * @returns {Promise<string[]>}
+	 * @returns {Promise<any>}
 	 */
 	async listWaitingJobs(workflowName) {
-		return this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_WAITING), 0, -1);
+		return (
+			await this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_WAITING), 0, -1)
+		).map(jobId => {
+			return { id: jobId };
+		});
 	}
 
 	/**

@@ -17,6 +17,7 @@ describe("Workflows Common Test", () => {
 		await broker.wf.cleanUp("test.serial");
 		await broker.wf.cleanUp("test.long");
 		await broker.wf.cleanUp("test.valid");
+		await broker.wf.cleanUp("test.disabled");
 
 		await broker.wf.removeSignal("signal.first", 12345);
 	};
@@ -86,6 +87,12 @@ describe("Workflows Common Test", () => {
 					},
 					async handler(ctx) {
 						return `Hello, ${ctx.params.name}`;
+					}
+				},
+				disabled: {
+					enabled: false,
+					async handler() {
+						return "This workflow is disabled";
 					}
 				}
 			}
@@ -474,6 +481,21 @@ describe("Workflows Common Test", () => {
 		});
 	});
 
+	it("should not execute disabled workflow job", async () => {
+		const job = await broker.wf.run("test.disabled");
+
+		await delay(1000);
+
+		const job2 = await broker.wf.get("test.disabled", job.id);
+		expect(job2).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch()
+		});
+
+		const events = await broker.wf.getEvents("test.disabled", job.id);
+		expect(events.length).toBe(0);
+	});
+
 	describe("Workflow parameter validation", () => {
 		it("should validate workflow parameters", async () => {
 			const job = await broker.wf.run("test.valid", { name: "John" });
@@ -787,14 +809,14 @@ describe("Workflows Remote worker Test", () => {
 			const jobs = await broker.wf.listCompletedJobs("remote.good");
 			expect(jobs).toBeInstanceOf(Array);
 			expect(jobs.length).toBe(2);
-			expect(jobs[0]).toEqual(expect.any(String));
+			expect(jobs[0]).toStrictEqual({ id: expect.any(String), finishedAt: expect.epoch() });
 		});
 
 		it("should list all failed jobIds", async () => {
 			const jobs = await broker.wf.listFailedJobs("remote.bad");
 			expect(jobs).toBeInstanceOf(Array);
 			expect(jobs.length).toBe(1);
-			expect(jobs[0]).toEqual(expect.any(String));
+			expect(jobs[0]).toStrictEqual({ id: expect.any(String), finishedAt: expect.epoch() });
 		});
 
 		it("should return empty lists", async () => {
@@ -816,7 +838,7 @@ describe("Workflows Remote worker Test", () => {
 			const jobs = await broker.wf.listWaitingJobs("remote.new");
 			expect(jobs).toBeInstanceOf(Array);
 			expect(jobs.length).toBe(1);
-			expect(jobs[0]).toBe(job1.id);
+			expect(jobs[0]).toStrictEqual({ id: job1.id });
 		});
 
 		it("should list active jobs", async () => {
@@ -827,7 +849,7 @@ describe("Workflows Remote worker Test", () => {
 			const jobs = await broker.wf.listActiveJobs("remote.signal");
 			expect(jobs).toBeInstanceOf(Array);
 			expect(jobs.length).toBe(1);
-			expect(jobs[0]).toBe(job1.id);
+			expect(jobs[0]).toStrictEqual({ id: job1.id });
 
 			await broker.wf.triggerSignal("signal.remote", 8888);
 		});
@@ -838,7 +860,7 @@ describe("Workflows Remote worker Test", () => {
 			const jobs = await broker.wf.listDelayedJobs("remote.good");
 			expect(jobs).toBeInstanceOf(Array);
 			expect(jobs.length).toBe(1);
-			expect(jobs[0]).toBe(job1.id);
+			expect(jobs[0]).toStrictEqual({ id: job1.id, promoteAt: job1.promoteAt });
 		});
 	});
 });

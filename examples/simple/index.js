@@ -331,24 +331,28 @@ const broker = new ServiceBroker({
 					drawHorizontalLine: (index, count) => index == 0 || index == 1 || index == count
 				};
 
-				const rows = [[kleur.bold("Job ID"), kleur.bold("Status")]];
+				const rows = [[kleur.bold("Job ID"), kleur.bold("Status"), kleur.bold("Time")]];
 
 				if (!args.type || args.type == "active" || args.type == "live") {
 					const active = await broker.wf.listActiveJobs(options.workflow || "test.wf1");
-					for (const jobId of active) {
-						rows.push([jobId, kleur.magenta("Active")]);
+					for (const item of active) {
+						rows.push([item.id, kleur.magenta("Active"), ""]);
 					}
 				}
 				if (!args.type || args.type == "delayed" || args.type == "live") {
 					const delayed = await broker.wf.listDelayedJobs(options.workflow || "test.wf1");
-					for (const jobId of delayed) {
-						rows.push([jobId, kleur.yellow("Delayed")]);
+					for (const item of delayed) {
+						rows.push([
+							item.id,
+							kleur.yellow("Delayed"),
+							new Date(item.promoteAt).toLocaleTimeString()
+						]);
 					}
 				}
 				if (!args.type || args.type == "waiting" || args.type == "live") {
 					const waiting = await broker.wf.listWaitingJobs(options.workflow || "test.wf1");
 					for (const jobId of waiting) {
-						rows.push([jobId, kleur.cyan("Waiting")]);
+						rows.push([jobId, kleur.cyan("Waiting"), ""]);
 					}
 				}
 
@@ -356,14 +360,22 @@ const broker = new ServiceBroker({
 					const completed = await broker.wf.listCompletedJobs(
 						options.workflow || "test.wf1"
 					);
-					for (const jobId of completed) {
-						rows.push([jobId, kleur.green("Completed")]);
+					for (const item of completed) {
+						rows.push([
+							item.id,
+							kleur.green("Completed"),
+							new Date(item.finishedAt).toLocaleTimeString()
+						]);
 					}
 				}
 				if (!args.type || args.type == "failed" || args.type == "closed") {
 					const failed = await broker.wf.listFailedJobs(options.workflow || "test.wf1");
-					for (const jobId of failed) {
-						rows.push([jobId, kleur.red("Failed")]);
+					for (const item of failed) {
+						rows.push([
+							item.id,
+							kleur.red("Failed"),
+							new Date(item.finishedAt).toLocaleTimeString()
+						]);
 					}
 				}
 
@@ -447,7 +459,7 @@ if (!isNoService) {
 					});
 					this.logger.info("Signal result", signalRes);
 
-					//await ctx.call("test.danger", { name: "John Doe" });
+					await ctx.call("test.danger", { name: "John Doe" });
 
 					this.logger.info("WF handler end", ctx.wf.jobId);
 

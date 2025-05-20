@@ -52,6 +52,7 @@
     "moleculer": "^0.14.35",
     "moleculer-repl": "^0.7.4",
     "moleculer-web": "^0.10.8",
+    "msgpack5": "^6.0.2",
     "nodemon": "^3.1.10",
     "npm-check-updates": "^18.0.1",
     "prettier": "^3.5.3"

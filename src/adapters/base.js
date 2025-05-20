@@ -14,7 +14,7 @@ const {
 } = require("../errors");
 const { Serializers } = require("moleculer");
 const C = require("../constants");
-const { circa, parseDuration } = require("../utils");
+const { parseDuration } = require("../utils");
 
 /**
  * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
@@ -777,7 +777,10 @@ class BaseAdapter {
 			let delay;
 			if (nextTime != null) {
 				delay = Math.max(0, nextTime - now + Math.floor(Math.random() * 50));
-				this.logger.debug(
+				this.log(
+					"debug",
+					wf.name,
+					null,
 					"Set next delayed maintenance time:",
 					new Date(nextTime).toISOString()
 				);
