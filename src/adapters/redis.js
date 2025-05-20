@@ -24,6 +24,8 @@ const { parseDuration, humanize, getCronNextTime } = require("../utils");
  * @typedef {import("./base").BaseDefaultOptions} BaseDefaultOptions Base adapter options
  */
 
+const SIGNAL_EMPTY_KEY = "null";
+
 const JOB_FIELDS_JSON = ["payload", "repeat", "result", "error", "state"];
 
 const JOB_FIELDS_NUMERIC = [
@@ -40,7 +42,11 @@ const JOB_FIELDS_NUMERIC = [
 	"retryAttempts"
 ];
 
-// const JOB_FIELDS = ["id", "parent", ...JOB_FIELDS_JSON, ...JOB_FIELDS_NUMERIC, "success", "nodeID"];
+const JOB_FIELDS_BOOLEAN = ["success"];
+
+// const JOB_FIELDS_STRING = ["id", "parent", "nodeID"];
+
+// const JOB_FIELDS = [...JOB_FIELDS_STRING, ...JOB_FIELDS_JSON, ...JOB_FIELDS_NUMERIC, ...JOB_FIELDS_BOOLEAN];
 
 /**
  * Redis Streams adapter
@@ -181,7 +187,8 @@ class RedisAdapter extends BaseAdapter {
 				this.subClient = null;
 				//this.logger.info("Workflows Redis adapter disconnected.");
 			});
-			client.on("message", (channel, message) => {
+			client.on("messageBuffer", (channelBuf, message) => {
+				const channel = channelBuf.toString();
 				if (channel === this.getKey(C.QUEUE_CATEGORY_SIGNAL)) {
 					const json = this.serializer.deserialize(message);
 					this.logger.debug("Signal received on Pub/Sub", json);
@@ -560,9 +567,11 @@ class RedisAdapter extends BaseAdapter {
 		let job;
 
 		if (fields === true) {
-			job = await this.commandClient.hgetall(this.getKey(workflowName, C.QUEUE_JOB, jobId));
+			job = await this.commandClient.hgetallBuffer(
+				this.getKey(workflowName, C.QUEUE_JOB, jobId)
+			);
 		} else {
-			const values = await this.commandClient.hmget(
+			const values = await this.commandClient.hmgetBuffer(
 				this.getKey(workflowName, C.QUEUE_JOB, jobId),
 				fields
 			);
@@ -587,7 +596,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<Object[]>} Resolves with an array of job events.
 	 */
 	async getJobEvents(workflowName, jobId) {
-		const jobEvents = await this.commandClient.lrange(
+		const jobEvents = await this.commandClient.lrangeBuffer(
 			this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId),
 			0,
 			-1
@@ -832,7 +841,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns
 	 */
 	async getState(workflowName, jobId) {
-		const state = await this.commandClient.hget(
+		const state = await this.commandClient.hgetBuffer(
 			this.getKey(workflowName, C.QUEUE_JOB, jobId),
 			"state"
 		);
@@ -849,25 +858,20 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the signal is triggered.
 	 */
 	async triggerSignal(signalName, key, payload) {
+		if (key == null) key = SIGNAL_EMPTY_KEY;
 		const content = this.serializer.serialize({
 			signal: signalName,
 			key,
 			payload
 		});
 
-		this.log("debug", signalName, key, "Trigger signal", content.toString());
+		this.log("debug", signalName, key, "Trigger signal", payload);
 
 		const exp = parseDuration(this.mwOpts.signalExpiration);
 		if (exp != null && exp > 0) {
-			await this.commandClient.set(
-				this.getSignalKey(signalName, key),
-				content,
-				"NX",
-				"PX",
-				exp
-			);
+			await this.commandClient.set(this.getSignalKey(signalName, key), content, "PX", exp);
 		} else {
-			await this.commandClient.set(this.getSignalKey(signalName, key), content, "NX");
+			await this.commandClient.set(this.getSignalKey(signalName, key), content);
 		}
 
 		await this.commandClient.publish(this.getKey(C.QUEUE_CATEGORY_SIGNAL), content);
@@ -881,6 +885,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the signal is triggered.
 	 */
 	async removeSignal(signalName, key) {
+		if (key == null) key = SIGNAL_EMPTY_KEY;
 		this.log("debug", signalName, key, "Remove signal", signalName, key);
 
 		await this.commandClient.del(this.getSignalKey(signalName, key));
@@ -894,7 +899,8 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<unknown>} Resolves with the signal payload.
 	 */
 	async waitForSignal(signalName, key) {
-		const content = await this.commandClient.get(this.getSignalKey(signalName, key));
+		if (key == null) key = SIGNAL_EMPTY_KEY;
+		const content = await this.commandClient.getBuffer(this.getSignalKey(signalName, key));
 		if (content) {
 			const json = this.serializer.deserialize(content);
 			if (key === json.key) {
@@ -1186,22 +1192,26 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Object} The deserialized job object.
 	 */
 	deserializeJob(job) {
-		const res = { ...job };
+		const res = {};
 
-		for (const field of JOB_FIELDS_JSON) {
-			if (job[field] != null) {
-				res[field] = job[field] !== "" ? this.serializer.deserialize(job[field]) : null;
+		for (const [key, value] of Object.entries(job)) {
+			if (JOB_FIELDS_JSON.includes(key)) {
+				if (value != null) {
+					res[key] = value !== "" ? this.serializer.deserialize(value) : null;
+				}
+			} else if (JOB_FIELDS_NUMERIC.includes(key)) {
+				if (value != null) {
+					res[key] = value !== "" ? Number(value) : null;
+				}
+			} else if (JOB_FIELDS_BOOLEAN.includes(key)) {
+				if (value != null) {
+					res[key] = String(value) === "true";
+				}
+			} else {
+				if (value != null) {
+					res[key] = value !== "" ? String(value) : null;
+				}
 			}
-		}
-
-		for (const field of JOB_FIELDS_NUMERIC) {
-			if (job[field] != null) {
-				res[field] = job[field] !== "" ? Number(job[field]) : null;
-			}
-		}
-
-		if (job.success) {
-			res.success = job.success === "true" || job.success === true;
 		}
 
 		return res;
@@ -1879,15 +1889,28 @@ class RedisAdapter extends BaseAdapter {
 			keys.push(...res[1]);
 		} while (cursor !== "0");
 
+		const deserializeData = value => {
+			if (_.isString(value) || Buffer.isBuffer(value)) {
+				return this.serializer.deserialize(value);
+			} else if (_.isObject(value)) {
+				return this.deserializeJob(value);
+			}
+
+			return value;
+		};
+
 		const dump = {};
 		for (const key of keys) {
 			const type = await client.type(key);
 			if (type === "list") {
-				dump[key] = await client.lrange(key, 0, -1);
+				const list = await client.lrangeBuffer(key, 0, -1);
+				dump[key] = key.includes(":" + C.QUEUE_JOB_EVENTS + ":")
+					? list.map(item => deserializeData(item))
+					: list.map(item => item);
 			} else if (type === "set") {
 				dump[key] = await client.smembers(key);
 			} else if (type === "hash") {
-				dump[key] = await client.hgetall(key);
+				dump[key] = deserializeData(await client.hgetallBuffer(key));
 			} else if (type === "zset") {
 				const members = await client.zrange(key, 0, -1, "WITHSCORES");
 				// Convert flat array to [{member, score}]
@@ -1897,7 +1920,7 @@ class RedisAdapter extends BaseAdapter {
 				}
 				dump[key] = arr;
 			} else if (type === "string") {
-				dump[key] = await client.get(key);
+				dump[key] = deserializeData(await client.getBuffer(key));
 			} else {
 				dump[key] = null;
 			}

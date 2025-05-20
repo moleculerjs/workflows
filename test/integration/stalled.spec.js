@@ -453,7 +453,7 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				duration: expect.any(Number),
 				nodeID: "worker",
-				run: "httpPost",
+				taskName: "httpPost",
 				taskId: 15,
 				taskType: "custom",
 				ts: expect.epoch(),
@@ -694,7 +694,7 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				duration: expect.any(Number),
 				nodeID: "worker",
-				run: "httpPost",
+				taskName: "httpPost",
 				taskId: 15,
 				taskType: "custom",
 				ts: expect.epoch(),
@@ -729,7 +729,7 @@ describe("Workflows Stalled Job Test", () => {
 			{
 				duration: expect.any(Number),
 				nodeID: "worker",
-				run: "httpPost",
+				taskName: "httpPost",
 				taskId: 15,
 				taskType: "custom",
 				ts: expect.epoch(),

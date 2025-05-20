@@ -407,11 +407,11 @@ class BaseAdapter {
 			}
 		};
 
-		ctx.wf.task = async (name, fn) => {
+		ctx.wf.task = async (taskName, fn) => {
 			taskId++;
 			const startTime = Date.now();
 
-			if (!name) name = `custom-${taskId}`;
+			if (!taskName) taskName = `custom-${taskId}`;
 			if (!fn) throw new WorkflowError("Missing function to run.", 400, "MISSING_FUNCTION");
 
 			const event = getCurrentTaskEvent();
@@ -419,13 +419,13 @@ class BaseAdapter {
 
 			try {
 				const result = await fn();
-				await taskEvent("custom", { run: name, result }, startTime);
+				await taskEvent("custom", { taskName, result }, startTime);
 				return result;
 			} catch (err) {
 				await taskEvent(
 					"custom",
 					{
-						run: name,
+						taskName,
 						error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
 					},
 					startTime
@@ -874,7 +874,7 @@ class BaseAdapter {
 			);
 		}
 
-		if (!re.test(key)) {
+		if (key != null && !re.test(key)) {
 			throw new WorkflowError(
 				`Invalid signal key '${key}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
 				400,
