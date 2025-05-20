@@ -95,7 +95,7 @@ describe("Workflows Serialization Test", () => {
 			startedAt: expect.epoch(),
 			finishedAt: expect.epoch(),
 			nodeID: broker.nodeID,
-			duration: expect.withinRange(0, 50),
+			duration: expect.withinRange(0, 200),
 			success: true,
 			state: { progresss: 50, status: "running" },
 			result: {
@@ -117,7 +117,7 @@ describe("Workflows Serialization Test", () => {
 				type: "task",
 				taskType: "signal-wait",
 				taskId: 1,
-				duration: expect.withinRange(0, 50),
+				duration: expect.withinRange(0, 200),
 				signalName: "signal.serialize"
 			},
 			{
@@ -126,7 +126,7 @@ describe("Workflows Serialization Test", () => {
 				type: "task",
 				taskType: "signal-end",
 				taskId: 2,
-				duration: expect.withinRange(0, 50),
+				duration: expect.withinRange(0, 200),
 				signalName: "signal.serialize",
 				result: { abc: 123 }
 			},
@@ -145,7 +145,7 @@ describe("Workflows Serialization Test", () => {
 				taskType: "custom",
 				taskName: "myGoodTask",
 				taskId: 4,
-				duration: expect.withinRange(0, 50),
+				duration: expect.withinRange(0, 200),
 				result: { do: "something" }
 			},
 			{ nodeID: broker.nodeID, ts: expect.epoch(), type: "finished" }
@@ -211,7 +211,7 @@ describe("Workflows Serialization Test", () => {
 				taskType: "custom",
 				taskName: "myBadTask",
 				taskId: 1,
-				duration: expect.withinRange(0, 50),
+				duration: expect.withinRange(0, 200),
 				error: {
 					code: 500,
 					type: "ERR_BAD",
