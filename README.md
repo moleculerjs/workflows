@@ -174,6 +174,80 @@ broker.createService({
 });
 ```
 
+## Journaling
+
+The middleware uses an event log for replay after failures. This means that non-deterministic results inside the workflow handlers need to be stored in the event log. To make it easier for developers, the middleware wraps the `ctx.call` and other Moleculer functions automatically and stores the execution result in the event log. It means, if you call a Moleculer action in your workflow and after the calling, the worker crashed, the workflows middleware restart the job and skip the already executed action calls. For example a new entity creator action won't be called multiple times in case of failure.
+
+The following functions are protected with journaling:
+
+- `ctx.call` - Call a Moleculer action
+- `ctx.mcall` - Call multiple Moleculer actions
+- `ctx.broadcast` - Broadcast a message
+- `ctx.emit` - Emit an event
+
+
+If you using other non-deterministic functions (e.g. UUID generation, or random numbers), you need to store the result in the event log manually. You can use the `ctx.wf.task(name, fn)` function to execute a task and store the result in the event log. The `name` parameter is used for logging purposes. The function can be asynchronous.
+
+```js
+const rnd = await ctx.wf.task("Generate a random number", () => Math.random());
+```
+
+```js
+const uuid = await ctx.wf.task("Generate a UUID", () => uuid.v4());
+```
+
+## Signals
+
+Signals are a way to communicate with a workflow job. You can send signals to a workflow job to trigger specific actions or to notify the job about certain events. Signals are useful for scenarios where you need to wait for an external event or user input before continuing the workflow execution.
+For example, in the user sign-up workflow, you can send a signal to notify the workflow job when the user has verified their email address. The workflow job will then continue its execution based on the signal received.
+
+The signal is not related to workflows, so you can use the same signal in multiple workflows. The signal is identified by a unique key, which can be any string or number. The signal can be sent to a specific workflow job by using the job ID as the key.
+
+You can define a timeout for the signal waiting. If the timeout is reached, the workflow job will throw a `WorkflowSignalTimeoutError` error. You can catch this error and handle it accordingly.
+
+```js
+try {
+    // Waiting for verification (max 1h)
+    await ctx.wf.waitForSignal("email.verification", user.id, {
+        timeout: "1 hour"
+    });
+    await ctx.wf.setState("VERIFIED");
+} catch (err) {
+    if (err.name == "WorkflowSignalTimeoutError") {
+        // Registration not verified in 1 hour, remove the user
+        await ctx.call("user.remove", { id: user.id });
+        return null;
+    }
+
+    // Other error should be thrown further
+    throw err;
+}
+```
+
+>The signal timeout is journaled, so if the workflow job is restarted, the waiting is continued, not started from the beginning.
+
+### Triggering a signal
+
+You can trigger a signal by calling the `broker.wf.triggerSignal(signal, key, payload)` method. The `signal` parameter is the name of the signal, the `key` parameter is the unique identifier for the signal (e.g., user ID), and the `payload` parameter is the data you want to send with the signal. The signal triggering uses Redis Pub/Sub, so you can trigger a signal from any node.
+
+```js
+await broker.wf.triggerSignal("email.verification", user.id);
+```
+
+You can also remove a signal by calling the `broker.wf.removeSignal(signal, key)` method. The `signal` parameter is the name of the signal, and the `key` parameter is the unique identifier for the signal (e.g., user ID).
+
+```js
+await broker.wf.removeSignal("email.verification", user.id);
+```
+
+## Failures
+
+If a workflow job fails (or executor node is crashed), the job will be retried based on the retry policy defined in the workflow options. The retry policy can be configured to use a fixed or exponential backoff strategy. You can also define the maximum number of retries and the delay between retries.
+
+> If the job failed by an unhandled error, the workflow checks the `retryable` property of the error (`MoleculerRetryableError`, `WorkflowRetryableError`). If it's `true`, the job will be retried. If it's `false`, the job will be marked as failed and removed from the queue without retry.
+
+In case of retry, the workflow job will be restarted from the beginning, skipping the already executed actions. The workflow job will be retried until the maximum number of retries is reached or the job is marked as completed.
+
 ## Options
 
 ### WorkflowsMiddleware (Mixin) Options
@@ -202,8 +276,8 @@ broker.createService({
 | Name         | Type   | Description  |
 |--------------|--------|-------------|
 | `name`        | `String`  | Name of workflow. **Default:** service name + workflow name               |
-| `fullName`        | `String`  | Full name of workflow. If you don't want to prepend the service name for the workflow.name.               |
-| `params`        | `object` | Job parameter validation schema **Default:** optional              |
+| `fullName`        | `String`  | Full name of workflow. If you don't want to prepend the service name for the workflow name.               |
+| `params`        | `object` | Job parameter validation schema.             |
 | `removeOnCompleted`        | `boolean`  | Remove the job when it's completed. **Default:** `false`      |
 | `removeOnFailed`        | `boolean`  | Remove the job when it's failed. **Default:** `false`      |
 | `concurrency`        | `number`  | Number of concurrent running jobs. **Default:** `1`       |
@@ -289,7 +363,7 @@ await broker.wf.removeSignal("email.verification", user.id);
 - **Description:** Lists completed workflow job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
-- **Returns:** Array of job IDs.
+- **Returns:** Array of job IDs and timestamp of completion.
 - **Example:**
 ```js
 const jobIds = await broker.wf.listCompletedJobs("users.signupWorkflow");
@@ -299,7 +373,7 @@ const jobIds = await broker.wf.listCompletedJobs("users.signupWorkflow");
 - **Description:** Lists failed job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
-- **Returns:** Array of job IDs.
+- **Returns:** Array of job IDs and timestamp of failure.
 - **Example:**
 ```js
 const jobIds = await broker.wf.listFailedJobs("users.signupWorkflow");
@@ -309,7 +383,7 @@ const jobIds = await broker.wf.listFailedJobs("users.signupWorkflow");
 - **Description:** Lists delayed job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
-- **Returns:** Array of job IDs.
+- **Returns:** Array of job IDs and timestamp of promotion.
 - **Example:**
 ```js
 const jobIds = await broker.wf.listDelayedJobs("users.signupWorkflow");
@@ -319,7 +393,7 @@ const jobIds = await broker.wf.listDelayedJobs("users.signupWorkflow");
 - **Description:** Lists active job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
-- **Returns:** Array of job IDs.
+- **Returns:** Array of `{ "jobId": "" }`
 - **Example:**
 ```js
 const jobIds = await broker.wf.listActiveJobs("users.signupWorkflow");
@@ -329,7 +403,7 @@ const jobIds = await broker.wf.listActiveJobs("users.signupWorkflow");
 - **Description:** Lists waiting job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
-- **Returns:** Array of job IDs.
+- **Returns:** Array of `{ "jobId": "" }`
 - **Example:**
 ```js
 const jobIds = await broker.wf.listWaitingJobs("users.signupWorkflow");
@@ -358,6 +432,8 @@ await broker.wf.remove("users.signupWorkflow", "abc123");
 ```
 
 ### Context workflow properties & methods
+
+>These methods & properties is available only in `ctx` instance of workflow handler.
 
 #### `ctx.wf.setState(state)`
 - **Description:** Sets the current state of the workflow job. 
