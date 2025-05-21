@@ -100,7 +100,7 @@ const broker = new ServiceBroker({
 				const jobOpts = {
 					jobId: options.jobId,
 					delay: options.delay,
-					retries: options.retries != null ? parseInt(options.retries) : 0,
+					retries: options.retries != null ? parseInt(options.retries) : null,
 					timeout: options.timeout
 				};
 
@@ -416,8 +416,11 @@ if (!isNoService) {
 				timeout: "5m",
 				retention: "10m",
 
-				backoff: "exponential",
-				backoffDelay: 1000,
+				retryPolicy: {
+					retries: 3,
+					delay: 1000,
+					factor: 2
+				},
 
 				__params: {
 					c: { type: "number" },

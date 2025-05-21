@@ -31,7 +31,6 @@ describe("Workflows Signal Test", () => {
 			name: "signal",
 			workflows: {
 				good: {
-					backoffDelay: 1000,
 					async handler(ctx) {
 						await ctx.wf.waitForSignal("signal.test", 555, { timeout: "10s" });
 						return `OK`;

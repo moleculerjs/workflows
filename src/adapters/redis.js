@@ -691,17 +691,13 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {number} The backoff time in milliseconds.
 	 */
 	getBackoffTime(workflow, retryAttempts) {
-		const backoff = workflow.backoff || "fixed";
-		const delay = parseDuration(workflow.backoffDelay) ?? 100;
-		if (typeof backoff === "function") {
-			return backoff(retryAttempts);
-		} else if (backoff === "fixed") {
-			return delay;
-		} else if (backoff === "exponential") {
-			return Math.pow(2, retryAttempts) * delay;
-		}
+		const opts = workflow.retryPolicy || {};
+		const delay = parseDuration(opts.delay) ?? 100;
 
-		return delay;
+		return Math.min(
+			delay * Math.pow(opts.factor || 1, retryAttempts),
+			opts.maxDelay ?? Number.POSITIVE_INFINITY
+		);
 	}
 
 	/**
@@ -737,7 +733,10 @@ class RedisAdapter extends BaseAdapter {
 				this.getKey(workflow.name, C.QUEUE_JOB, job.id),
 				["retries", "retryAttempts"]
 			);
-			const retries = parseInt(retryFields[0] ?? 0);
+			const retries =
+				(retryFields[0] != null
+					? parseInt(retryFields[0])
+					: workflow.retryPolicy?.retries) ?? 0;
 			const retryAttempts = parseInt(retryFields[1] ?? 0);
 
 			if (retries > 0 && retryAttempts < retries) {
@@ -989,7 +988,7 @@ class RedisAdapter extends BaseAdapter {
 				job.payload = payload;
 			}
 
-			if (opts.retries) {
+			if (opts.retries != null) {
 				job.retries = opts.retries;
 				job.retryAttempts = 0;
 			}

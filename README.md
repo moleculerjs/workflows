@@ -282,8 +282,11 @@ In case of retry, the workflow job will be restarted from the beginning, skippin
 | `removeOnFailed`        | `boolean`  | Remove the job when it's failed. **Default:** `false`      |
 | `concurrency`        | `number`  | Number of concurrent running jobs. **Default:** `1`       |
 | `retention`        | `string` or `number`  | Retention time of job history. **Default:** `null`      |
-| `backoff`        | `string`\|`Function`  | Retry backoff strategy. Available: `fixed`, `exponention` or a custom Function **Default:** `fixed`      |
-| `backoffDelay`        | `number`  | Backoff delay for fixed and exponential strategy. **Default:** `100`      |
+| `retryPolicy`        | `object`  | Retry policy. |
+| `retryPolicy.retries`        | `number`  | Number of retries. **Default:** `0`      |
+| `retryPolicy.delay`        | `number`  | Delay between retries (ms). **Default:** `100`      |
+| `retryPolicy.maxDelay`        | `number`  | Maximum delay between retries (ms). **Default:** `1000`      |
+| `retryPolicy.factor`        | `number`  | Exponential backoff factor. **Default:** `1` (fixed)      |
 | `maxStalledCount`        | `number`  | Number of maximum put back the stalled job. `0` or `null` value disables it. **Default:** `null`      |
 
 ## References
