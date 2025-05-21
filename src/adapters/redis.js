@@ -342,6 +342,7 @@ class RedisAdapter extends BaseAdapter {
 	async stopJobProcessor(workflow) {
 		if (this.jobClients.has(workflow.name)) {
 			const client = this.jobClients.get(workflow.name);
+			this.jobClients.delete(workflow.name);
 			await this.closeClient(client);
 			client.stopped = true;
 		}
