@@ -11,9 +11,9 @@ const {
 	WorkflowError,
 	WorkflowTaskMismatchError,
 	WorkflowSignalTimeoutError
-} = require("../errors");
-const C = require("../constants");
-const { parseDuration } = require("../utils");
+} = require("./errors");
+const C = require("./constants");
+const { parseDuration } = require("./utils");
 const Adapters = require("./adapters");
 
 /**
@@ -22,17 +22,22 @@ const Adapters = require("./adapters");
  * @typedef {import("moleculer").LoggerInstance} Logger Logger instance
  * @typedef {import("moleculer").Serializer} Serializer Moleculer Serializer
 
- * @typedef {import("./index.d.ts").Workflow} Workflow Workflow definition
+ * @typedef {import("./index.d.ts").BaseAdapter} BaseAdapter
  * @typedef {import("./index.d.ts").WorkflowSchema} WorkflowSchema
+ * @typedef {import("./index.d.ts").WorkflowOptions} WorkflowOptions
  * @typedef {import("./index.d.ts").WorkflowHandler} WorkflowHandler Workflow handler
  * @typedef {import("./index.d.ts").WorkflowsMiddlewareOptions} WorkflowsMiddlewareOptions Middleware options
+ * @typedef {import("./index.d.ts").WorkflowContext} WorkflowContext
+ * @typedef {import("./index.d.ts").Job} Job
+ * @typedef {import("./index.d.ts").JobEvent} JobEvent
+ * @typedef {import("./index.d.ts").CreateJobOptions} CreateJobOptions
  */
 
 /**
  * Workflow class
  *
- * @class Workflow
- * @typedef {import("./index.d.ts").Workflow} Workflow
+ * @class WorkflowClass
+ * @typedef {import("./index.d.ts").Workflow} WorkflowClass
  */
 class Workflow {
 	/**
@@ -81,7 +86,7 @@ class Workflow {
 	 * Initialize the workflow.
 	 *
 	 * @param {ServiceBroker} broker
-	 * @param {LoggerInstance} logger
+	 * @param {Logger} logger
 	 * @param {WorkflowsMiddlewareOptions} mwOpts - Middleware options.
 	 */
 	init(broker, logger, mwOpts) {
@@ -96,10 +101,9 @@ class Workflow {
 	/**
 	 * Log a message with the given level.
 	 *
-	 * @param {*} level
-	 * @param {*} workflowName
-	 * @param {*} jobId
-	 * @param {*} msg
+	 * @param {string} level
+	 * @param {string|null} jobId
+	 * @param {string} msg
 	 * @param  {...any} args
 	 */
 	log(level, jobId, msg, ...args) {
@@ -122,11 +126,11 @@ class Workflow {
 		// this.connected = true;
 		await this.afterAdapterConnected();
 
-		this.logger("info", null, `Workflow '${this.name}' is started.`);
+		this.log("info", null, `Workflow '${this.name}' is started.`);
 	}
 
 	async afterAdapterConnected() {
-		this.startJobProcessor();
+		this.adapter.startJobProcessor();
 		this.setNextDelayedMaintenance();
 
 		if (!this.maintenanceTimer) {
@@ -148,12 +152,12 @@ class Workflow {
 			clearTimeout(this.maintenanceTimer);
 		}
 
-		await this.stopJobProcessor();
+		await this.adapter?.stopJobProcessor();
 
 		// Close adapter
-		await this.adapter?.close();
+		await this.adapter?.disconnect();
 
-		this.logger("info", null, `Workflow '${this.name}' is stopped.`);
+		this.log("info", null, `Workflow '${this.name}' is stopped.`);
 	}
 
 	addRunningJob(jobId) {
@@ -183,21 +187,29 @@ class Workflow {
 		this.broker.metrics.increment(metricName, { workflow: this.name });
 	}
 
+	/**
+	 * Create a new job and push it to the waiting or delayed queue.
+	 *
+	 * @param {unknown} payload - The payload of the job.
+	 * @param {CreateJobOptions} opts - Additional options for the job.
+	 * @returns {Promise<Job>} Resolves with the created job object.
+	 */
 	createJob(payload, opts) {
-		// TODO:
+		return this.adapter.createJob(this.name, payload, opts);
 	}
 
 	/**
 	 * Create a workflow context for the given workflow and job.
 	 *
 	 * @param {Job} job The job object.
-	 * @param {Array<Object>} events The list of events associated with the job.
-	 * @returns {Context} The created workflow context.
+	 * @param {JobEvent[]} events The list of events associated with the job.
+	 * @returns {WorkflowContext} The created workflow context.
 	 */
 	createWorkflowContext(job, events) {
 		let taskId = 0;
 
 		const ctxOpts = {};
+		/** @type {WorkflowContext} */
 		const ctx = this.broker.ContextFactory.create(this.broker, null, job.payload, ctxOpts);
 		ctx.wf = {
 			name: this.name,
@@ -224,7 +236,7 @@ class Workflow {
 		};
 
 		const taskEvent = async (taskType, data, startTime) => {
-			return await this.adapter.addJobEvent(job.id, {
+			return await this.adapter.addJobEvent(this.name, job.id, {
 				type: "task",
 				taskId,
 				taskType,
@@ -480,15 +492,10 @@ class Workflow {
 					) {
 						await Promise.all([
 							await this.adapter.maintenanceRemoveOldJobs(
-								this,
 								C.QUEUE_COMPLETED,
 								retention
 							),
-							await this.adapter.maintenanceRemoveOldJobs(
-								this,
-								C.QUEUE_FAILED,
-								retention
-							)
+							await this.adapter.maintenanceRemoveOldJobs(C.QUEUE_FAILED, retention)
 						]);
 
 						this.lastRetentionTime = Date.now();
@@ -522,7 +529,7 @@ class Workflow {
 	 */
 	async setNextDelayedMaintenance(nextTime) {
 		if (nextTime == null) {
-			nextTime = await this.adapter.getNextDelayedJobTime(this.name);
+			nextTime = await this.adapter.getNextDelayedJobTime();
 		}
 
 		const now = Date.now();
@@ -613,7 +620,8 @@ class Workflow {
 	/**
 	 * Check if the job ID is valid.
 	 *
-	 * @param {String} jobId
+	 * @param {String} signalName
+	 * @param {string|null} key
 	 */
 	static checkSignal(signalName, key) {
 		const re = /^[a-zA-Z0-9_.-]+$/;

@@ -37,6 +37,7 @@ const { parseDuration, humanize, getCronNextTime } = require("../utils");
  * @typedef {import("../index.d.ts").CreateJobOptions} CreateJobOptions Job options for creation
  * @typedef {import("../index.d.ts").Workflow} Workflow2 Workflow definition
  * @typedef {import("../index.d.ts").WorkflowsMiddlewareOptions} WorkflowsMiddlewareOptions Workflow middleware options
+ * @typedef {import("../index.d.ts").SignalWaitOptions} SignalWaitOptions
 
  */
 
@@ -73,7 +74,7 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Constructor of adapter.
 	 *
-	 * @param  {RedisAdapterOptions?} opts
+	 * @param {RedisAdapterOptions=} opts
 	 */
 	constructor(opts) {
 		if (typeof opts == "string")
@@ -1134,6 +1135,8 @@ class RedisAdapter extends BaseAdapter {
 
 	/**
 	 * Get the next delayed jobs maintenance time.
+	 *
+	 * @returns {Promise<number|null>}
 	 */
 	async getNextDelayedJobTime() {
 		const first = await this.commandClient?.zrange(

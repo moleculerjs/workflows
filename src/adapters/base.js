@@ -15,8 +15,11 @@ const C = require("../constants");
  * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
  * @typedef {import("moleculer").Service} Service Moleculer Service definition
  * @typedef {import("moleculer").LoggerInstance} Logger Logger instance
+ * @typedef {import("../index.d.ts").Job} Job
+ * @typedef {import("../index.d.ts").JobEvent} JobEvent
  * @typedef {import("../index.d.ts").Workflow} Workflow Workflow definition
  * @typedef {import("../index.d.ts").WorkflowsMiddlewareOptions} WorkflowsMiddlewareOptions Workflow middleware options
+ * @typedef {import("../index.d.ts").SignalWaitOptions} SignalWaitOptions
  */
 
 /**
@@ -88,7 +91,7 @@ class BaseAdapter {
 	/**
 	 * Start the job processor for the given workflow.
 	 */
-	startJobProcessor(/*workflow*/) {
+	startJobProcessor() {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -96,7 +99,7 @@ class BaseAdapter {
 	/**
 	 * Stop the job processor for the given workflow.
 	 */
-	stopJobProcessor(/*workflow*/) {
+	stopJobProcessor() {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -115,24 +118,11 @@ class BaseAdapter {
 	}
 
 	/**
-	 * Add job event to Redis.
-	 *
-	 * @param {String} workflowName The workflow object.
-	 * @param {string} jobId The ID of the job.
-	 * @param {Object} event The event object to add.
-	 * @returns {Promise<void>} Resolves when the event is added.
-	 */
-	async addJobEvent(workflowName, jobId, event) {
-		/* istanbul ignore next */
-		throw new Error("Abstract method is not implemented.");
-	}
-
-	/**
 	 * Save state of a job.
 	 *
 	 * @param {string} workflowName The name of workflow.
 	 * @param {string} jobId The ID of the job.
-	 * @param {Object} state The state object to save.
+	 * @param {unknown} state The state object to save.
 	 * @returns {Promise<void>} Resolves when the state is saved.
 	 */
 	async saveJobState(workflowName, jobId, state) {
@@ -181,8 +171,8 @@ class BaseAdapter {
 	 * Wait for a named signal.
 	 *
 	 * @param {string} signalName The name of the signal to wait for.
-	 * @param {string} key The key associated with the signal.
-	 * @param {Object} opts Options for waiting for the signal.
+	 * @param {unknown} key The key associated with the signal.
+	 * @param {SignalWaitOptions} opts Options for waiting for the signal.
 	 * @returns {Promise<*>} The payload of the received signal.
 	 */
 	async waitForSignal(signalName, key, opts) {
@@ -196,7 +186,7 @@ class BaseAdapter {
 	 * @param {string} workflowName
 	 * @param {*} payload
 	 * @param {*} opts
-	 * @returns {Promise<any>}
+	 * @returns {Promise<Job>}
 	 */
 	async createJob(workflowName, payload, opts) {
 		/* istanbul ignore next */
@@ -217,6 +207,19 @@ class BaseAdapter {
 	}
 
 	/**
+	 * Add a job event to Redis.
+	 *
+	 * @param {string} workflowName - The name of the workflow.
+	 * @param {string} jobId - The ID of the job.
+	 * @param {Partial<JobEvent>} event - The event object to add.
+	 * @returns {Promise<void>} Resolves when the event is added.
+	 */
+	async addJobEvent(workflowName, jobId, event) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
 	 * Get job events from Redis.
 	 *
 	 * @param {string} workflowName - The name of the workflow.
@@ -224,14 +227,6 @@ class BaseAdapter {
 	 * @returns {Promise<Object[]>} Resolves with an array of job events.
 	 */
 	async getJobEvents(workflowName, jobId) {
-		/* istanbul ignore next */
-		throw new Error("Abstract method is not implemented.");
-	}
-
-	/**
-	 * Get the next delayed jobs maintenance time.
-	 */
-	async getNextDelayedJobTime() {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -312,6 +307,70 @@ class BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the lock is released.
 	 */
 	async unlockMaintenance(lockName = C.QUEUE_MAINTENANCE_LOCK) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Process stalled jobs for a workflow and move them back to the waiting queue.
+	 *
+	 * @returns {Promise<void>} Resolves when stalled jobs are processed.
+	 */
+	async maintenanceStalledJobs() {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Check active jobs and if they timed out, move to failed jobs.
+	 *
+	 * @returns {Promise<void>} Resolves when delayed jobs are processed.
+	 */
+	async maintenanceActiveJobs() {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Remove old jobs from a specified queue based on their age.
+	 *
+	 * @param {string} queueName - The name of the queue (e.g., completed, failed).
+	 * @param {number} retention - The age threshold in milliseconds for removing jobs.
+	 * @returns {Promise<void>} Resolves when old jobs are removed.
+	 */
+	async maintenanceRemoveOldJobs(queueName, retention) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Get the next delayed jobs maintenance time.
+	 *
+	 * @returns {Promise<number|null>}
+	 */
+	async getNextDelayedJobTime() {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Dump all Redis data for all workflows to JSON files.
+	 *
+	 * @param {string} folder - The folder to save the dump files.
+	 * @param {string[]} wfNames - The names of the workflows to dump.
+	 */
+	async dumpWorkflows(folder, wfNames) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Dump all Redis data for a workflow to a JSON file.
+	 *
+	 * @param {string} workflowName - The name of the workflow.
+	 * @returns {Promise<string>} Path to the dump file.
+	 */
+	async dumpWorkflow(workflowName, folder = ".") {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}

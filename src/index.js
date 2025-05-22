@@ -23,7 +23,9 @@ const C = require("./constants");
  * @typedef {import("./index.d.ts").WorkflowSchema} WorkflowSchema Workflow schema
  */
 
-module.exports = function WorkflowsMiddleware(mwOpts) {
+/** @param {WorkflowsMiddlewareOptions} mwOpts */
+function WorkflowsMiddleware(mwOpts) {
+	/** @type {WorkflowsMiddlewareOptions} */
 	mwOpts = _.defaultsDeep({}, mwOpts, {
 		adapter: "Redis",
 		schemaProperty: "workflows",
@@ -132,8 +134,8 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 *
 			 * @param {String} workflowName
 			 * @param {unknown} payload
-			 * @param {object} opts
-			 * @returns
+			 * @param {CreateJobOptions} opts
+			 * @returns {Promise<Job>}
 			 */
 			broker.wf.run = (workflowName, payload, opts) => {
 				Workflow.checkWorkflowName(workflowName);
@@ -168,7 +170,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * Trigger a named signal.
 			 *
 			 * @param {string} signalName
-			 * @param {unknown} key
+			 * @param {string} key
 			 * @param {unknown} payload
 			 * @returns
 			 */
@@ -193,7 +195,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * Remove a named signal.
 			 *
 			 * @param {string} signalName
-			 * @param {unknown} key
+			 * @param {string} key
 			 * @returns
 			 */
 			broker.wf.removeSignal = (signalName, key) => {
@@ -513,4 +515,6 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			}
 		}
 	};
-};
+}
+
+module.exports = WorkflowsMiddleware;
