@@ -8,9 +8,9 @@
 
 const _ = require("lodash");
 const { METRIC } = require("moleculer");
-const { BrokerOptionsError, ServiceSchemaError, MoleculerError, ValidationError } =
-	require("moleculer").Errors;
+const { ServiceSchemaError, MoleculerError, ValidationError } = require("moleculer").Errors;
 const Adapters = require("./adapters");
+const Workflow = require("./workflow");
 const C = require("./constants");
 
 /**
@@ -18,7 +18,9 @@ const C = require("./constants");
  * @typedef {import("moleculer").LoggerInstance} Logger Logger instance
  * @typedef {import("moleculer").Service} Service Moleculer service
  * @typedef {import("moleculer").Middleware} Middleware Moleculer middleware
- * @typedef {import("./adapters/base")} BaseAdapter Base adapter class
+ *
+ * @typedef {import("./index.d.ts").Workflow} Workflow Workflow definition
+ * @typedef {import("./index.d.ts").WorkflowSchema} WorkflowSchema Workflow schema
  */
 
 module.exports = function WorkflowsMiddleware(mwOpts) {
@@ -116,17 +118,14 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			broker = _broker;
 			logger = broker.getLogger("Workflows");
 
-			// Create store adapter
-			if (!mwOpts.adapter)
-				throw new BrokerOptionsError("Workflow adapter must be defined.", { opts: mwOpts });
-
-			adapter = Adapters.resolve(mwOpts.adapter);
-			adapter.init(broker, logger, mwOpts);
-
 			// Populate broker with new methods
 			if (!broker.wf) {
 				broker.wf = {};
 			}
+
+			// Common adapter without worker
+			adapter = Adapters.resolve(this.mwOpts.adapter);
+			this.adapter.init(null, this.broker, this.mwOpts);
 
 			/**
 			 * Execute a workflow
@@ -137,7 +136,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.run = (workflowName, payload, opts) => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				if (broker.isMetricsEnabled()) {
 					broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_CREATED, {
@@ -155,7 +154,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.remove = (workflowName, jobId) => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				if (!jobId) {
 					return Promise.reject(
@@ -217,7 +216,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.getState = (workflowName, jobId) => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				if (!jobId) {
 					return Promise.reject(
@@ -235,7 +234,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.get = (workflowName, jobId) => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				if (!jobId) {
 					return Promise.reject(
@@ -253,7 +252,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.getEvents = (workflowName, jobId) => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				if (!jobId) {
 					return Promise.reject(
@@ -270,7 +269,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.listCompletedJobs = workflowName => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				return adapter.listCompletedJobs(workflowName);
 			};
@@ -282,7 +281,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.listFailedJobs = workflowName => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				return adapter.listFailedJobs(workflowName);
 			};
@@ -294,7 +293,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.listDelayedJobs = workflowName => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				return adapter.listDelayedJobs(workflowName);
 			};
@@ -306,7 +305,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.listActiveJobs = workflowName => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				return adapter.listActiveJobs(workflowName);
 			};
@@ -318,7 +317,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.listWaitingJobs = workflowName => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				return adapter.listWaitingJobs(workflowName);
 			};
@@ -330,7 +329,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 			 * @returns
 			 */
 			broker.wf.cleanUp = workflowName => {
-				adapter.checkWorkflowName(workflowName);
+				Workflow.checkWorkflowName(workflowName);
 
 				return adapter.cleanUp(workflowName);
 			};
@@ -348,11 +347,11 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 		 */
 		async serviceCreated(svc) {
 			if (_.isPlainObject(svc.schema[mwOpts.schemaProperty])) {
-				svc.$workflowList = [];
+				svc.$workflows = [];
 
 				// Process `workflows` in the schema
 				for (const [name, def] of Object.entries(svc.schema[mwOpts.schemaProperty])) {
-					/** @type {Partial<WorkFlow>} */
+					/** @type {WorkflowSchema} */
 					let wf;
 
 					if (_.isFunction(def)) {
@@ -378,7 +377,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 					}
 
 					wf.name = wf.fullName ? wf.fullName : svc.fullName + "." + (wf.name || name);
-					adapter.checkWorkflowName(wf.name);
+					Workflow.checkWorkflowName(wf.name);
 
 					// Wrap the original handler
 					let handler = broker.Promise.method(wf.handler).bind(svc);
@@ -431,15 +430,16 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 						};
 					}
 
-					wf.service = svc;
+					const workflow = new Workflow(wf, svc);
 
 					// Register thw workflow handler into the adapter
-					svc.$workflowList.push(wf);
-					logger.info(`Workflow '${wf.name}' is registered.`);
+					svc.$workflows.push(workflow);
+					logger.info(`Workflow '${workflow.name}' is registered.`);
 				}
 
 				/**
 				 * Call a local channel event handler. Useful for unit tests.
+				 * TODO:
 				 *
 				 * @param {String} workflowName
 				 * @param {Object} payload
@@ -492,11 +492,10 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 		 * @param {*} svc
 		 */
 		async serviceStarted(svc) {
-			if (!svc.$workflowList) return;
+			if (!svc.$workflows) return;
 
-			for (const wf of svc.$workflowList) {
-				// Register workflow into the adapter
-				adapter.registerWorkflow(wf);
+			for (const wf of svc.$workflows) {
+				await wf.start();
 			}
 		},
 
@@ -507,30 +506,11 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 		 * @param {Service} svc
 		 */
 		async serviceStopping(svc) {
-			if (!svc.$workflowList) return;
+			if (!svc.$workflows) return;
 
-			for (const wf of svc.$workflowList) {
-				adapter.unregisterWorkflow(wf);
-				logger.info(`Workflow '${wf.name}' is unregistered.`);
+			for (const wf of svc.$workflows) {
+				await wf.stop();
 			}
-		},
-
-		/**
-		 * Start lifecycle hook of ServiceBroker
-		 */
-		async started() {
-			logger.info("Workflows adapter is connecting...");
-			await adapter.connect();
-			logger.debug("Workflows adapter connected.");
-		},
-
-		/**
-		 * Stop lifecycle hook of ServiceBroker
-		 */
-		async stopped() {
-			logger.info("Workflows adapter is disconnecting...");
-			await adapter.destroy();
-			logger.debug("Workflows adapter disconnected.");
 		}
 	};
 };

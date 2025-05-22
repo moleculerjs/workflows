@@ -17,9 +17,16 @@ export interface WorkflowsMiddlewareOptions {
     lockExpiration?: number;
 }
 
-export interface Workflow {
+export type WorkflowHandler = (ctx: WorkflowContext) => Promise<unknown>;
+
+export class Workflow {
+	opts: WorkflowSchema;
+	name: string;
+    handler: WorkflowHandler;
+}
+
+export interface WorkflowOptions {
     name?: string;
-    fullName?: string;
     timeout?: string | number;
     retention?: string | number;
     concurrency?: number;
@@ -32,6 +39,10 @@ export interface Workflow {
 
     params?: Record<string, any>;
 	maxStalledCount?: number;
+}
+
+export interface WorkflowSchema extends WorkflowOptions {
+    fullName?: string;
     handler: (ctx: WorkflowContext) => Promise<unknown>;
 }
 
@@ -47,16 +58,16 @@ export interface WorkflowContext {
 export interface WorkflowServiceBroker {
 	run: (workflowName: string, payload: any, opts?: any) => Promise<unknown>;
 	remove: (workflowName: string, jobId: string) => Promise<void>;
-	triggerSignal: (signalName: string, key?: unknown, payload: any) => Promise<void>;
+	triggerSignal: (signalName: string, key?: unknown, payload?: unknown) => Promise<void>;
 	removeSignal: (signalName: string, key?: unknown) => Promise<void>;
-	getState: (workflowName: string, jobId: string) => Promise<any>;
-	get: (workflowName: string, jobId: string) => Promise<any>;
-	getEvents: (workflowName: string, jobId: string) => Promise<any>;
-	listCompletedJobs: (workflowName: string) => Promise<any>;
-	listFailedJobs: (workflowName: string) => Promise<any>;
-	listDelayedJobs: (workflowName: string) => Promise<any>;
-	listActiveJobs: (workflowName: string) => Promise<any>;
-	listWaitingJobs: (workflowName: string) => Promise<any>;
+	getState: (workflowName: string, jobId: string) => Promise<unknown>;
+	get: (workflowName: string, jobId: string) => Promise<unknown>;
+	getEvents: (workflowName: string, jobId: string) => Promise<unknown>;
+	listCompletedJobs: (workflowName: string) => Promise<unknown>;
+	listFailedJobs: (workflowName: string) => Promise<unknown>;
+	listDelayedJobs: (workflowName: string) => Promise<unknown>;
+	listActiveJobs: (workflowName: string) => Promise<unknown>;
+	listWaitingJobs: (workflowName: string) => Promise<unknown>;
 	cleanUp: (workflowName: string) => Promise<void>;
 
 	adapter: RedisAdapter | BaseAdapter;
