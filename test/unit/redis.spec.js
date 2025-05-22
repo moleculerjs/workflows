@@ -5,7 +5,7 @@ const C = require("../../src/constants");
 describe("RedisAdapter.getKey without custom prefix", () => {
 	const broker = new ServiceBroker({ logger: false });
 	const adapter = new RedisAdapter();
-	adapter.init(broker, broker.logger, {});
+	adapter.init(null, broker, broker.logger, {});
 
 	it(`should generate key without type and id`, () => {
 		expect(adapter.getKey("wf1")).toBe("molwf:workflows:wf1");
@@ -28,7 +28,7 @@ describe("RedisAdapter.getKey without custom prefix", () => {
 describe("RedisAdapter.getKey with broker namespace", () => {
 	const broker = new ServiceBroker({ logger: false, namespace: "ns1" });
 	const adapter = new RedisAdapter();
-	adapter.init(broker, broker.logger, {});
+	adapter.init(null, broker, broker.logger, {});
 
 	it(`should generate key without type and id`, () => {
 		expect(adapter.getKey("wf1")).toBe("molwf-ns1:workflows:wf1");
@@ -53,7 +53,7 @@ describe("RedisAdapter.getKey with broker namespace", () => {
 describe("RedisAdapter.getKey with custom prefix", () => {
 	const broker = new ServiceBroker({ logger: false, namespace: "ns1" });
 	const adapter = new RedisAdapter({ prefix: "custom" });
-	adapter.init(broker, broker.logger, {});
+	adapter.init(null, broker, broker.logger, {});
 
 	it(`should generate key without type and id`, () => {
 		expect(adapter.getKey("wf1")).toBe("custom:workflows:wf1");
