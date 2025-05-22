@@ -10,6 +10,7 @@
 
 const _ = require("lodash");
 const C = require("../constants");
+const { WorkflowError } = require("../errors");
 
 /**
  * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
@@ -394,6 +395,27 @@ class BaseAdapter {
 
 			this.broker[this.mwOpts.jobEventType](eventName, payload);
 		}
+	}
+
+	/**
+	 * Check if the job ID is valid.
+	 *
+	 * @param {String} jobId
+	 */
+	checkJobId(jobId) {
+		const re = /^[a-zA-Z0-9_.-]+$/;
+		if (!re.test(jobId)) {
+			throw new WorkflowError(
+				`Invalid job ID '${jobId}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
+				400,
+				"INVALID_JOB_ID",
+				{
+					jobId
+				}
+			);
+		}
+
+		return jobId;
 	}
 }
 

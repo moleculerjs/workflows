@@ -576,27 +576,6 @@ class Workflow {
 	/**
 	 * Check if the job ID is valid.
 	 *
-	 * @param {String} jobId
-	 */
-	static checkJobId(jobId) {
-		const re = /^[a-zA-Z0-9_.-]+$/;
-		if (!re.test(jobId)) {
-			throw new WorkflowError(
-				`Invalid job ID '${jobId}'. Only alphanumeric characters, underscore, dot and dash are allowed.`,
-				400,
-				"INVALID_JOB_ID",
-				{
-					jobId
-				}
-			);
-		}
-
-		return jobId;
-	}
-
-	/**
-	 * Check if the job ID is valid.
-	 *
 	 * @param {String} signalName
 	 * @param {string|null} key
 	 */

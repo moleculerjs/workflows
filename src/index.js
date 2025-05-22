@@ -530,7 +530,7 @@ function WorkflowsMiddleware(mwOpts) {
 		 */
 		async stopped() {
 			//logger.info("Workflows adapter is disconnecting...");
-			await adapter.destroy();
+			await adapter.disconnect();
 			//logger.debug("Workflows adapter disconnected.");
 		}
 	};

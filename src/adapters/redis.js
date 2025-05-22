@@ -14,9 +14,13 @@ const { Serializers } = require("moleculer");
 const { BrokerOptionsError } = require("moleculer").Errors;
 const { makeDirs } = require("moleculer").Utils;
 
-const Workflow = require("../workflow");
 const BaseAdapter = require("./base");
-const { WorkflowError, WorkflowAlreadyLocked, WorkflowTimeoutError } = require("../errors");
+const {
+	WorkflowError,
+	WorkflowAlreadyLocked,
+	WorkflowTimeoutError,
+	WorkflowMaximumStalled
+} = require("../errors");
 const C = require("../constants");
 const { parseDuration, humanize, getCronNextTime } = require("../utils");
 
@@ -156,10 +160,8 @@ class RedisAdapter extends BaseAdapter {
 		if (this.connected) return;
 
 		await this.createCommandClient();
+		await this.createSubscriptionClient();
 		if (this.isWorker) {
-			await this.createSubscriptionClient();
-			await this.subClient.subscribe(this.getKey(this.wf.name, C.QUEUE_DELAYED));
-
 			await this.createBlockerClient();
 		}
 	}
@@ -237,13 +239,18 @@ class RedisAdapter extends BaseAdapter {
 						storePromise.resolve(json.result);
 					}
 				}
-			} else if (channel == this.getKey(this.wf.name, C.QUEUE_DELAYED)) {
-				const json = this.serializer.deserialize(message);
-				this.wf.setNextDelayedMaintenance(json.promoteAt);
+			}
+			if (this.isWorker) {
+				if (channel == this.getKey(this.wf.name, C.QUEUE_DELAYED)) {
+					const json = this.serializer.deserialize(message);
+					this.wf.setNextDelayedMaintenance(json.promoteAt);
+				}
 			}
 		});
 
-		await this.subClient.subscribe(this.getKey(this.wf.name, C.QUEUE_DELAYED));
+		if (this.isWorker) {
+			await this.subClient.subscribe(this.getKey(this.wf.name, C.QUEUE_DELAYED));
+		}
 	}
 
 	/**
@@ -360,7 +367,7 @@ class RedisAdapter extends BaseAdapter {
 	 * @returns {Promise<void>} Resolves when the job is processed.
 	 */
 	async runJobProcessor() {
-		if (!this.running) return;
+		if (!this.running || this.blockerClient.blocked) return;
 
 		// if (this.disconnecting || !this.connected) {
 		// 	this.log("debug", workflow.name, null, "Adapter is not connected or disconnecting.");
@@ -376,6 +383,7 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		try {
+			// console.log(" >>> BLOCK START >>>", activeJobCount);
 			this.blockerClient.blocked = true;
 			const jobId = await this.blockerClient.brpoplpush(
 				this.getKey(this.wf.name, C.QUEUE_WAITING),
@@ -383,6 +391,7 @@ class RedisAdapter extends BaseAdapter {
 				this.opts.drainDelay
 			);
 			this.blockerClient.blocked = false;
+			// console.log(" >>> BLOCK END >>>", this.wf.getNumberOfActiveJobs());
 
 			if (jobId) {
 				this.wf.addRunningJob(jobId);
@@ -541,8 +550,9 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Get a job from Redis.
 	 *
+	 * @param {string} workflowName - Workflow name
 	 * @param {string} jobId - The ID of the job.
-	 * @param {string[]|boolean|undefined} fields - The fields to retrieve or true to retrieve all fields.
+	 * @param {string[]|boolean=} fields - The fields to retrieve or true to retrieve all fields.
 	 * @returns {Promise<Job|null>} Resolves with the job object or null if not found.
 	 */
 	async getJob(workflowName, jobId, fields) {
@@ -673,7 +683,7 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		if (job.parent) {
-			await this.rescheduleJob(this.wf.name, job.parent);
+			await this.rescheduleJob(job.parent);
 		}
 	}
 
@@ -801,7 +811,7 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		if (job.parent) {
-			await this.rescheduleJob(this.wf.name, job.parent);
+			await this.rescheduleJob(job.parent);
 		}
 	}
 
@@ -904,7 +914,7 @@ class RedisAdapter extends BaseAdapter {
 			return found.promise;
 		}
 
-		await this.subClient?.subscribe(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName));
+		await this.subClient.subscribe(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName));
 
 		const item = {};
 		item.promise = new Promise(resolve => (item.resolve = resolve));
@@ -929,7 +939,7 @@ class RedisAdapter extends BaseAdapter {
 
 		/** @type {Job} */
 		let job = {
-			id: opts.jobId ? Workflow.checkJobId(opts.jobId) : this.broker.generateUid(),
+			id: opts.jobId ? this.checkJobId(opts.jobId) : this.broker.generateUid(),
 			createdAt: Date.now()
 		};
 
@@ -1034,7 +1044,7 @@ class RedisAdapter extends BaseAdapter {
 				// Repeatable job
 				this.log("debug", workflowName, job.id, "Repeatable job created.", job);
 
-				await this.rescheduleJob(workflowName, job);
+				await this.rescheduleJob(job);
 			} else if (job.delay) {
 				// Delayed job
 				this.log(
@@ -1063,7 +1073,7 @@ class RedisAdapter extends BaseAdapter {
 
 		job.promise = async () => {
 			// Subscribe to the job finished event
-			await this.subClient?.subscribe(this.getKey(workflowName, C.FINISHED));
+			await this.subClient.subscribe(this.getKey(workflowName, C.FINISHED));
 
 			// Get the Job to check the status
 			const job2 = await this.getJob(workflowName, job.id, [
@@ -1559,7 +1569,7 @@ class RedisAdapter extends BaseAdapter {
 							);
 							if (removed > 0) {
 								// Move the job back to the waiting queue
-								await this.moveStalledJobsToWaiting(this.wf, jobId);
+								await this.moveStalledJobsToWaiting(jobId);
 							}
 						}
 
@@ -1621,7 +1631,10 @@ class RedisAdapter extends BaseAdapter {
 				"Job is reached the maximum stalled count. It's moved to failed."
 			);
 
-			await this.moveToFailed(this.wf, jobId, new Error("Job stalled too many times."));
+			await this.moveToFailed(
+				jobId,
+				new WorkflowMaximumStalled(jobId, this.wf.opts.maxStalledCount)
+			);
 			return;
 		}
 

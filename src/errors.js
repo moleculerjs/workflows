@@ -53,10 +53,20 @@ class WorkflowAlreadyLocked extends WorkflowRetryableError {
 	}
 }
 
+class WorkflowMaximumStalled extends WorkflowRetryableError {
+	constructor(jobId, maxStalledCount) {
+		super("Job stalled too many times.", 500, "WORKFLOW_MAXIMUM_STALLED", {
+			jobId,
+			maxStalledCount
+		});
+	}
+}
+
 module.exports = {
 	WorkflowError,
 	WorkflowTimeoutError,
 	WorkflowSignalTimeoutError,
 	WorkflowAlreadyLocked,
-	WorkflowTaskMismatchError
+	WorkflowTaskMismatchError,
+	WorkflowMaximumStalled
 };

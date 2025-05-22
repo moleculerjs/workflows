@@ -15,8 +15,8 @@ const C = require("../constants");
  * @typedef {import("moleculer").Context} Context Context instance
  * @typedef {import("moleculer").Service} Service Service instance
  * @typedef {import("moleculer").LoggerInstance} Logger Logger instance
- * @typedef {import("../index").Channel} Channel Base channel definition
- * @typedef {import("./base").BaseDefaultOptions} BaseDefaultOptions Base adapter options
+ * @typedef {import("../index").Workflow} Workflow
+ * @typedef {import("../index").WorkflowsMiddlewareOptions} WorkflowsMiddlewareOptions
  */
 
 /**
@@ -44,11 +44,13 @@ class FakeAdapter extends BaseAdapter {
 	/**
 	 * Initialize the adapter.
 	 *
+	 * @param {Workflow} wf
 	 * @param {ServiceBroker} broker
 	 * @param {Logger} logger
+	 * @param {WorkflowsMiddlewareOptions} mwOpts - Middleware options.
 	 */
-	init(broker, logger) {
-		super.init(broker, logger);
+	init(wf, broker, logger, mwOpts) {
+		super.init(wf, broker, logger, mwOpts);
 	}
 
 	/**
@@ -61,7 +63,7 @@ class FakeAdapter extends BaseAdapter {
 	/**
 	 * Disconnect from adapter
 	 */
-	async destroy() {
+	async disconnect() {
 		this.connected = false;
 	}
 }
