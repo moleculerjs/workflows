@@ -11,6 +11,7 @@ export interface WorkflowsMiddlewareOptions {
     schemaProperty?: string;
     workflowHandlerTrigger?: string;
     jobEventType?: string;
+	jobIdCollision: "reject" | "skip" | "rerun";
 
     signalExpiration?: string;
     maintenanceTime?: number;
@@ -19,10 +20,73 @@ export interface WorkflowsMiddlewareOptions {
 
 export type WorkflowHandler = (ctx: WorkflowContext) => Promise<unknown>;
 
+export interface CreateJobOptions {
+	jobId?: string;
+	retries?: number;
+	delay?: number;
+	timeout?: number;
+	repeat?: JobRepeat;
+}
+
+export type JobRepeat = {
+	endDate?: number;
+	cron?: string;
+	tz?: string;
+	limit?: number;
+}
+
+export interface JobEvent {
+	type: string;
+	ts: number;
+	nodeID: string;
+	taskId?: number;
+	taskType: string;
+	duration?: number;
+	result?: unknown;
+	error?: Record<string, any>;
+}
+
+export interface Job {
+	id: string;
+	parent?: string;
+	payload?: Record<string, any>;
+
+	delay?: number;
+	timeout?: number;
+	retries?: number;
+	retryAttempts?: number;
+
+	repeat?: JobRepeat;
+	repeatCounter?: number;
+
+	createdAt?: number;
+	promoteAt?: number;
+
+	startedAt?: number;
+	stalledCounter?: number;
+	state?: unknown;
+
+	success?: boolean;
+	finishedAt?: number;
+	nodeID?: string;
+	error?: Record<string, any>;
+	result?: unknown;
+	duration?: number;
+
+	promise?: () => Promise<any>;
+}
+
 export class Workflow {
 	opts: WorkflowSchema;
 	name: string;
     handler: WorkflowHandler;
+
+	sendJobEvent: (workflowName: string, jobId: string, type: string) => void;
+	callHandler: (job: Job, events: JobEvent[]) => Promise<unknown>;
+	setNextDelayedMaintenance: (time: number) => Promise<void>;
+	addRunningJob: (jobId: string) => void;
+	removeRunningJob: (jobId: string) => void;
+	getNumberOfActiveJobs: () => number;
 }
 
 export interface WorkflowOptions {
@@ -36,6 +100,9 @@ export interface WorkflowOptions {
         maxDelay?: number;
         factor?: number;
     };
+
+	removeOnCompleted?: boolean;
+	removeOnFailed?: boolean;
 
     params?: Record<string, any>;
 	maxStalledCount?: number;
@@ -73,13 +140,12 @@ export interface WorkflowServiceBroker {
 	adapter: RedisAdapter | BaseAdapter;
 }
 
-export interface BaseDefaultOptions {
-    serializer?: string;
-}
+export interface BaseDefaultOptions {}
 
 export interface RedisAdapterOptions extends BaseDefaultOptions {
-    redis: RedisOptions | { url: string } | { cluster: { nodes: string[]; clusterOptions?: any } };
+    redis?: RedisOptions | { url: string } | { cluster: { nodes: string[]; clusterOptions?: any } };
     prefix?: string;
+    serializer?: string;
     drainDelay?: number;
 }
 
@@ -93,5 +159,8 @@ export class BaseAdapter {
 }
 
 export class RedisAdapter extends BaseAdapter {
+	opts: RedisAdapterOptions;
     constructor(opts?: RedisAdapterOptions);
+
+	getKey: (name: string, type?: string, id?: string) => string;
 }

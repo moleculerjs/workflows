@@ -9,14 +9,12 @@
 "use strict";
 
 const _ = require("lodash");
-const { Serializers } = require("moleculer");
 const C = require("../constants");
 
 /**
  * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
  * @typedef {import("moleculer").Service} Service Moleculer Service definition
  * @typedef {import("moleculer").LoggerInstance} Logger Logger instance
- * @typedef {import("moleculer").Serializer} Serializer Moleculer Serializer
  * @typedef {import("../index.d.ts").Workflow} Workflow Workflow definition
  * @typedef {import("../index.d.ts").WorkflowsMiddlewareOptions} WorkflowsMiddlewareOptions Workflow middleware options
  */
@@ -30,13 +28,11 @@ const C = require("../constants");
 class BaseAdapter {
 	/**
 	 * Constructor of adapter
-	 * @param {BaseDefaultOptions?} opts
+	 * @param {BaseDefaultOptions=} opts
 	 */
 	constructor(opts) {
 		/** @type {BaseDefaultOptions} */
-		this.opts = _.defaultsDeep({}, opts, {
-			serializer: "JSON"
-		});
+		this.opts = _.defaultsDeep({}, opts, {});
 	}
 
 	/**
@@ -54,12 +50,22 @@ class BaseAdapter {
 		this.broker = broker;
 		this.logger = logger;
 		this.mwOpts = mwOpts;
+	}
 
-		// create an instance of serializer (default to JSON)
-		/** @type {Serializer} */
-		this.serializer = Serializers.resolve(this.opts.serializer);
-		this.serializer.init(this.broker);
-		this.logger.info("Workflows serializer:", this.broker.getConstructorName(this.serializer));
+	/**
+	 * Log a message with the given level.
+	 *
+	 * @param {*} level
+	 * @param {*} workflowName
+	 * @param {*} jobId
+	 * @param {*} msg
+	 * @param  {...any} args
+	 */
+	log(level, workflowName, jobId, msg, ...args) {
+		if (this.logger) {
+			const wfJobName = jobId ? `${workflowName}:${jobId}` : workflowName;
+			this.logger[level](`[${wfJobName}] ${msg}`, ...args);
+		}
 	}
 
 	/**
@@ -96,19 +102,6 @@ class BaseAdapter {
 	}
 
 	/**
-	 * Create a new job.
-	 *
-	 * @param {string} workflowName
-	 * @param {*} payload
-	 * @param {*} opts
-	 * @returns {Promise<any>}
-	 */
-	async createJob(workflowName, payload, opts) {
-		/* istanbul ignore next */
-		throw new Error("Abstract method is not implemented.");
-	}
-
-	/**
 	 * Create a job
 	 *
 	 * @param {String} workflowName
@@ -137,12 +130,24 @@ class BaseAdapter {
 	/**
 	 * Save state of a job.
 	 *
-	 * @param {Workflow} workflow The workflow object.
+	 * @param {string} workflowName The name of workflow.
 	 * @param {string} jobId The ID of the job.
 	 * @param {Object} state The state object to save.
 	 * @returns {Promise<void>} Resolves when the state is saved.
 	 */
-	async saveJobState(workflow, jobId, state) {
+	async saveJobState(workflowName, jobId, state) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Get state of a workflow run.
+	 *
+	 * @param {string} workflowName
+	 * @param {string} jobId
+	 * @returns {Promise<unknown>} Resolves with the state object or null if not found.
+	 */
+	async getState(workflowName, jobId) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -186,13 +191,14 @@ class BaseAdapter {
 	}
 
 	/**
-	 * Get state of a workflow run.
+	 * Create a new job.
 	 *
 	 * @param {string} workflowName
-	 * @param {string} jobId
-	 * @returns
+	 * @param {*} payload
+	 * @param {*} opts
+	 * @returns {Promise<any>}
 	 */
-	async getState(workflowName, jobId) {
+	async createJob(workflowName, payload, opts) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -218,6 +224,14 @@ class BaseAdapter {
 	 * @returns {Promise<Object[]>} Resolves with an array of job events.
 	 */
 	async getJobEvents(workflowName, jobId) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Get the next delayed jobs maintenance time.
+	 */
+	async getNextDelayedJobTime() {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -270,8 +284,8 @@ class BaseAdapter {
 	/**
 	 * Clean up the adapter store. Workflowname and jobId are optional.
 	 *
-	 * @param {string?} workflowName
-	 * @param {string?} jobId
+	 * @param {string=} workflowName
+	 * @param {string=} jobId
 	 * @returns {Promise<void>}
 	 */
 	async cleanUp(workflowName, jobId) {

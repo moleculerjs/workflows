@@ -179,7 +179,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 					);
 				}
 
-				adapter.checkSignal(signalName, key);
+				Workflow.checkSignal(signalName, key);
 
 				if (broker.isMetricsEnabled()) {
 					broker.metrics.increment(C.METRIC_WORKFLOWS_SIGNAL_TOTAL, {
@@ -203,7 +203,7 @@ module.exports = function WorkflowsMiddleware(mwOpts) {
 					);
 				}
 
-				adapter.checkSignal(signalName, key);
+				Workflow.checkSignal(signalName, key);
 
 				return adapter.removeSignal(signalName, key);
 			};

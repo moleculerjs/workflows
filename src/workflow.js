@@ -116,7 +116,7 @@ class Workflow {
 		// TODO: Implement workflow start logic
 
 		this.adapter = Adapters.resolve(this.mwOpts.adapter);
-		await this.adapter.init(this.broker, this.mwOpts);
+		await this.adapter.init(this, this.broker, this.logger, this.mwOpts);
 
 		await this.adapter.connect();
 		// this.connected = true;
@@ -154,6 +154,22 @@ class Workflow {
 		await this.adapter?.close();
 
 		this.logger("info", null, `Workflow '${this.name}' is stopped.`);
+	}
+
+	addRunningJob(jobId) {
+		if (!this.activeJobs.includes(jobId)) {
+			this.activeJobs.push(jobId);
+		}
+	}
+	removeRunningJob(jobId) {
+		const index = this.activeJobs.indexOf(jobId);
+		if (index > -1) {
+			this.activeJobs.splice(index, 1);
+		}
+	}
+
+	getNumberOfActiveJobs() {
+		return this.activeJobs.length;
 	}
 
 	/**
@@ -504,7 +520,11 @@ class Workflow {
 	 * Set the next delayed jobs maintenance timer for a workflow.
 	 * @param {number} [nextTime] - Optional timestamp to schedule next maintenance.
 	 */
-	setNextDelayedMaintenance(nextTime) {
+	async setNextDelayedMaintenance(nextTime) {
+		if (nextTime == null) {
+			nextTime = await this.adapter.getNextDelayedJobTime(this.name);
+		}
+
 		const now = Date.now();
 		if (!this.delayedNextTime || nextTime == null || nextTime < this.delayedNextTime) {
 			clearTimeout(this.delayedTimer);

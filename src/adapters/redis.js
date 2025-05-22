@@ -7,21 +7,37 @@
 "use strict";
 
 const _ = require("lodash");
-const BaseAdapter = require("./base");
+const Redis = require("ioredis");
+
+const { Serializers } = require("moleculer");
+
 const { BrokerOptionsError } = require("moleculer").Errors;
 const { makeDirs } = require("moleculer").Utils;
+
+const Workflow = require("../workflow");
+const BaseAdapter = require("./base");
 const { WorkflowError, WorkflowAlreadyLocked, WorkflowTimeoutError } = require("../errors");
 const C = require("../constants");
-const Redis = require("ioredis");
 const { parseDuration, humanize, getCronNextTime } = require("../utils");
 
 /**
  * @typedef {import("ioredis").Cluster} Cluster Redis cluster instance. More info: https://github.com/luin/ioredis/blob/master/API.md#Cluster
  * @typedef {import("ioredis").Redis} Redis Redis instance. More info: https://github.com/luin/ioredis/blob/master/API.md#Redis
  * @typedef {import("ioredis").RedisOptions} RedisOptions
+ *
  * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
  * @typedef {import("moleculer").LoggerInstance} Logger Logger instance
- * @typedef {import("./base").BaseDefaultOptions} BaseDefaultOptions Base adapter options
+ * @typedef {import("moleculer").Serializer} Serializer Moleculer Serializer
+ *
+ * @typedef {import("../index.d.ts").BaseDefaultOptions} BaseDefaultOptions Base adapter options
+ * @typedef {import("../index.d.ts").RedisAdapterOptions} RedisAdapterOptions
+ * @typedef {import("../index.d.ts").RedisAdapter} RedisAdapterClass
+ * @typedef {import("../index.d.ts").Job} Job Job definition
+ * @typedef {import("../index.d.ts").JobEvent} JobEvent Job event definition
+ * @typedef {import("../index.d.ts").CreateJobOptions} CreateJobOptions Job options for creation
+ * @typedef {import("../index.d.ts").Workflow} Workflow2 Workflow definition
+ * @typedef {import("../index.d.ts").WorkflowsMiddlewareOptions} WorkflowsMiddlewareOptions Workflow middleware options
+
  */
 
 const SIGNAL_EMPTY_KEY = "null";
@@ -43,17 +59,15 @@ const JOB_FIELDS_NUMERIC = [
 ];
 
 const JOB_FIELDS_BOOLEAN = ["success"];
-
 // const JOB_FIELDS_STRING = ["id", "parent", "nodeID"];
-
 // const JOB_FIELDS = [...JOB_FIELDS_STRING, ...JOB_FIELDS_JSON, ...JOB_FIELDS_NUMERIC, ...JOB_FIELDS_BOOLEAN];
 
 /**
  * Redis Streams adapter
  *
- * @class RedisAdapter
+ * @class RedisAdapterClass
  * @extends {BaseAdapter}
- * @typedef {import("../index.d.ts").RedisAdapterOptions} RedisAdapterOptions
+ * @property {RedisAdapterOptions} opts
  */
 class RedisAdapter extends BaseAdapter {
 	/**
@@ -62,14 +76,14 @@ class RedisAdapter extends BaseAdapter {
 	 * @param  {RedisAdapterOptions?} opts
 	 */
 	constructor(opts) {
-		if (_.isString(opts))
+		if (typeof opts == "string")
 			opts = {
 				redis: {
 					url: opts
 				}
 			};
 
-		if (opts && _.isString(opts.redis)) {
+		if (opts && typeof opts.redis == "string") {
 			opts = {
 				...opts,
 				redis: {
@@ -80,33 +94,40 @@ class RedisAdapter extends BaseAdapter {
 
 		super(opts);
 
-		/** @type {RedisOpts & BaseDefaultOptions} */
+		// /** @type {RedisAdapterOptions} */
 		this.opts = _.defaultsDeep(this.opts, {
+			serializer: "JSON",
 			drainDelay: 5,
 			redis: {
 				retryStrategy: times => Math.min(times * 500, 5000)
 			}
 		});
 
-		this.jobClients = new Map();
+		this.isWorker = false;
+
 		this.commandClient = null;
+		this.blockerClient = null;
 		this.subClient = null;
 
 		this.signalPromises = new Map();
 		this.jobResultPromises = new Map();
 
+		this.running = false;
 		this.disconnecting = false;
 	}
 
 	/**
 	 * Initialize the adapter.
 	 *
-	 * @param {ServiceBroker} broker - The Moleculer Service Broker instance.
-	 * @param {LoggerInstance} logger - The logger instance.
+	 * @param {Workflow2} wf
+	 * @param {ServiceBroker} broker
+	 * @param {Logger} logger
 	 * @param {WorkflowsMiddlewareOptions} mwOpts - Middleware options.
 	 */
-	init(broker, logger, mwOpts) {
-		super.init(broker, logger, mwOpts);
+	init(wf, broker, logger, mwOpts) {
+		super.init(wf, broker, logger, mwOpts);
+
+		this.isWorker = !!wf;
 
 		if (this.opts.prefix) {
 			this.prefix = this.opts.prefix + ":";
@@ -116,7 +137,13 @@ class RedisAdapter extends BaseAdapter {
 			this.prefix = "molwf:";
 		}
 
-		this.logger.info("Workflows Redis adapter prefix:", this.prefix);
+		this.logger.debug("Workflows Redis adapter prefix:", this.prefix);
+
+		// create an instance of serializer (default to JSON)
+		/** @type {Serializer} */
+		this.serializer = Serializers.resolve(this.opts.serializer);
+		this.serializer.init(this.broker);
+		this.logger.info("Workflows serializer:", this.broker.getConstructorName(this.serializer));
 	}
 
 	/**
@@ -128,135 +155,123 @@ class RedisAdapter extends BaseAdapter {
 		if (this.connected) return;
 
 		await this.createCommandClient();
-		await this.createSignalClient();
+		if (this.isWorker) {
+			await this.createSubscriptionClient();
+			await this.subClient.subscribe(this.getKey(this.wf.name, C.QUEUE_DELAYED));
 
-		await this.afterConnected();
-	}
-
-	async afterConnected() {
-		await super.afterConnected();
-		// Start delayed maintenance timers for all registered workflows
-		if (this.workflows) {
-			for (const wf of this.workflows.values()) {
-				await this.subClient?.subscribe(this.getKey(wf.name, C.QUEUE_DELAYED));
-			}
+			await this.createBlockerClient();
 		}
 	}
 
-	createCommandClient() {
+	async createRedisClient() {
 		return new Promise(resolve => {
-			const client = this.createRedisClient();
+			let client;
+
+			const opts = this.opts.redis;
+
+			if (opts && opts.cluster) {
+				if (!opts.cluster.nodes || opts.cluster.nodes.length === 0) {
+					throw new BrokerOptionsError(
+						"No nodes defined for Redis cluster in Workflow adapter.",
+						"ERR_NO_REDIS_CLUSTER_NODES"
+					);
+				}
+				client = new Redis.Cluster(opts.cluster.nodes, opts.cluster.clusterOptions);
+			} else {
+				client = new Redis.Redis(opts && opts.url ? opts.url : opts);
+			}
 
 			client.on("ready", () => {
-				this.commandClient = client;
 				this.connected = true;
 				resolve(client);
-				this.logger.info("Workflows Redis adapter connected.");
+				this.log("info", this.wf?.name, null, "Redis adapter connected.");
 			});
 			client.on("error", err => {
 				this.connected = false;
-				this.logger.error("Workflows Redis adapter error", err.message);
+				this.log("info", this.wf?.name, null, "Redis adapter error", err.message);
 			});
 			client.on("end", () => {
 				this.connected = false;
-				this.commandClient = null;
-				this.logger.info("Workflows Redis adapter disconnected.");
+				this.log("info", this.wf?.name, null, "Redis adapter disconnected.");
 			});
 		});
 	}
 
-	createSignalClient() {
-		return new Promise(resolve => {
-			const client = this.createRedisClient();
+	async createCommandClient() {
+		this.commandClient = await this.createRedisClient();
+	}
 
-			client.on("ready", async () => {
-				this.subClient = client;
-				this.connected = true;
+	async createBlockerClient() {
+		this.blockerClient = await this.createRedisClient();
+	}
 
-				resolve(client);
-				//this.logger.info("Workflows Redis adapter connected.");
-			});
-			client.on("error", err => {
-				this.connected = false;
-				this.logger.error("Workflows Redis adapter error", err.message);
-			});
-			client.on("end", () => {
-				this.connected = false;
-				this.subClient = null;
-				//this.logger.info("Workflows Redis adapter disconnected.");
-			});
-			client.on("messageBuffer", (channelBuf, message) => {
-				const channel = channelBuf.toString();
-				if (channel.startsWith(this.getKey(C.QUEUE_CATEGORY_SIGNAL + ":"))) {
-					const json = this.serializer.deserialize(message);
-					this.logger.debug("Signal received on Pub/Sub", json);
-					const pKey = json.signal + ":" + json.key;
-					const found = this.signalPromises.get(pKey);
-					if (found) {
-						this.signalPromises.delete(pKey);
-						found.resolve(json.payload);
-					}
-				} else if (
-					channel.startsWith(this.prefix) &&
-					channel.endsWith(C.FINISHED) &&
-					this.jobResultPromises.size > 0
-				) {
-					const json = this.serializer.deserialize(message);
-					this.logger.debug("Job finished message received.", json);
-					const jobId = json.jobId;
-					if (this.jobResultPromises.has(jobId)) {
-						const storePromise = this.jobResultPromises.get(jobId);
-						this.jobResultPromises.delete(jobId);
-						if (json.error) {
-							storePromise.reject(this.broker.errorRegenerator.restore(json.error));
-						} else {
-							storePromise.resolve(json.result);
-						}
-					}
-				} else if (channel.startsWith(this.prefix) && channel.endsWith(C.QUEUE_DELAYED)) {
-					const json = this.serializer.deserialize(message);
-					const wf = this.workflows.get(json.workflow);
-					if (wf) {
-						this.setNextDelayedMaintenance(wf, json.promoteAt);
+	async createSubscriptionClient() {
+		this.subClient = await this.createRedisClient();
+		this.subClient.on("messageBuffer", (channelBuf, message) => {
+			const channel = channelBuf.toString();
+			if (channel.startsWith(this.getKey(C.QUEUE_CATEGORY_SIGNAL + ":"))) {
+				const json = this.serializer.deserialize(message);
+				this.logger.debug("Signal received on Pub/Sub", json);
+				const pKey = json.signal + ":" + json.key;
+				const found = this.signalPromises.get(pKey);
+				if (found) {
+					this.signalPromises.delete(pKey);
+					found.resolve(json.payload);
+				}
+			} else if (
+				channel.startsWith(this.prefix) &&
+				channel.endsWith(C.FINISHED) &&
+				this.jobResultPromises.size > 0
+			) {
+				const json = this.serializer.deserialize(message);
+				this.logger.debug("Job finished message received.", json);
+				const jobId = json.jobId;
+				if (this.jobResultPromises.has(jobId)) {
+					const storePromise = this.jobResultPromises.get(jobId);
+					this.jobResultPromises.delete(jobId);
+					if (json.error) {
+						// @ts-ignore
+						storePromise.reject(this.broker.errorRegenerator.restore(json.error));
+					} else {
+						storePromise.resolve(json.result);
 					}
 				}
-			});
+			} else if (channel == this.getKey(this.wf.name, C.QUEUE_DELAYED)) {
+				const json = this.serializer.deserialize(message);
+				this.wf.setNextDelayedMaintenance(json.promoteAt);
+			}
 		});
+
+		await this.subClient.subscribe(this.getKey(this.wf.name, C.QUEUE_DELAYED));
 	}
 
 	/**
-	 * Disconnect from the adapter.
+	 * Close the adapter connection
 	 *
 	 * @returns {Promise<void>} Resolves when the disconnection is complete.
 	 */
-	async destroy() {
+	async disconnect() {
 		if (this.disconnecting) return;
 
 		this.disconnecting = true;
 		this.connected = false;
 
-		try {
-			await super.destroy();
+		await super.disconnect();
 
-			if (this.commandClient) {
-				await this.closeClient(this.commandClient);
-				this.commandClient = null;
-			}
-
-			if (this.subClient) {
-				await this.closeClient(this.subClient);
-				this.subClient = null;
-			}
-
-			for (const client of this.jobClients.values()) {
-				if (client) {
-					await this.closeClient(client);
-				}
-			}
-		} catch (err) {
-			this.logger.warn("Error while disconnecting from Redis", err.message);
+		if (this.commandClient) {
+			await this.closeClient(this.commandClient);
+			this.commandClient = null;
 		}
-		this.jobClients.clear();
+
+		if (this.subClient) {
+			await this.closeClient(this.subClient);
+			this.subClient = null;
+		}
+
+		if (this.blockerClient) {
+			await this.closeClient(this.blockerClient);
+			this.blockerClient = null;
+		}
 
 		this.disconnecting = false;
 	}
@@ -266,7 +281,7 @@ class RedisAdapter extends BaseAdapter {
 	 *
 	 * @param {string} workflowName - The name of the workflow.
 	 * @returns {Promise<Redis>} Resolves with the Redis client instance.
-	 */
+	 *
 	async isClientReady(workflowName) {
 		return new Promise((resolve, reject) => {
 			let client = this.jobClients.get(workflowName);
@@ -300,10 +315,11 @@ class RedisAdapter extends BaseAdapter {
 				client.once("end", handleEnd);
 			}
 		});
-	}
+	}*/
 
 	/**
 	 * Close a Redis client.
+	 *
 	 * @param {Redis} client
 	 */
 	async closeClient(client) {
@@ -324,108 +340,85 @@ class RedisAdapter extends BaseAdapter {
 
 	/**
 	 * Start the job processor for the given workflow.
-	 *
-	 * @param {string} workflow - The name of the workflow.
 	 */
-	startJobProcessor(workflow) {
-		if (!this.jobClients.has(workflow.name)) {
-			this.runJobProcessor(workflow);
-		}
+	startJobProcessor() {
+		this.running = true;
+		this.runJobProcessor();
 	}
 
 	/**
 	 * Stop the job processor for the given workflow.
-	 *
-	 * @param {string} workflow - The name of the workflow.
-	 * @returns {Promise<void>} Resolves when the job processor is stopped.
 	 */
-	async stopJobProcessor(workflow) {
-		if (this.jobClients.has(workflow.name)) {
-			const client = this.jobClients.get(workflow.name);
-			this.jobClients.delete(workflow.name);
-			await this.closeClient(client);
-			client.stopped = true;
-		}
+	async stopJobProcessor() {
+		this.running = false;
 	}
 
 	/**
 	 * Job processor for the given workflow. Waits for a job in the waiting queue, moves it to the active queue, and processes it.
 	 *
-	 * @param {string} workflow - The name of the workflow.
 	 * @returns {Promise<void>} Resolves when the job is processed.
 	 */
-	async runJobProcessor(workflow) {
-		// if (workflow.$isRunning) {
+	async runJobProcessor() {
+		if (!this.running) return;
+
+		// if (this.disconnecting || !this.connected) {
+		// 	this.log("debug", workflow.name, null, "Adapter is not connected or disconnecting.");
 		// 	return;
 		// }
 
-		if (this.disconnecting || !this.connected) {
-			this.log("debug", workflow.name, null, "Adapter is not connected or disconnecting.");
-			return;
-		}
+		const concurrency = this.wf.opts.concurrency;
+		const activeJobCount = this.wf.getNumberOfActiveJobs();
 
-		// workflow.$isRunning = true;
-		const client = await this.isClientReady(workflow.name);
-		if (client.stopped) {
-			this.log("debug", workflow.name, null, "Job processor is stopped");
-			return;
-		}
-
-		const concurrency = workflow.concurrency ?? 1;
-		const runningJobs = this.activeRuns.get(workflow.name) || [];
-
-		if (runningJobs.length >= concurrency) {
+		if (activeJobCount >= concurrency) {
 			// this.log("debug", workflow.name, null, "Max concurrency reached. Waiting...");
-			//workflow.$isRunning = false;
-			//setTimeout(() => this.runJobProcessor(workflow), 500);
-			setImmediate(() => this.runJobProcessor(workflow));
 			return;
 		}
 
 		try {
-			client.blocked = true;
-			const jobId = await client.brpoplpush(
-				this.getKey(workflow.name, C.QUEUE_WAITING),
-				this.getKey(workflow.name, C.QUEUE_ACTIVE),
+			this.blockerClient.blocked = true;
+			const jobId = await this.blockerClient.brpoplpush(
+				this.getKey(this.wf.name, C.QUEUE_WAITING),
+				this.getKey(this.wf.name, C.QUEUE_ACTIVE),
 				this.opts.drainDelay
 			);
-			client.blocked = false;
+			this.blockerClient.blocked = false;
 
 			if (jobId) {
-				this.addRunningJob(workflow, jobId);
+				this.wf.addRunningJob(jobId);
 				// Process the job, without awaiting for it
-				this.processJob(workflow, jobId);
+				this.processJob(jobId);
 			}
 		} catch (err) {
 			// Swallow error if disconnecting
 			if (!this.disconnecting && err.message != "Connection is closed.") {
-				this.log("error", workflow.name, null, "Unable to watch job", err);
+				this.log("error", this.wf.name, null, "Unable to watch job", err);
 			}
 		} finally {
-			setImmediate(() => this.runJobProcessor(workflow));
+			setImmediate(() => this.runJobProcessor());
 		}
 	}
 
 	/**
 	 * Get job details and process it.
 	 *
-	 * @param {string} workflow - The name of the workflow.
 	 * @param {string} jobId - The ID of the job to process.
 	 * @returns {Promise<void>} Resolves when the job is processed.
 	 */
-	async processJob(workflow, jobId) {
-		const job = await this.getJob(workflow.name, jobId);
+	async processJob(jobId) {
+		/** @type {Job} */
+		const job = await this.getJob(this.wf.name, jobId);
 		if (!job) {
-			this.log("warn", workflow.name, jobId, "Job not found");
+			this.log("warn", this.wf.name, jobId, "Job not found");
 			// Remove from active queue
-			await this.commandClient.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, jobId);
+			await this.commandClient.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, jobId);
 
-			this.removeRunningJob(workflow, jobId);
+			this.wf.removeRunningJob(jobId);
 
 			return;
 		}
 
-		const jobEvents = await this.getJobEvents(workflow.name, jobId);
+		/** @type {JobEvent[]} */
+		const jobEvents = await this.getJobEvents(this.wf.name, jobId);
 
 		if (!job.startedAt) {
 			job.startedAt = Date.now();
@@ -433,67 +426,66 @@ class RedisAdapter extends BaseAdapter {
 
 		let unlock;
 		try {
-			unlock = await this.lock(workflow, jobId);
+			unlock = await this.lock(jobId);
 
 			await this.commandClient.hsetnx(
-				this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+				this.getKey(this.wf.name, C.QUEUE_JOB, jobId),
 				"startedAt",
 				job.startedAt
 			);
 
-			await this.addJobEvent(workflow.name, job.id, {
+			await this.addJobEvent(this.wf.name, job.id, {
 				type: "started"
 			});
 
-			this.sendJobEvent(workflow.name, job.id, "started");
+			this.wf.sendJobEvent(this.wf.name, job.id, "started");
 
-			this.log("debug", workflow.name, jobId, "Running job...", job);
+			this.log("debug", this.wf.name, jobId, "Running job...", job);
 
-			const result = await this.callWorkflowHandler(workflow, job, jobEvents);
+			const result = await this.wf.callHandler(job, jobEvents);
 
 			const duration = Date.now() - job.startedAt;
 			this.log(
 				"debug",
-				workflow.name,
+				this.wf.name,
 				jobId,
 				`Job finished in ${humanize(duration)}.`,
 				result
 			);
 
-			await this.moveToCompleted(workflow, job, result);
+			await this.moveToCompleted(job, result);
 		} catch (err) {
 			if (err instanceof WorkflowAlreadyLocked) {
-				this.log("debug", workflow.name, jobId, "Job is already locked.");
+				this.log("debug", this.wf.name, jobId, "Job is already locked.");
 				return;
 			}
-			this.log("error", workflow.name, jobId, "Job processing is failed.", err);
-			await this.moveToFailed(workflow, job, err);
+			this.log("error", this.wf.name, jobId, "Job processing is failed.", err);
+			await this.moveToFailed(job, err);
 		} finally {
-			this.removeRunningJob(workflow, jobId);
+			this.wf.removeRunningJob(jobId);
 
 			if (unlock) await unlock();
 
-			//setImmediate(() => this.runJobProcessor(workflow));
+			setImmediate(() => this.runJobProcessor());
 		}
 	}
 
 	/**
 	 * Set a lock for the job.
 	 *
-	 * @param {string} workflow - The name of the workflow.
 	 * @param {string} jobId - The ID of the job to lock.
 	 * @returns {Promise<Function>} Resolves with a function to unlock the job.
 	 */
-	async lock(workflow, jobId) {
+	async lock(jobId) {
 		// Set lock
 		const lockRes = await this.commandClient.set(
-			this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
+			this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId),
 			this.broker.instanceID,
 			"EX",
 			this.mwOpts.lockExpiration,
 			"NX"
 		);
-		this.log("debug", workflow.name, jobId, "Lock result", lockRes);
+		this.log("debug", this.wf.name, jobId, "Lock result", lockRes);
 
 		if (!lockRes) throw new WorkflowError(`Job ${jobId} is already locked.`);
 
@@ -505,28 +497,28 @@ class RedisAdapter extends BaseAdapter {
 
 			// Check if the job is not finished (e.g timeout maintainer process is closed)
 			const finishedAt = await this.commandClient.hget(
-				this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+				this.getKey(this.wf.name, C.QUEUE_JOB, jobId),
 				"finishedAt"
 			);
 
 			if (finishedAt > 0) {
-				this.log("debug", workflow.name, jobId, "Job is finished. Unlocking...");
+				this.log("debug", this.wf.name, jobId, "Job is finished. Unlocking...");
 				clearInterval(timer);
-				await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId));
+				await this.commandClient.del(this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId));
 				return;
 			}
 
 			// Extend the lock
-			this.log("debug", workflow.name, jobId, "Extending lock");
+			this.log("debug", this.wf.name, jobId, "Extending lock");
 			const lockRes = await this.commandClient.set(
-				this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId),
+				this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId),
 				this.broker.instanceID,
 				"EX",
 				this.mwOpts.lockExpiration,
 				"XX"
 			);
 			if (!lockRes) {
-				this.log("debug", workflow.name, jobId, "Job lock is expired");
+				this.log("debug", this.wf.name, jobId, "Job lock is expired");
 				return;
 			}
 		};
@@ -539,19 +531,18 @@ class RedisAdapter extends BaseAdapter {
 			if (this.disconnecting || !this.connected) return;
 
 			const unlockRes = await this.commandClient.del(
-				this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId)
+				this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId)
 			);
-			this.log("debug", workflow.name, jobId, "Unlock result", unlockRes);
+			this.log("debug", this.wf.name, jobId, "Unlock result", unlockRes);
 		};
 	}
 
 	/**
 	 * Get a job from Redis.
 	 *
-	 * @param {string} workflowName - The name of the workflow.
 	 * @param {string} jobId - The ID of the job.
-	 * @param {string[]|boolean} fields - The fields to retrieve or true to retrieve all fields.
-	 * @returns {Promise<Object|null>} Resolves with the job object or null if not found.
+	 * @param {string[]|boolean|undefined} fields - The fields to retrieve or true to retrieve all fields.
+	 * @returns {Promise<Job|null>} Resolves with the job object or null if not found.
 	 */
 	async getJob(workflowName, jobId, fields) {
 		if (fields == null) {
@@ -575,6 +566,7 @@ class RedisAdapter extends BaseAdapter {
 				fields
 			);
 
+			// @ts-ignore
 			job = fields.reduce((acc, field, i) => {
 				if (values[i] == null) return acc;
 				acc[field] = values[i];
@@ -590,9 +582,9 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Get job events from Redis.
 	 *
-	 * @param {string} workflow - The name of the workflow.
+	 * @param {string} workflowName - The name of the workflow.
 	 * @param {string} jobId - The ID of the job.
-	 * @returns {Promise<Object[]>} Resolves with an array of job events.
+	 * @returns {Promise<JobEvent[]>} Resolves with an array of job events.
 	 */
 	async getJobEvents(workflowName, jobId) {
 		const jobEvents = await this.commandClient.lrangeBuffer(
@@ -609,7 +601,7 @@ class RedisAdapter extends BaseAdapter {
 	 *
 	 * @param {string} workflowName - The name of the workflow.
 	 * @param {string} jobId - The ID of the job.
-	 * @param {Object} event - The event object to add.
+	 * @param {Partial<JobEvent>} event - The event object to add.
 	 * @returns {Promise<void>} Resolves when the event is added.
 	 */
 	async addJobEvent(workflowName, jobId, event) {
@@ -628,28 +620,28 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Move a job to the completed queue.
 	 *
-	 * @param {string} workflow - The name of the workflow.
-	 * @param {Object} job - The job object.
-	 * @param {*} result - The result of the job execution.
+	 * @param {Job} job - The job object.
+	 * @param {unknown} result - The result of the job execution.
 	 * @returns {Promise<void>} Resolves when the job is moved to the completed queue.
 	 */
-	async moveToCompleted(workflow, job, result) {
+	async moveToCompleted(job, result) {
 		if (!this.connected || this.disconnecting) return;
 
-		await this.addJobEvent(workflow.name, job.id, {
+		await this.addJobEvent(this.wf.name, job.id, {
 			type: "finished"
 		});
 
-		this.sendJobEvent(workflow.name, job.id, "finished");
-		this.sendJobEvent(workflow.name, job.id, "completed");
+		this.wf.sendJobEvent(this.wf.name, job.id, "finished");
+		this.wf.sendJobEvent(this.wf.name, job.id, "completed");
 
 		const pipeline = this.commandClient.pipeline();
-		pipeline.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
-		pipeline.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
+		pipeline.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
+		pipeline.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
 
-		if (workflow.removeOnCompleted) {
-			pipeline.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
+		if (this.wf.opts.removeOnCompleted) {
+			pipeline.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
 		} else {
+			/** @type {Partial<Job>} */
 			const fields = {
 				success: true,
 				finishedAt: Date.now(),
@@ -659,8 +651,8 @@ class RedisAdapter extends BaseAdapter {
 			if (result != null) {
 				fields.result = this.serializer.serialize(result);
 			}
-			pipeline.hmset(this.getKey(workflow.name, C.QUEUE_JOB, job.id), fields);
-			pipeline.zadd(this.getKey(workflow.name, C.QUEUE_COMPLETED), fields.finishedAt, job.id);
+			pipeline.hmset(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), fields);
+			pipeline.zadd(this.getKey(this.wf.name, C.QUEUE_COMPLETED), fields.finishedAt, job.id);
 		}
 
 		await pipeline.exec();
@@ -671,7 +663,7 @@ class RedisAdapter extends BaseAdapter {
 			storePromise.resolve(result);
 		} else {
 			this.commandClient.publish(
-				this.getKey(workflow.name, C.FINISHED),
+				this.getKey(this.wf.name, C.FINISHED),
 				this.serializer.serialize({
 					jobId: job.id,
 					result
@@ -680,19 +672,18 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		if (job.parent) {
-			await this.rescheduleJob(workflow.name, job.parent);
+			await this.rescheduleJob(this.wf.name, job.parent);
 		}
 	}
 
 	/**
 	 * Calculate the backoff time for a job.
 	 *
-	 * @param {Workflow} workflow
 	 * @param {number} retryAttempts
 	 * @returns {number} The backoff time in milliseconds.
 	 */
-	getBackoffTime(workflow, retryAttempts) {
-		const opts = workflow.retryPolicy || {};
+	getBackoffTime(retryAttempts) {
+		const opts = this.wf.opts.retryPolicy || {};
 		const delay = parseDuration(opts.delay) ?? 100;
 
 		return Math.min(
@@ -704,76 +695,75 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Move a job to the failed queue.
 	 *
-	 * @param {string} workflow - The name of the workflow.
 	 * @param {Object|string} job - The job object.
 	 * @param {Error} err - The error that caused the job to fail.
 	 * @returns {Promise<void>} Resolves when the job is moved to the failed queue.
 	 */
-	async moveToFailed(workflow, job, err) {
+	async moveToFailed(job, err) {
 		if (!this.connected || this.disconnecting) return;
 
 		if (typeof job == "string") {
-			job = await this.getJob(workflow.name, job, ["parent", "startedAt"]);
+			job = await this.getJob(this.wf.name, job, ["parent", "startedAt"]);
 		}
 
-		await this.addJobEvent(workflow.name, job.id, {
+		await this.addJobEvent(this.wf.name, job.id, {
 			type: "failed",
 			error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
 		});
 
-		this.sendJobEvent(workflow.name, job.id, "finished");
-		this.sendJobEvent(workflow.name, job.id, "failed");
+		this.wf.sendJobEvent(this.wf.name, job.id, "finished");
+		this.wf.sendJobEvent(this.wf.name, job.id, "failed");
 
 		const pipeline = this.commandClient.pipeline();
-		pipeline.lrem(this.getKey(workflow.name, C.QUEUE_ACTIVE), 1, job.id);
-		pipeline.srem(this.getKey(workflow.name, C.QUEUE_STALLED), job.id);
+		pipeline.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
+		pipeline.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
 		await pipeline.exec();
 
 		if (err?.retryable) {
 			let retryFields = await this.commandClient.hmget(
-				this.getKey(workflow.name, C.QUEUE_JOB, job.id),
+				this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
 				["retries", "retryAttempts"]
 			);
 			const retries =
 				(retryFields[0] != null
 					? parseInt(retryFields[0])
-					: workflow.retryPolicy?.retries) ?? 0;
+					: this.wf.opts.retryPolicy?.retries) ?? 0;
 			const retryAttempts = parseInt(retryFields[1] ?? 0);
 
 			if (retries > 0 && retryAttempts < retries) {
 				const pipeline = this.commandClient.pipeline();
 				pipeline.hincrby(
-					this.getKey(workflow.name, C.QUEUE_JOB, job.id),
+					this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
 					"retryAttempts",
 					1
 				);
-				const backoffTime = this.getBackoffTime(workflow, retryAttempts);
+				const backoffTime = this.getBackoffTime(retryAttempts);
 				this.log(
 					"debug",
-					workflow.name,
+					this.wf.name,
 					job.id,
 					`Retrying job (${retryAttempts} attempts of ${retries}) after ${backoffTime} ms...`
 				);
 
 				const promoteAt = Date.now() + backoffTime;
 				pipeline.hset(
-					this.getKey(workflow.name, C.QUEUE_JOB, job.id),
+					this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
 					"promoteAt",
 					promoteAt
 				);
-				pipeline.zadd(this.getKey(workflow.name, C.QUEUE_DELAYED), promoteAt, job.id);
+				pipeline.zadd(this.getKey(this.wf.name, C.QUEUE_DELAYED), promoteAt, job.id);
 
 				await pipeline.exec();
 
 				// Publish promoteAt time to all workers
-				await this.sendDelayedJobPromoteAt(workflow.name, job.id, promoteAt);
+				await this.sendDelayedJobPromoteAt(this.wf.name, job.id, promoteAt);
 
 				return;
 			}
 		}
 
-		if (workflow.removeOnFailed) {
-			await this.commandClient.del(this.getKey(workflow.name, C.QUEUE_JOB, job.id));
+		if (this.wf.opts.removeOnFailed) {
+			await this.commandClient.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
 		} else {
 			const fields = {
 				success: false,
@@ -787,11 +777,11 @@ class RedisAdapter extends BaseAdapter {
 				);
 			}
 
-			this.log("debug", workflow.name, job.id, `Job move to failed queue.`);
+			this.log("debug", this.wf.name, job.id, `Job move to failed queue.`);
 
 			const pipeline = this.commandClient.pipeline();
-			pipeline.hmset(this.getKey(workflow.name, C.QUEUE_JOB, job.id), fields);
-			pipeline.zadd(this.getKey(workflow.name, C.QUEUE_FAILED), fields.finishedAt, job.id);
+			pipeline.hmset(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), fields);
+			pipeline.zadd(this.getKey(this.wf.name, C.QUEUE_FAILED), fields.finishedAt, job.id);
 			await pipeline.exec();
 		}
 
@@ -801,7 +791,7 @@ class RedisAdapter extends BaseAdapter {
 			storePromise.reject(err);
 		} else {
 			this.commandClient.publish(
-				this.getKey(workflow.name, C.FINISHED),
+				this.getKey(this.wf.name, C.FINISHED),
 				this.serializer.serialize({
 					jobId: job.id,
 					error: this.broker.errorRegenerator.extractPlainError(err)
@@ -810,25 +800,25 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		if (job.parent) {
-			await this.rescheduleJob(workflow.name, job.parent);
+			await this.rescheduleJob(this.wf.name, job.parent);
 		}
 	}
 
 	/**
 	 * Save the state of a job.
 	 *
-	 * @param {string} workflow - The name of the workflow.
+	 * @param {string} workflowName - The name of the workflow.
 	 * @param {string} jobId - The ID of the job.
-	 * @param {Object} state - The state object to save.
+	 * @param {unknown} state - The state object to save.
 	 * @returns {Promise<void>} Resolves when the state is saved.
 	 */
-	async saveJobState(workflow, jobId, state) {
+	async saveJobState(workflowName, jobId, state) {
 		await this.commandClient.hset(
-			this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+			this.getKey(workflowName, C.QUEUE_JOB, jobId),
 			"state",
 			this.serializer.serialize(state)
 		);
-		this.log("debug", workflow.name, jobId, "Job state set.", state);
+		this.log("debug", workflowName, jobId, "Job state set.", state);
 	}
 
 	/**
@@ -836,7 +826,7 @@ class RedisAdapter extends BaseAdapter {
 	 *
 	 * @param {string} workflowName
 	 * @param {string} jobId
-	 * @returns
+	 * @returns {Promise<unknown>} Resolves with the state object or null if not found.
 	 */
 	async getState(workflowName, jobId) {
 		const state = await this.commandClient.hgetBuffer(
@@ -927,17 +917,18 @@ class RedisAdapter extends BaseAdapter {
 	 * Create a new job and push it to the waiting or delayed queue.
 	 *
 	 * @param {string} workflowName - The name of the workflow.
-	 * @param {*} payload - The payload of the job.
-	 * @param {*} opts - Additional options for the job.
-	 * @returns {Promise<Object>} Resolves with the created job object.
+	 * @param {unknown} payload - The payload of the job.
+	 * @param {CreateJobOptions} opts - Additional options for the job.
+	 * @returns {Promise<Job>} Resolves with the created job object.
 	 */
 	async createJob(workflowName, payload, opts) {
 		opts = opts || {};
 
 		let customJobId = !!opts.jobId;
 
+		/** @type {Job} */
 		let job = {
-			id: opts.jobId ? this.checkJobId(opts.jobId) : this.broker.generateUid(),
+			id: opts.jobId ? Workflow.checkJobId(opts.jobId) : this.broker.generateUid(),
 			createdAt: Date.now()
 		};
 
@@ -1066,7 +1057,7 @@ class RedisAdapter extends BaseAdapter {
 				await this.commandClient.lpush(this.getKey(workflowName, C.QUEUE_WAITING), job.id);
 			}
 
-			this.sendJobEvent(workflowName, job.id, "created");
+			this.wf.sendJobEvent(workflowName, job.id, "created");
 		}
 
 		job.promise = async () => {
@@ -1142,36 +1133,31 @@ class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Set the next delayed jobs maintenance timer for a workflow.
-	 * @param {Object} wf - The workflow object.
-	 * @param {number} [nextTime] - Optional timestamp to schedule next maintenance.
+	 * Get the next delayed jobs maintenance time.
 	 */
-	async setNextDelayedMaintenance(wf, nextTime) {
-		if (nextTime == null) {
-			const first = await this.commandClient?.zrange(
-				this.getKey(wf.name, C.QUEUE_DELAYED),
-				0,
-				0,
-				"WITHSCORES"
-			);
+	async getNextDelayedJobTime() {
+		const first = await this.commandClient?.zrange(
+			this.getKey(this.wf.name, C.QUEUE_DELAYED),
+			0,
+			0,
+			"WITHSCORES"
+		);
 
-			if (first?.length > 0) {
-				const promoteAt = parseInt(first[1]);
-				if (promoteAt > Date.now()) {
-					super.setNextDelayedMaintenance(wf, promoteAt);
-					return;
-				}
+		if (first?.length > 0) {
+			const promoteAt = parseInt(first[1]);
+			if (promoteAt > Date.now()) {
+				return promoteAt;
 			}
 		}
 
-		super.setNextDelayedMaintenance(wf, nextTime);
+		return null;
 	}
 
 	/**
 	 * Serialize a job object for storage in Redis.
 	 *
-	 * @param {Object} job - The job object to serialize.
-	 * @returns {Object} The serialized job object.
+	 * @param {Job} job - The job object to serialize.
+	 * @returns {Job} The serialized job object.
 	 */
 	serializeJob(job) {
 		const res = { ...job };
@@ -1188,10 +1174,12 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Deserialize a job object retrieved from Redis.
 	 *
-	 * @param {Object} job - The serialized job object.
-	 * @returns {Object} The deserialized job object.
+	 * @param {Job} job - The serialized job object.
+	 * @returns {Job} The deserialized job object.
 	 */
 	deserializeJob(job) {
+		/** @type {Job} */
+		// @ts-ignore
 		const res = {};
 
 		for (const [key, value] of Object.entries(job)) {
@@ -1220,14 +1208,13 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Reschedule a repeatable job based on its configuration.
 	 *
-	 * @param {string} workflowName - The name of the workflow.
-	 * @param {Object|string} job - The job object or job ID to reschedule.
+	 * @param {Job|string} job - The job object or job ID to reschedule.
 	 * @returns {Promise<void>} Resolves when the job is rescheduled.
 	 */
-	async rescheduleJob(workflowName, job) {
+	async rescheduleJob(job) {
 		try {
 			if (typeof job == "string") {
-				job = await this.getJob(workflowName, job, [
+				job = await this.getJob(this.wf.name, job, [
 					"payload",
 					"repeat",
 					"repeatCounter",
@@ -1237,7 +1224,7 @@ class RedisAdapter extends BaseAdapter {
 				]);
 
 				if (!job) {
-					this.log("warn", workflowName, job, "Parent job not found. Not rescheduling.");
+					this.log("warn", this.wf.name, job, "Parent job not found. Not rescheduling.");
 					return;
 				}
 			}
@@ -1253,14 +1240,14 @@ class RedisAdapter extends BaseAdapter {
 					if (endDate < Date.now()) {
 						this.log(
 							"debug",
-							workflowName,
+							this.wf.name,
 							job.id,
 							`Repeatable job is expired at ${job.repeat.endDate}. Not rescheduling.`,
 							job
 						);
 
 						await this.commandClient.hmset(
-							this.getKey(workflowName, C.QUEUE_JOB, job.id),
+							this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
 							{
 								finishedAt: Date.now(),
 								nodeID: this.broker.nodeID
@@ -1273,14 +1260,14 @@ class RedisAdapter extends BaseAdapter {
 					if (job.repeatCounter >= job.repeat.limit) {
 						this.log(
 							"debug",
-							workflowName,
+							this.wf.name,
 							job.id,
 							`Repeatable job reached the limit of ${job.repeat.limit}. Not rescheduling.`,
 							job
 						);
 
 						await this.commandClient.hmset(
-							this.getKey(workflowName, C.QUEUE_JOB, job.id),
+							this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
 							{
 								finishedAt: Date.now(),
 								nodeID: this.broker.nodeID
@@ -1292,7 +1279,7 @@ class RedisAdapter extends BaseAdapter {
 				}
 
 				nextJob.repeatCounter = await this.commandClient.hincrby(
-					this.getKey(workflowName, C.QUEUE_JOB, job.id),
+					this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
 					"repeatCounter",
 					1
 				);
@@ -1306,12 +1293,12 @@ class RedisAdapter extends BaseAdapter {
 
 				// Save the next scheduled Job to Redis
 				await this.commandClient.hmset(
-					this.getKey(workflowName, C.QUEUE_JOB, nextJob.id),
+					this.getKey(this.wf.name, C.QUEUE_JOB, nextJob.id),
 					this.serializeJob(nextJob)
 				);
 				this.log(
 					"debug",
-					workflowName,
+					this.wf.name,
 					job.id,
 					`Scheduled job created. Next run: ${new Date(nextJob.promoteAt).toISOString()}`,
 					nextJob
@@ -1319,15 +1306,15 @@ class RedisAdapter extends BaseAdapter {
 
 				// Push to delayed queue
 				await this.commandClient.zadd(
-					this.getKey(workflowName, C.QUEUE_DELAYED),
+					this.getKey(this.wf.name, C.QUEUE_DELAYED),
 					nextJob.promoteAt,
 					nextJob.id
 				);
 
-				await this.sendDelayedJobPromoteAt(workflowName, nextJob.id, nextJob.promoteAt);
+				await this.sendDelayedJobPromoteAt(this.wf.name, nextJob.id, nextJob.promoteAt);
 			}
 		} catch (err) {
-			this.log("error", workflowName, job.id, "Error while rescheduling job", err);
+			this.log("error", this.wf.name, job.id, "Error while rescheduling job", err);
 		}
 	}
 
@@ -1373,7 +1360,7 @@ class RedisAdapter extends BaseAdapter {
 		// if we get slave nodes, it would be failed for deletion.
 		return this.commandClient
 			.nodes("master")
-			.map(async node => this.nodeScanDel(node, pattern));
+			.map(async node => this.nodeCleanDb(node, pattern));
 	}
 
 	async nodeCleanDb(node, pattern) {
@@ -1417,14 +1404,13 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Acquire a maintenance lock for a workflow.
 	 *
-	 * @param {Object} workflow - The workflow object.
 	 * @param {number} lockTime - The time to hold the lock in milliseconds.
 	 * @returns {Promise<boolean>} Resolves with true if the lock is acquired, false otherwise.
 	 */
-	async lockMaintenance(workflow, lockTime, lockName = C.QUEUE_MAINTENANCE_LOCK) {
+	async lockMaintenance(lockTime, lockName = C.QUEUE_MAINTENANCE_LOCK) {
 		// Set lock
 		const lockRes = await this.commandClient?.set(
-			this.getKey(workflow.name, lockName),
+			this.getKey(this.wf.name, lockName),
 			this.broker.instanceID,
 			"PX",
 			lockTime / 2,
@@ -1484,55 +1470,53 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Check active jobs and if they timed out, move to failed jobs.
 	 *
-	 * @param {Object} workflow - The workflow object.
 	 * @returns {Promise<void>} Resolves when delayed jobs are processed.
 	 */
-	async maintenanceActiveJobs(workflow) {
-		this.log("debug", workflow.name, null, "Maintenance active jobs...");
+	async maintenanceActiveJobs() {
+		this.log("debug", this.wf.name, null, "Maintenance active jobs...");
 		try {
 			const now = Date.now();
 			const activeJobIds = await this.commandClient.lrange(
-				this.getKey(workflow.name, C.QUEUE_ACTIVE),
+				this.getKey(this.wf.name, C.QUEUE_ACTIVE),
 				0,
 				-1
 			);
 			if (activeJobIds.length > 0) {
 				for (const jobId of activeJobIds) {
 					try {
-						const job = await this.getJob(workflow.name, jobId, [
+						const job = await this.getJob(this.wf.name, jobId, [
 							"startedAt",
 							"timeout"
 						]);
 						if (job && job.startedAt > 0) {
 							const timeout = parseDuration(
-								job.timeout != null ? job.timeout : workflow.timeout
+								job.timeout != null ? job.timeout : this.wf.opts.timeout
 							);
 							if (timeout > 0) {
 								if (now - job.startedAt > timeout) {
 									this.log(
 										"debug",
-										workflow.name,
+										this.wf.name,
 										jobId,
 										`Job timed out (${humanize(timeout)}). Moving to failed queue.`
 									);
 									await this.moveToFailed(
-										workflow,
 										jobId,
-										new WorkflowTimeoutError(workflow.name, jobId, timeout)
+										new WorkflowTimeoutError(this.wf.name, jobId, timeout)
 									);
 									// Unlock manually
 									await this.commandClient.del(
-										this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId)
+										this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId)
 									);
 
-									this.removeRunningJob(workflow, jobId);
+									this.wf.removeRunningJob(jobId);
 								}
 							}
 						}
 					} catch (err) {
 						this.log(
 							"error",
-							workflow.name,
+							this.wf.name,
 							jobId,
 							"Error while timeout active job",
 							err
@@ -1541,52 +1525,51 @@ class RedisAdapter extends BaseAdapter {
 				}
 			}
 		} catch (err) {
-			this.log("error", workflow.name, null, "Error while processing active jobs", err);
+			this.log("error", this.wf.name, null, "Error while processing active jobs", err);
 		}
 	}
 
 	/**
 	 * Process stalled jobs for a workflow and move them back to the waiting queue.
 	 *
-	 * @param {Object} workflow - The workflow object.
 	 * @returns {Promise<void>} Resolves when stalled jobs are processed.
 	 */
-	async maintenanceStalledJobs(workflow) {
-		this.log("debug", workflow.name, null, "Maintenance stalled jobs...");
+	async maintenanceStalledJobs() {
+		this.log("debug", this.wf.name, null, "Maintenance stalled jobs...");
 
 		try {
 			const stalledJobIds = await this.commandClient.smembers(
-				this.getKey(workflow.name, C.QUEUE_STALLED)
+				this.getKey(this.wf.name, C.QUEUE_STALLED)
 			);
 			if (stalledJobIds.length > 0) {
 				for (const jobId of stalledJobIds) {
 					try {
 						// Check the job lock is exists
 						const exists = await this.commandClient.exists(
-							this.getKey(workflow.name, C.QUEUE_JOB_LOCK, jobId)
+							this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId)
 						);
 						if (exists == 0) {
 							// Check the job is in the active queue
 							const removed = await this.commandClient.lrem(
-								this.getKey(workflow.name, C.QUEUE_ACTIVE),
+								this.getKey(this.wf.name, C.QUEUE_ACTIVE),
 								1,
 								jobId
 							);
 							if (removed > 0) {
 								// Move the job back to the waiting queue
-								await this.moveStalledJobsToWaiting(workflow, jobId);
+								await this.moveStalledJobsToWaiting(this.wf, jobId);
 							}
 						}
 
 						// Remove from stalled queue
 						await this.commandClient.srem(
-							this.getKey(workflow.name, C.QUEUE_STALLED),
+							this.getKey(this.wf.name, C.QUEUE_STALLED),
 							jobId
 						);
 					} catch (err) {
 						this.log(
 							"error",
-							workflow.name,
+							this.wf.name,
 							jobId,
 							"Error while processing stalled job",
 							err
@@ -1597,66 +1580,64 @@ class RedisAdapter extends BaseAdapter {
 
 			// Copy active jobIds to stalled queue
 			const activeJobIds = await this.commandClient.lrange(
-				this.getKey(workflow.name, C.QUEUE_ACTIVE),
+				this.getKey(this.wf.name, C.QUEUE_ACTIVE),
 				0,
 				-1
 			);
 			if (activeJobIds.length > 0) {
 				await this.commandClient.sadd(
-					this.getKey(workflow.name, C.QUEUE_STALLED),
+					this.getKey(this.wf.name, C.QUEUE_STALLED),
 					activeJobIds
 				);
 			}
 		} catch (err) {
-			this.log("error", workflow.name, null, "Error while processing stalled jobs", err);
+			this.log("error", this.wf.name, null, "Error while processing stalled jobs", err);
 		}
 	}
 
 	/**
 	 * Move stalled job back to the waiting queue.
 	 *
-	 * @param {Object} workflow - The workflow object.
 	 * @param {string} jobId - The ID of the stalled job.
 	 * @returns {Promise<void>} Resolves when the job is moved to the failed queue.
 	 */
-	async moveStalledJobsToWaiting(workflow, jobId) {
+	async moveStalledJobsToWaiting(jobId) {
 		const stalledCounter = await this.commandClient.hincrby(
-			this.getKey(workflow.name, C.QUEUE_JOB, jobId),
+			this.getKey(this.wf.name, C.QUEUE_JOB, jobId),
 			"stalledCounter",
 			1
 		);
 
-		await this.addJobEvent(workflow.name, jobId, { type: "stalled" });
-		this.sendJobEvent(workflow.name, jobId, "stalled");
+		await this.addJobEvent(this.wf.name, jobId, { type: "stalled" });
+		this.wf.sendJobEvent(this.wf.name, jobId, "stalled");
 
-		if (workflow.maxStalledCount > 0 && stalledCounter > workflow.maxStalledCount) {
+		if (this.wf.opts.maxStalledCount > 0 && stalledCounter > this.wf.opts.maxStalledCount) {
 			this.log(
 				"debug",
-				workflow.name,
+				this.wf.name,
 				jobId,
 				"Job is reached the maximum stalled count. It's moved to failed."
 			);
 
-			await this.moveToFailed(workflow, jobId, new Error("Job stalled too many times."));
+			await this.moveToFailed(this.wf, jobId, new Error("Job stalled too many times."));
 			return;
 		}
 
-		this.log("debug", workflow.name, jobId, `Job is stalled. Moved back to waiting queue.`);
-		await this.commandClient.lpush(this.getKey(workflow.name, C.QUEUE_WAITING), jobId);
+		this.log("debug", this.wf.name, jobId, `Job is stalled. Moved back to waiting queue.`);
+		await this.commandClient.lpush(this.getKey(this.wf.name, C.QUEUE_WAITING), jobId);
 	}
 
 	/**
 	 * Remove old jobs from a specified queue based on their age.
 	 *
-	 * @param {Object} workflow - The workflow object.
 	 * @param {string} queueName - The name of the queue (e.g., completed, failed).
 	 * @param {number} retention - The age threshold in milliseconds for removing jobs.
 	 * @returns {Promise<void>} Resolves when old jobs are removed.
 	 */
-	async maintenanceRemoveOldJobs(workflow, queueName, retention) {
+	async maintenanceRemoveOldJobs(queueName, retention) {
 		this.log(
 			"debug",
-			workflow.name,
+			this.wf.name,
 			null,
 			`Maintenance remove old ${queueName} jobs... (retention: ${humanize(retention)})`
 		);
@@ -1664,24 +1645,24 @@ class RedisAdapter extends BaseAdapter {
 		try {
 			const minDate = Date.now() - retention;
 			const jobIds = await this.commandClient.zrangebyscore(
-				this.getKey(workflow.name, queueName),
+				this.getKey(this.wf.name, queueName),
 				0,
 				minDate
 			);
 			if (jobIds.length > 0) {
-				const jobKeys = jobIds.map(jobId => this.getKey(workflow.name, C.QUEUE_JOB, jobId));
+				const jobKeys = jobIds.map(jobId => this.getKey(this.wf.name, C.QUEUE_JOB, jobId));
 				const jobEventsKeys = jobIds.map(jobId =>
-					this.getKey(workflow.name, C.QUEUE_JOB_EVENTS, jobId)
+					this.getKey(this.wf.name, C.QUEUE_JOB_EVENTS, jobId)
 				);
 				const pipeline = this.commandClient.pipeline();
 				pipeline.del(jobKeys);
 				pipeline.del(jobEventsKeys);
-				pipeline.zremrangebyscore(this.getKey(workflow.name, queueName), 0, minDate);
+				pipeline.zremrangebyscore(this.getKey(this.wf.name, queueName), 0, minDate);
 				await pipeline.exec();
 
 				this.log(
 					"debug",
-					workflow.name,
+					this.wf.name,
 					null,
 					`Removed ${jobIds.length} ${queueName} jobs:`,
 					jobIds
@@ -1690,7 +1671,7 @@ class RedisAdapter extends BaseAdapter {
 		} catch (err) {
 			this.log(
 				"error",
-				workflow.name,
+				this.wf.name,
 				null,
 				`Error while removing old ${queueName} jobs`,
 				err
@@ -1701,46 +1682,19 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Release the maintenance lock for a workflow.
 	 *
-	 * @param {Object} workflow - The workflow object.
 	 * @returns {Promise<void>} Resolves when the lock is released.
 	 */
-	async unlockMaintenance(workflow, lockName = C.QUEUE_MAINTENANCE_LOCK) {
-		const unlockRes = await this.commandClient?.del(this.getKey(workflow.name, lockName));
-		this.log("debug", workflow.name, null, "Unlock maintenance", lockName, unlockRes);
-	}
-
-	/**
-	 * Create Redis standalone or cluster client.
-	 *
-	 * @returns {Redis|Cluster} A Redis client instance, either standalone or cluster.
-	 * @throws {WorkflowError} If no nodes are defined for Redis cluster.
-	 */
-	createRedisClient() {
-		let client;
-
-		const opts = this.opts.redis;
-
-		if (opts && opts.cluster) {
-			if (!opts.cluster.nodes || opts.cluster.nodes.length === 0) {
-				throw new BrokerOptionsError(
-					"No nodes defined for Redis cluster in Workflow adapter.",
-					"ERR_NO_REDIS_CLUSTER_NODES"
-				);
-			}
-			client = new Redis.Cluster(opts.cluster.nodes, opts.cluster.clusterOptions);
-		} else {
-			client = new Redis(opts && opts.url ? opts.url : opts);
-		}
-
-		return client;
+	async unlockMaintenance(lockName = C.QUEUE_MAINTENANCE_LOCK) {
+		const unlockRes = await this.commandClient?.del(this.getKey(this.wf.name, lockName));
+		this.log("debug", this.wf.name, null, "Unlock maintenance", lockName, unlockRes);
 	}
 
 	/**
 	 * Get Redis key (for Workflow) for the given name and type.
 	 *
 	 * @param {string} name - The name of the workflow or entity.
-	 * @param {string} type - The type of the key (e.g., job, lock, events).
-	 * @param {string} [id] - Optional ID to append to the key.
+	 * @param {string=} type - The type of the key (e.g., job, lock, events).
+	 * @param {string=} id - Optional ID to append to the key.
 	 * @returns {string} The constructed Redis key.
 	 */
 	getKey(name, type, id) {
@@ -1860,10 +1814,13 @@ class RedisAdapter extends BaseAdapter {
 
 	/**
 	 * Dump all Redis data for all workflows to JSON files.
+	 *
+	 * @param {string} folder - The folder to save the dump files.
+	 * @param {string[]} wfNames - The names of the workflows to dump.
 	 */
-	async dumpWorkflows(folder) {
+	async dumpWorkflows(folder, wfNames) {
 		makeDirs(folder);
-		for (const name of this.workflows.keys()) {
+		for (const name of wfNames) {
 			await this.dumpWorkflow(name, folder);
 		}
 	}
