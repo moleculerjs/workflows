@@ -85,7 +85,6 @@ export class Workflow {
 	name: string;
     handler: WorkflowHandler;
 
-	sendJobEvent: (workflowName: string, jobId: string, type: string) => void;
 	callHandler: (job: Job, events: JobEvent[]) => Promise<unknown>;
 	setNextDelayedMaintenance: (time: number) => Promise<void>;
 	addRunningJob: (jobId: string) => void;
@@ -173,6 +172,8 @@ export class BaseAdapter {
 	stopJobProcessor(): Promise<void>;
     createJob(workflowName: string, payload: any, opts?: any): Promise<unknown>;
     cleanUp(workflowName?: string, jobId?: string): Promise<void>;
+
+	sendJobEvent: (workflowName: string, jobId: string, type: string) => void;
 
 	addJobEvent(workflowName: string, jobId: string, event: JobEvent): Promise<void>;
 	saveJobState(workflowName: string, jobId: string, state: unknown): Promise<void>;

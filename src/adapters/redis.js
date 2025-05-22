@@ -439,7 +439,7 @@ class RedisAdapter extends BaseAdapter {
 				type: "started"
 			});
 
-			this.wf.sendJobEvent(this.wf.name, job.id, "started");
+			this.sendJobEvent(this.wf.name, job.id, "started");
 
 			this.log("debug", this.wf.name, jobId, "Running job...", job);
 
@@ -632,8 +632,8 @@ class RedisAdapter extends BaseAdapter {
 			type: "finished"
 		});
 
-		this.wf.sendJobEvent(this.wf.name, job.id, "finished");
-		this.wf.sendJobEvent(this.wf.name, job.id, "completed");
+		this.sendJobEvent(this.wf.name, job.id, "finished");
+		this.sendJobEvent(this.wf.name, job.id, "completed");
 
 		const pipeline = this.commandClient.pipeline();
 		pipeline.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
@@ -712,8 +712,8 @@ class RedisAdapter extends BaseAdapter {
 			error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
 		});
 
-		this.wf.sendJobEvent(this.wf.name, job.id, "finished");
-		this.wf.sendJobEvent(this.wf.name, job.id, "failed");
+		this.sendJobEvent(this.wf.name, job.id, "finished");
+		this.sendJobEvent(this.wf.name, job.id, "failed");
 
 		const pipeline = this.commandClient.pipeline();
 		pipeline.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
@@ -1058,7 +1058,7 @@ class RedisAdapter extends BaseAdapter {
 				await this.commandClient.lpush(this.getKey(workflowName, C.QUEUE_WAITING), job.id);
 			}
 
-			this.wf.sendJobEvent(workflowName, job.id, "created");
+			this.sendJobEvent(workflowName, job.id, "created");
 		}
 
 		job.promise = async () => {
@@ -1426,15 +1426,14 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Process delayed jobs for a workflow and move them to the waiting queue if ready.
 	 *
-	 * @param {Object} workflow - The workflow object.
 	 * @returns {Promise<void>} Resolves when delayed jobs are processed.
 	 */
-	async maintenanceDelayedJobs(workflow) {
-		this.log("debug", workflow.name, null, "Maintenance delayed jobs...");
+	async maintenanceDelayedJobs() {
+		this.log("debug", this.wf.name, null, "Maintenance delayed jobs...");
 		try {
 			const now = Date.now();
 			const jobIds = await this.commandClient.zrangebyscore(
-				this.getKey(workflow.name, C.QUEUE_DELAYED),
+				this.getKey(this.wf.name, C.QUEUE_DELAYED),
 				0,
 				now
 			);
@@ -1442,23 +1441,23 @@ class RedisAdapter extends BaseAdapter {
 				try {
 					const pipeline = this.commandClient.pipeline();
 					for (const jobId of jobIds) {
-						const job = await this.getJob(workflow.name, jobId, ["id"]);
+						const job = await this.getJob(this.wf.name, jobId, ["id"]);
 						if (job) {
 							this.log(
 								"debug",
-								workflow.name,
+								this.wf.name,
 								jobId,
 								"Moving delayed job to waiting queue."
 							);
-							pipeline.lpush(this.getKey(workflow.name, C.QUEUE_WAITING), jobId);
+							pipeline.lpush(this.getKey(this.wf.name, C.QUEUE_WAITING), jobId);
 						}
-						pipeline.zrem(this.getKey(workflow.name, C.QUEUE_DELAYED), jobId);
+						pipeline.zrem(this.getKey(this.wf.name, C.QUEUE_DELAYED), jobId);
 					}
 					await pipeline.exec();
 				} catch (err) {
 					this.log(
 						"error",
-						workflow.name,
+						this.wf.name,
 						null,
 						"Error while moving delayed jobs to waiting queue",
 						err
@@ -1466,7 +1465,7 @@ class RedisAdapter extends BaseAdapter {
 				}
 			}
 		} catch (err) {
-			this.log("error", workflow.name, null, "Error while processing delayed jobs", err);
+			this.log("error", this.wf.name, null, "Error while processing delayed jobs", err);
 		}
 	}
 
@@ -1612,7 +1611,7 @@ class RedisAdapter extends BaseAdapter {
 		);
 
 		await this.addJobEvent(this.wf.name, jobId, { type: "stalled" });
-		this.wf.sendJobEvent(this.wf.name, jobId, "stalled");
+		this.sendJobEvent(this.wf.name, jobId, "stalled");
 
 		if (this.wf.opts.maxStalledCount > 0 && stalledCounter > this.wf.opts.maxStalledCount) {
 			this.log(

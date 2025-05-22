@@ -117,8 +117,6 @@ class Workflow {
 	 * Start the workflow.
 	 */
 	async start() {
-		// TODO: Implement workflow start logic
-
 		this.adapter = Adapters.resolve(this.mwOpts.adapter);
 		await this.adapter.init(this, this.broker, this.logger, this.mwOpts);
 
@@ -331,7 +329,7 @@ class Workflow {
 			const event = getCurrentTaskEvent();
 			if (event) return validateEvent(event, "state");
 
-			await this.adapter.saveJobState(job.id, state);
+			await this.adapter.saveJobState(this.name, job.id, state);
 
 			await taskEvent("state", { state });
 		};
@@ -551,27 +549,6 @@ class Workflow {
 			}
 
 			this.delayedTimer = setTimeout(async () => this.maintenanceDelayed(), delay);
-		}
-	}
-
-	/**
-	 * Send entity lifecycle events
-	 *
-	 * @param {String} workflowName
-	 * @param {String} jobId
-	 * @param {String} type
-	 */
-	sendJobEvent(workflowName, jobId, type) {
-		if (this.mwOpts?.jobEventType) {
-			const eventName = `job.${workflowName}.${type}`;
-
-			const payload = {
-				type,
-				workflow: workflowName,
-				job: jobId
-			};
-
-			this.broker[this.mwOpts.jobEventType](eventName, payload);
 		}
 	}
 

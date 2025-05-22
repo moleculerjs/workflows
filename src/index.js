@@ -9,8 +9,8 @@
 const _ = require("lodash");
 const { METRIC } = require("moleculer");
 const { ServiceSchemaError, MoleculerError, ValidationError } = require("moleculer").Errors;
-const Adapters = require("./adapters");
 const Workflow = require("./workflow");
+const Adapters = require("./adapters");
 const C = require("./constants");
 
 /**
@@ -126,8 +126,8 @@ function WorkflowsMiddleware(mwOpts) {
 			}
 
 			// Common adapter without worker
-			adapter = Adapters.resolve(this.mwOpts.adapter);
-			this.adapter.init(null, this.broker, this.mwOpts);
+			adapter = Adapters.resolve(mwOpts.adapter);
+			adapter.init(null, broker, logger, mwOpts);
 
 			/**
 			 * Execute a workflow
@@ -433,6 +433,7 @@ function WorkflowsMiddleware(mwOpts) {
 					}
 
 					const workflow = new Workflow(wf, svc);
+					await workflow.init(broker, logger, mwOpts);
 
 					// Register thw workflow handler into the adapter
 					svc.$workflows.push(workflow);
@@ -513,6 +514,24 @@ function WorkflowsMiddleware(mwOpts) {
 			for (const wf of svc.$workflows) {
 				await wf.stop();
 			}
+		},
+
+		/**
+		 * Start lifecycle hook of ServiceBroker
+		 */
+		async started() {
+			//logger.info("Workflows adapter is connecting...");
+			await adapter.connect();
+			//logger.debug("Workflows adapter connected.");
+		},
+
+		/**
+		 * Stop lifecycle hook of ServiceBroker
+		 */
+		async stopped() {
+			//logger.info("Workflows adapter is disconnecting...");
+			await adapter.destroy();
+			//logger.debug("Workflows adapter disconnected.");
 		}
 	};
 }

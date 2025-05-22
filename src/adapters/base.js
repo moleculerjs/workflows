@@ -374,6 +374,27 @@ class BaseAdapter {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
+
+	/**
+	 * Send entity lifecycle events
+	 *
+	 * @param {String} workflowName
+	 * @param {String} jobId
+	 * @param {String} type
+	 */
+	sendJobEvent(workflowName, jobId, type) {
+		if (this.mwOpts?.jobEventType) {
+			const eventName = `job.${workflowName}.${type}`;
+
+			const payload = {
+				type,
+				workflow: workflowName,
+				job: jobId
+			};
+
+			this.broker[this.mwOpts.jobEventType](eventName, payload);
+		}
+	}
 }
 
 module.exports = BaseAdapter;
