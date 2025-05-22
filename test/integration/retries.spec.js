@@ -58,7 +58,7 @@ describe("Workflows Retries Test", () => {
 		});
 
 		afterAll(async () => {
-			await broker.wf.adapter?.dumpWorkflows("./tmp");
+			await broker.wf.adapter?.dumpWorkflows("./tmp", ["retry.simple", "retry.policy"]);
 			await cleanup();
 			await broker.stop();
 		});

@@ -34,7 +34,7 @@ describe("Workflows Repeat Test", () => {
 	});
 
 	afterAll(async () => {
-		await broker.wf.adapter?.dumpWorkflows("./tmp");
+		await broker.wf.adapter?.dumpWorkflows("./tmp", ["repeat.work"]);
 		await cleanup();
 		await broker.stop();
 	});
