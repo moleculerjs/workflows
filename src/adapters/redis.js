@@ -683,7 +683,7 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		if (job.parent) {
-			await this.rescheduleJob(job.parent);
+			await this.rescheduleJob(this.wf.name, job.parent);
 		}
 	}
 
@@ -811,7 +811,7 @@ class RedisAdapter extends BaseAdapter {
 		}
 
 		if (job.parent) {
-			await this.rescheduleJob(job.parent);
+			await this.rescheduleJob(this.wf.name, job.parent);
 		}
 	}
 
@@ -1044,7 +1044,7 @@ class RedisAdapter extends BaseAdapter {
 				// Repeatable job
 				this.log("debug", workflowName, job.id, "Repeatable job created.", job);
 
-				await this.rescheduleJob(job);
+				await this.rescheduleJob(workflowName, job);
 			} else if (job.delay) {
 				// Delayed job
 				this.log(
@@ -1221,13 +1221,14 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Reschedule a repeatable job based on its configuration.
 	 *
+	 * @param {string} workflowName - The name of workflow.
 	 * @param {Job|string} job - The job object or job ID to reschedule.
 	 * @returns {Promise<void>} Resolves when the job is rescheduled.
 	 */
-	async rescheduleJob(job) {
+	async rescheduleJob(workflowName, job) {
 		try {
 			if (typeof job == "string") {
-				job = await this.getJob(this.wf.name, job, [
+				job = await this.getJob(workflowName, job, [
 					"payload",
 					"repeat",
 					"repeatCounter",
@@ -1237,7 +1238,7 @@ class RedisAdapter extends BaseAdapter {
 				]);
 
 				if (!job) {
-					this.log("warn", this.wf.name, job, "Parent job not found. Not rescheduling.");
+					this.log("warn", workflowName, job, "Parent job not found. Not rescheduling.");
 					return;
 				}
 			}
@@ -1253,14 +1254,14 @@ class RedisAdapter extends BaseAdapter {
 					if (endDate < Date.now()) {
 						this.log(
 							"debug",
-							this.wf.name,
+							workflowName,
 							job.id,
 							`Repeatable job is expired at ${job.repeat.endDate}. Not rescheduling.`,
 							job
 						);
 
 						await this.commandClient.hmset(
-							this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
+							this.getKey(workflowName, C.QUEUE_JOB, job.id),
 							{
 								finishedAt: Date.now(),
 								nodeID: this.broker.nodeID
@@ -1273,14 +1274,14 @@ class RedisAdapter extends BaseAdapter {
 					if (job.repeatCounter >= job.repeat.limit) {
 						this.log(
 							"debug",
-							this.wf.name,
+							workflowName,
 							job.id,
 							`Repeatable job reached the limit of ${job.repeat.limit}. Not rescheduling.`,
 							job
 						);
 
 						await this.commandClient.hmset(
-							this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
+							this.getKey(workflowName, C.QUEUE_JOB, job.id),
 							{
 								finishedAt: Date.now(),
 								nodeID: this.broker.nodeID
@@ -1292,7 +1293,7 @@ class RedisAdapter extends BaseAdapter {
 				}
 
 				nextJob.repeatCounter = await this.commandClient.hincrby(
-					this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
+					this.getKey(workflowName, C.QUEUE_JOB, job.id),
 					"repeatCounter",
 					1
 				);
@@ -1306,12 +1307,12 @@ class RedisAdapter extends BaseAdapter {
 
 				// Save the next scheduled Job to Redis
 				await this.commandClient.hmset(
-					this.getKey(this.wf.name, C.QUEUE_JOB, nextJob.id),
+					this.getKey(workflowName, C.QUEUE_JOB, nextJob.id),
 					this.serializeJob(nextJob)
 				);
 				this.log(
 					"debug",
-					this.wf.name,
+					workflowName,
 					job.id,
 					`Scheduled job created. Next run: ${new Date(nextJob.promoteAt).toISOString()}`,
 					nextJob
@@ -1319,15 +1320,15 @@ class RedisAdapter extends BaseAdapter {
 
 				// Push to delayed queue
 				await this.commandClient.zadd(
-					this.getKey(this.wf.name, C.QUEUE_DELAYED),
+					this.getKey(workflowName, C.QUEUE_DELAYED),
 					nextJob.promoteAt,
 					nextJob.id
 				);
 
-				await this.sendDelayedJobPromoteAt(this.wf.name, nextJob.id, nextJob.promoteAt);
+				await this.sendDelayedJobPromoteAt(workflowName, nextJob.id, nextJob.promoteAt);
 			}
 		} catch (err) {
-			this.log("error", this.wf.name, job.id, "Error while rescheduling job", err);
+			this.log("error", workflowName, job.id, "Error while rescheduling job", err);
 		}
 	}
 
