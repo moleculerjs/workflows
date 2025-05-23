@@ -152,7 +152,12 @@ function WorkflowsMiddleware(mwOpts) {
 					});
 				}
 
-				return (await broker.wf.getAdapter()).createJob(workflowName, payload, opts);
+				return Workflow.createJob(
+					await broker.wf.getAdapter(),
+					workflowName,
+					payload,
+					opts
+				);
 			};
 
 			/**

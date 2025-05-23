@@ -13,7 +13,7 @@ const {
 	WorkflowSignalTimeoutError
 } = require("./errors");
 const C = require("./constants");
-const { parseDuration } = require("./utils");
+const { parseDuration, getCronNextTime } = require("./utils");
 const Adapters = require("./adapters");
 
 /**
@@ -188,17 +188,6 @@ class Workflow {
 	}
 
 	/**
-	 * Create a new job and push it to the waiting or delayed queue.
-	 *
-	 * @param {unknown} payload - The payload of the job.
-	 * @param {CreateJobOptions} opts - Additional options for the job.
-	 * @returns {Promise<Job>} Resolves with the created job object.
-	 */
-	createJob(payload, opts) {
-		return this.adapter.createJob(this.name, payload, opts);
-	}
-
-	/**
 	 * Create a workflow context for the given workflow and job.
 	 *
 	 * @param {Job} job The job object.
@@ -210,7 +199,9 @@ class Workflow {
 
 		const ctxOpts = {};
 		/** @type {WorkflowContext} */
+		// @ts-ignore
 		const ctx = this.broker.ContextFactory.create(this.broker, null, job.payload, ctxOpts);
+		// @ts-ignore
 		ctx.wf = {
 			name: this.name,
 			jobId: job.id,
@@ -255,7 +246,7 @@ class Workflow {
 					event
 				);
 				if (event.error) {
-					const err = this.broker.errorRegenerator.restore(event.error);
+					const err = this.broker.errorRegenerator.restore(event.error, {});
 					// err.stack = event.error.stack;
 					throw err;
 				}
@@ -491,7 +482,7 @@ class Workflow {
 	 * @returns {Promise<unknown>} The result of the workflow handler execution.
 	 */
 	async callHandler(job, events) {
-		/** @type {Context} */
+		/** @type {WorkflowContext} */
 		const ctx = this.createWorkflowContext(job, events);
 
 		const result = await this.handler(ctx);
@@ -655,6 +646,173 @@ class Workflow {
 				{
 					key
 				}
+			);
+		}
+	}
+
+	/**
+	 * Create a new job and push it to the waiting or delayed queue.
+	 *
+	 * @param {BaseAdapter} adapter - The adapter instance.
+	 * @param {string} workflowName - The name of the workflow.
+	 * @param {unknown} payload - The job payload.
+	 * @param {CreateJobOptions} opts - Additional options for the job.
+	 * @returns {Promise<Job>} Resolves with the created job object.
+	 */
+	static async createJob(adapter, workflowName, payload, opts) {
+		opts = opts || {};
+
+		let isCustomJobId = !!opts.jobId;
+
+		/** @type {Job} */
+		let job = {
+			id: opts.jobId ? adapter.checkJobId(opts.jobId) : adapter.broker.generateUid(),
+			createdAt: Date.now()
+		};
+
+		if (payload != null) {
+			job.payload = payload;
+		}
+
+		if (opts.retries != null) {
+			job.retries = opts.retries;
+			job.retryAttempts = 0;
+		}
+
+		if (opts.timeout) {
+			job.timeout = parseDuration(opts.timeout);
+		}
+
+		if (opts.delay) {
+			job.delay = parseDuration(opts.delay);
+			job.promoteAt = Date.now() + job.delay;
+		}
+
+		if (opts.repeat) {
+			if (!opts.jobId) {
+				throw new WorkflowError(
+					"Job ID is required for repeatable jobs",
+					400,
+					"MISSING_REPEAT_JOB_ID"
+				);
+			}
+
+			job.repeat = opts.repeat;
+			job.repeatCounter = 0;
+
+			if (opts.repeat.endDate) {
+				const endDate = new Date(opts.repeat.endDate).getTime();
+				if (endDate < Date.now()) {
+					throw new WorkflowError(
+						"Repeatable job is expired at " +
+							new Date(opts.repeat.endDate).toISOString(),
+						400,
+						"REPEAT_JOB_EXPIRED",
+						{
+							jobId: job.id,
+							endDate: opts.repeat.endDate
+						}
+					);
+				}
+			}
+		}
+
+		// Save the Job to Redis
+		return await adapter.newJob(workflowName, job, { isCustomJobId });
+	}
+
+	/**
+	 * Reschedule a repeatable job based on its configuration.
+	 *
+	 * @param {BaseAdapter} adapter - The adapter instance.
+	 * @param {string} workflowName - The name of workflow.
+	 * @param {Job|string} job - The job object or job ID to reschedule.
+	 * @returns {Promise<void>} Resolves when the job is rescheduled.
+	 */
+	static async rescheduleJob(adapter, workflowName, job) {
+		try {
+			if (typeof job == "string") {
+				const jobId = job;
+				job = await adapter.getJob(workflowName, job, [
+					"payload",
+					"repeat",
+					"repeatCounter",
+					"retries",
+					"startedAt",
+					"timeout"
+				]);
+
+				if (!job) {
+					adapter.log(
+						"warn",
+						workflowName,
+						jobId,
+						"Parent job not found. Not rescheduling."
+					);
+					return;
+				}
+			}
+
+			const nextJob = { ...job };
+			delete nextJob.repeat;
+			nextJob.createdAt = Date.now();
+			nextJob.parent = job.id;
+
+			if (job.repeat.cron) {
+				if (job.repeat.endDate) {
+					const endDate = new Date(job.repeat.endDate).getTime();
+					if (endDate < Date.now()) {
+						adapter.log(
+							"debug",
+							workflowName,
+							job.id,
+							`Repeatable job is expired at ${job.repeat.endDate}. Not rescheduling.`,
+							job
+						);
+
+						await adapter.finishParentJob(workflowName, job.id);
+						return;
+					}
+				}
+				if (job.repeat.limit > 0) {
+					if (job.repeatCounter >= job.repeat.limit) {
+						adapter.log(
+							"debug",
+							workflowName,
+							job.id,
+							`Repeatable job reached the limit of ${job.repeat.limit}. Not rescheduling.`,
+							job
+						);
+
+						await adapter.finishParentJob(workflowName, job.id);
+						return;
+					}
+				}
+
+				const promoteAt = getCronNextTime(job.repeat.cron, Date.now(), job.repeat.tz);
+				if (!nextJob.promoteAt || nextJob.promoteAt < promoteAt) {
+					nextJob.promoteAt = promoteAt;
+				}
+
+				nextJob.id = job.id + ":" + nextJob.promoteAt;
+
+				await adapter.newRepeatChildJob(workflowName, nextJob);
+
+				adapter.log(
+					"debug",
+					workflowName,
+					job.id,
+					`Scheduled job created. Next run: ${new Date(nextJob.promoteAt).toISOString()}`,
+					nextJob
+				);
+			}
+		} catch (err) {
+			adapter.log(
+				"error",
+				workflowName,
+				typeof job == "string" ? job : job.id,
+				"Error while rescheduling job",
+				err
 			);
 		}
 	}

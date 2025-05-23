@@ -37,6 +37,8 @@ class BaseAdapter {
 	constructor(opts) {
 		/** @type {BaseDefaultOptions} */
 		this.opts = _.defaultsDeep({}, opts, {});
+
+		this.connected = false;
 	}
 
 	/**
@@ -85,7 +87,7 @@ class BaseAdapter {
 	/**
 	 * Close the adapter.
 	 */
-	disconnect() {
+	async disconnect() {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -183,14 +185,26 @@ class BaseAdapter {
 	}
 
 	/**
-	 * Create a new job.
+	 * Create a new job and push it to the waiting or delayed queue.
 	 *
-	 * @param {string} workflowName
-	 * @param {*} payload
-	 * @param {*} opts
-	 * @returns {Promise<Job>}
+	 * @param {string} workflowName - The name of the workflow.
+	 * @param {Job} job - The job.
+	 * @param {Record<string, any>} opts - Additional options for the job.
+	 * @returns {Promise<Job>} Resolves with the created job object.
 	 */
-	async createJob(workflowName, payload, opts) {
+	async newJob(workflowName, job, opts) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Reschedule a repeatable job based on its configuration.
+	 *
+	 * @param {string} workflowName - The name of workflow.
+	 * @param {Job} job - The job object or job ID to reschedule.
+	 * @returns {Promise<void>} Resolves when the job is rescheduled.
+	 */
+	async newRepeatChildJob(workflowName, job) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -204,6 +218,17 @@ class BaseAdapter {
 	 * @returns {Promise<Object|null>} Resolves with the job object or null if not found.
 	 */
 	async getJob(workflowName, jobId, fields) {
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
+	}
+
+	/**
+	 * Finish a parent job.
+	 *
+	 * @param {string} workflowName
+	 * @param {string} jobId
+	 */
+	async finishParentJob(workflowName, jobId) {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
@@ -344,6 +369,13 @@ class BaseAdapter {
 		/* istanbul ignore next */
 		throw new Error("Abstract method is not implemented.");
 	}
+
+	/**
+	 * Process delayed jobs for a workflow and move them to the waiting queue if ready.
+	 *
+	 * @returns {Promise<void>} Resolves when delayed jobs are processed.
+	 */
+	async maintenanceDelayedJobs() {}
 
 	/**
 	 * Get the next delayed jobs maintenance time.

@@ -1,6 +1,6 @@
 // TypeScript type definitions for the Moleculer Workflow project
 
-import { ServiceBroker, LoggerInstance, Context } from "moleculer";
+import { ServiceBroker, LoggerInstance, Context, PlainMoleculerError } from "moleculer";
 import { Cluster, Redis, RedisOptions } from "ioredis";
 
 /**
@@ -16,6 +16,7 @@ export interface WorkflowsMiddlewareOptions {
     signalExpiration?: string;
     maintenanceTime?: number;
     lockExpiration?: number;
+	tracing?: boolean;
 }
 
 export type WorkflowHandler = (ctx: WorkflowContext) => Promise<unknown>;
@@ -29,7 +30,7 @@ export interface CreateJobOptions {
 }
 
 export interface SignalWaitOptions {
-	timout?: number|string;
+	timeout?: number|string;
 }
 
 export type JobRepeat = {
@@ -47,7 +48,7 @@ export interface JobEvent {
 	taskType: string;
 	duration?: number;
 	result?: unknown;
-	error?: Record<string, any>;
+	error?: PlainMoleculerError;
 }
 
 export interface Job {
@@ -73,7 +74,7 @@ export interface Job {
 	success?: boolean;
 	finishedAt?: number;
 	nodeID?: string;
-	error?: Record<string, any>;
+	error?: PlainMoleculerError;
 	result?: unknown;
 	duration?: number;
 
@@ -81,7 +82,7 @@ export interface Job {
 }
 
 export class Workflow {
-	opts: WorkflowSchema;
+	opts: WorkflowOptions;
 	name: string;
     handler: WorkflowHandler;
 
@@ -90,6 +91,9 @@ export class Workflow {
 	addRunningJob: (jobId: string) => void;
 	removeRunningJob: (jobId: string) => void;
 	getNumberOfActiveJobs: () => number;
+
+	static createJob: (adapter: BaseAdapter, workflowName: string, payload: unknown, opts: CreateJobOptions) => Promise<Job>;
+	static rescheduleJob: (adapter: BaseAdapter, workflowName: string, job: Job) => Promise<void>;
 }
 
 export interface WorkflowOptions {
@@ -108,6 +112,7 @@ export interface WorkflowOptions {
 	removeOnFailed?: boolean;
 
     params?: Record<string, any>;
+	tracing?: boolean;
 	maxStalledCount?: number;
 }
 
@@ -116,7 +121,7 @@ export interface WorkflowSchema extends WorkflowOptions {
     handler: (ctx: WorkflowContext) => Promise<unknown>;
 }
 
-export interface WorkflowContext {
+export interface WorkflowContext extends Context {
 	wf: WorkflowContextProps;
 }
 
@@ -161,6 +166,7 @@ export interface RedisAdapterOptions extends BaseDefaultOptions {
 }
 
 export class BaseAdapter {
+	broker: ServiceBroker;
 	connected: boolean;
 
     constructor(opts?: BaseDefaultOptions);
@@ -168,9 +174,13 @@ export class BaseAdapter {
     connect(): Promise<void>;
     disconnect(): Promise<void>;
 
-	startJobProcessor(): Promise<void>;
-	stopJobProcessor(): Promise<void>;
-    createJob(workflowName: string, payload: any, opts?: any): Promise<unknown>;
+	startJobProcessor(): void;
+	stopJobProcessor(): void;
+
+	newJob(workflowName: string, job: Job, opts?: Record<string, any>): Promise<Job>;
+	newRepeatChildJob(workflowName: string, job: Job): Promise<void>;
+	getJob(workflowName:string, jobId: string, fields?: string[]|boolean): Promise<Job | null>;
+	finishParentJob(workflowName: string, jobId: string): Promise<void>;
     cleanUp(workflowName?: string, jobId?: string): Promise<void>;
 
 	sendJobEvent: (workflowName: string, jobId: string, type: string) => void;
@@ -187,8 +197,12 @@ export class BaseAdapter {
 	maintenanceDelayedJobs(): Promise<void>;
 	maintenanceActiveJobs(): Promise<void>;
 	maintenanceRemoveOldJobs(queueName: string, retention: number): Promise<void>;
+	maintenanceDelayedJobs(): Promise<void>;
 
 	getNextDelayedJobTime(): Promise<number|null>;
+
+	checkJobId(jobId: string): string;
+	log(level: string, workflowName: string, jobId: string, msg: string, ...args: any[]): void;
 }
 
 export class RedisAdapter extends BaseAdapter {

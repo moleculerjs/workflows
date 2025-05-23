@@ -3,9 +3,13 @@
 		"allowJs": true,
 		"strict": false,
 		"checkJs": true,
+		"skipLibCheck": true,
+		"moduleResolution": "nodenext",
+		"module": "NodeNext",
 		"declaration": true,
 		"declarationDir": "types",
 		"outDir": "dist",
+		"target": "ES2023"
 	},
 	"include": ["**.js"],
 	"exclude": ["node_modules", ".eslintrc.js", "prettier.config.js", "types"]

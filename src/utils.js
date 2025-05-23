@@ -46,6 +46,7 @@ function parseDuration(str, format = "ms") {
 	String(str)
 		.replace(new RegExp(`(\\d)[${unit.placeholder}${unit.group}](\\d)`, "g"), "$1$2") // clean up group separators / placeholders
 		.replace(unit.decimal, ".") // normalize decimal separator
+		// @ts-ignore
 		.replace(durationRE, (_, n, units) => {
 			// if no units, find next smallest units or fall back to format value
 			// eg. 1h30 -> 1h30m

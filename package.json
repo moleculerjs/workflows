@@ -18,6 +18,8 @@
     "bench:watch": "nodemon benchmark/index.js",
     "deps": "ncu -i && npm audit fix",
     "ci-update-deps": "ncu -u --target minor",
+    "check": "tsc --noEmit true",
+    "types": "tsc --emitDeclarationOnly true --noEmitOnError false",
     "coverall": "cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js",
     "release": "npm publish --access public && git push --tags"
   },

@@ -20,10 +20,8 @@ module.exports = function tracingLocalChannelMiddleware(handler, wf) {
 	opts = _.defaultsDeep({}, opts, { enabled: true });
 
 	/** @type {ServiceBroker} */
-	// @ts-ignore
 	const broker = this;
 	/** @type {Tracer} */
-	// @ts-ignore
 	const tracer = this.tracer;
 
 	if (broker.isTracingEnabled() && opts.enabled) {
