@@ -1889,7 +1889,7 @@ class RedisAdapter extends BaseAdapter {
 				const list = await client.lrangeBuffer(key, 0, -1);
 				dump[key] = key.includes(":" + C.QUEUE_JOB_EVENTS + ":")
 					? list.map(item => deserializeData(item))
-					: list.map(item => item);
+					: list.map(item => item.toString());
 			} else if (type === "set") {
 				dump[key] = await client.smembers(key);
 			} else if (type === "hash") {

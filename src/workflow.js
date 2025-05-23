@@ -148,6 +148,7 @@ class Workflow {
 
 		if (this.maintenanceTimer) {
 			clearTimeout(this.maintenanceTimer);
+			this.maintenanceTimer = null;
 		}
 
 		await this.adapter?.stopJobProcessor();
