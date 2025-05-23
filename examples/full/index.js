@@ -2,33 +2,18 @@
 "use strict";
 
 /**
- * It's a simple example which demonstrates how to
+ * It's a full example which demonstrates how to
  * use the workflow middleware
  */
 
 const { ServiceBroker } = require("moleculer");
 const { MoleculerClientError } = require("moleculer").Errors;
-const { inspect } = require("util");
+const ApiGateway = require("moleculer-web");
 
 const WorkFlowsMiddleware = require("../../index").Middleware;
 
 // Create broker
 const broker = new ServiceBroker({
-	logger: {
-		type: "Console",
-		options: {
-			level: {
-				WORKFLOWS: "debug",
-				"*": "info"
-			},
-			objectPrinter: obj =>
-				inspect(obj, {
-					breakLength: 50,
-					colors: true,
-					depth: 3
-				})
-		}
-	},
 	metrics: {
 		enabled: false,
 		reporter: {
@@ -48,6 +33,26 @@ const broker = new ServiceBroker({
 
 	middlewares: [WorkFlowsMiddleware({})]
 });
+
+broker.createService({
+	name: "api",
+	mixins: [ApiGateway],
+	settings: {
+		port: 3003,
+		routes: [
+			{
+				path: "/api",
+				aliases: {
+					"POST /register": "users.signup",
+					"POST /verify/:token": "users.verify",
+					"GET /state/:jobId": "users.checkSignupState"
+				}
+			}
+		]
+	}
+});
+
+const USERS = [];
 
 // Create a service
 broker.createService({
@@ -89,10 +94,6 @@ broker.createService({
 				// Register (max execution is 10 sec)
 				const user = await ctx.call("users.register", ctx.params, {
 					timeout: 10,
-					// Set the workflow state to this before call the action
-					beforeSetState: "REGISTERING",
-					// Set the workflow state to this after the action called
-					afterSetState: "SENDING_EMAIL",
 					// For Saga, define the compensation action in case of failure
 					compensation: "users.remove"
 				});
@@ -128,7 +129,7 @@ broker.createService({
 
 				// Other non-moleculer related workflow task
 				await ctx.wf.task("httpPost", async () => {
-					await fetch("https://...", { method: "POST", data: "" });
+					await fetch("https://jsonplaceholder.typicode.com/posts/1", { method: "GET" });
 				});
 
 				// Send welcome email
@@ -146,6 +147,9 @@ broker.createService({
 	actions: {
 		signup: {
 			rest: "POST /register",
+			params: {
+				email: { type: "string", min: 3, max: 100 }
+			},
 			async handler(ctx) {
 				const job = await this.broker.wf.run("users.signupWorkflow", ctx.params, {
 					jobId: ctx.requestID // optional
@@ -167,22 +171,68 @@ broker.createService({
 			rest: "POST /verify/:token",
 			async handler(ctx) {
 				// Check the validity
-				const user = ctx.call("users.find", { verificationToken: ctx.params.token });
+				const user = await ctx.call("users.findByToken", {
+					verificationToken: ctx.params.token
+				});
 				if (user) {
-					this.broker.wf.triggerSignal("email.verification", user.id, { a: 5 });
+					await this.broker.wf.triggerSignal("email.verification", user.id, { a: 5 });
 				}
 			}
 		},
 
 		checkSignupState: {
 			rest: "GET /state/:jobId",
+			params: {
+				jobId: { type: "string" }
+			},
 			async handler(ctx) {
-				const res = await ctx.wf.getState({ jobId: ctx.params.jobId });
-				if (res.state == "DONE") {
-					return { user: res.result };
-				} else {
-					return { state: res.state, startedAt: res.startedAt };
+				return await this.broker.wf.getState("users.signupWorkflow", ctx.params.jobId);
+			}
+		},
+
+		getByEmail: {
+			async handler(ctx) {
+				return USERS.find(user => user.email === ctx.params.email);
+			}
+		},
+
+		register: {
+			async handler(ctx) {
+				const user = { id: USERS.length + 1, email: ctx.params.email };
+				user.verificationToken = "token_" + user.id;
+				user.verified = false;
+				USERS.push(user);
+				return user;
+			}
+		},
+
+		update: {
+			async handler(ctx) {
+				const user = USERS.find(user => user.id === ctx.params.id);
+				if (user) {
+					Object.assign(user, ctx.params);
 				}
+				return user;
+			}
+		},
+
+		findByToken: {
+			async handler(ctx) {
+				const user = USERS.find(
+					user => user.verificationToken === ctx.params.verificationToken
+				);
+				if (!user) {
+					throw new MoleculerClientError("Invalid token", 422, "INVALID_TOKEN");
+				}
+				return user;
+			}
+		}
+	},
+
+	events: {
+		"user.registered": {
+			handler(payload) {
+				console.log("User registered", payload);
 			}
 		}
 	},
@@ -197,6 +247,28 @@ broker.createService({
 		// 		cron: "0 0 * * *" // run every midnight
 		// 	}
 		// });
+	}
+});
+
+broker.createService({
+	name: "mail",
+	actions: {
+		send(ctx) {
+			console.log(
+				`Send ${ctx.params.type} mail to ${ctx.params.user.email}, token: ${ctx.params.user.verificationToken}`
+			);
+
+			return true;
+		}
+	}
+});
+broker.createService({
+	name: "utils",
+	actions: {
+		isTemporaryEmail(ctx) {
+			console.log("Check if the email is temporary", ctx.params.email);
+			return false;
+		}
 	}
 });
 
