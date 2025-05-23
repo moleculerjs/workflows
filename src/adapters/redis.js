@@ -167,7 +167,12 @@ class RedisAdapter extends BaseAdapter {
 		}
 	}
 
-	async createRedisClient() {
+	/**
+	 * Create a Redis client.
+	 * @param {string} name Connection name
+	 * @returns
+	 */
+	async createRedisClient(name) {
 		return new Promise(resolve => {
 			let client;
 
@@ -188,29 +193,40 @@ class RedisAdapter extends BaseAdapter {
 			client.on("ready", () => {
 				this.connected = true;
 				resolve(client);
-				this.log("info", this.wf?.name ?? "", null, "Redis adapter connected.");
+				this.log("info", this.wf?.name ?? "", null, `Redis adapter (${name}) connected.`);
 			});
 			client.on("error", err => {
 				this.connected = false;
-				this.log("info", this.wf?.name ?? "", null, "Redis adapter error", err.message);
+				this.log(
+					"info",
+					this.wf?.name ?? "",
+					null,
+					`Redis adapter (${name}) error`,
+					err.message
+				);
 			});
 			client.on("end", () => {
 				this.connected = false;
-				this.log("info", this.wf?.name ?? "", null, "Redis adapter disconnected.");
+				this.log(
+					"info",
+					this.wf?.name ?? "",
+					null,
+					`Redis adapter (${name}) disconnected.`
+				);
 			});
 		});
 	}
 
 	async createCommandClient() {
-		this.commandClient = await this.createRedisClient();
+		this.commandClient = await this.createRedisClient("command");
 	}
 
 	async createBlockerClient() {
-		this.blockerClient = await this.createRedisClient();
+		this.blockerClient = await this.createRedisClient("blocker");
 	}
 
 	async createSubscriptionClient() {
-		this.subClient = await this.createRedisClient();
+		this.subClient = await this.createRedisClient("subscription");
 		this.subClient.on("messageBuffer", (channelBuf, message) => {
 			const channel = channelBuf.toString();
 			if (channel.startsWith(this.getKey(C.QUEUE_CATEGORY_SIGNAL + ":"))) {
