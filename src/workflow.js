@@ -19,6 +19,7 @@ const Adapters = require("./adapters");
 /**
  * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
  * @typedef {import("moleculer").Service} Service Moleculer Service definition
+ * @typedef {import("moleculer").Context} Context Moleculer Context
  * @typedef {import("moleculer").LoggerInstance} Logger Logger instance
  * @typedef {import("moleculer").Serializer} Serializer Moleculer Serializer
 
@@ -316,12 +317,27 @@ class Workflow {
 			const event2 = getCurrentTaskEvent();
 			if (event2) return validateEvent(event2, "sleep-end");
 
+			let span;
+			if (ctx.tracing) {
+				span = ctx.startSpan(`sleep '${time}'`, {
+					tags: {
+						workflow: this.name,
+						jobId: job.id,
+						sleep: time
+					}
+				});
+			}
+
 			let remaining = parseDuration(time) - (event ? startTime - event.ts : 0);
 			if (remaining > 0) {
 				await new Promise(resolve => setTimeout(resolve, remaining));
 			}
 
 			await taskEvent("sleep-end", { time }, startTime);
+
+			if (span) {
+				ctx.finishSpan(span);
+			}
 		};
 
 		ctx.wf.setState = async state => {
@@ -356,7 +372,18 @@ class Workflow {
 			const event2 = getCurrentTaskEvent();
 			if (event2) return validateEvent(event2, "signal-end");
 
+			let span;
 			try {
+				if (ctx.tracing) {
+					span = ctx.startSpan(`signal wait '${signalName}'`, {
+						tags: {
+							workflow: this.name,
+							jobId: job.id,
+							signal: signalName,
+							signalKey: key
+						}
+					});
+				}
 				const result = await Promise.race([
 					this.adapter.waitForSignal(signalName, key, opts),
 					new Promise((_, reject) => {
@@ -383,6 +410,10 @@ class Workflow {
 					startTime
 				);
 
+				if (span) {
+					ctx.finishSpan(span);
+				}
+
 				return result;
 			} catch (err) {
 				await taskEvent(
@@ -396,6 +427,11 @@ class Workflow {
 					startTime
 				);
 
+				if (span) {
+					span.setError(err);
+					ctx.finishSpan(span);
+				}
+
 				throw err;
 			}
 		};
@@ -403,6 +439,16 @@ class Workflow {
 		ctx.wf.task = async (taskName, fn) => {
 			taskId++;
 			const startTime = Date.now();
+
+			let span;
+			if (ctx.tracing) {
+				span = ctx.startSpan(`task '${taskName}'`, {
+					tags: {
+						workflow: this.name,
+						jobId: job.id
+					}
+				});
+			}
 
 			if (!taskName) taskName = `custom-${taskId}`;
 			if (!fn) throw new WorkflowError("Missing function to run.", 400, "MISSING_FUNCTION");
@@ -413,6 +459,9 @@ class Workflow {
 			try {
 				const result = await fn();
 				await taskEvent("custom", { taskName, result }, startTime);
+				if (span) {
+					ctx.finishSpan(span);
+				}
 				return result;
 			} catch (err) {
 				await taskEvent(
@@ -423,6 +472,10 @@ class Workflow {
 					},
 					startTime
 				);
+				if (span) {
+					span.setError(err);
+					ctx.finishSpan(span);
+				}
 				throw err;
 			}
 		};
@@ -438,6 +491,7 @@ class Workflow {
 	 * @returns {Promise<unknown>} The result of the workflow handler execution.
 	 */
 	async callHandler(job, events) {
+		/** @type {Context} */
 		const ctx = this.createWorkflowContext(job, events);
 
 		const result = await this.handler(ctx);
