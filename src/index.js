@@ -102,7 +102,7 @@ function WorkflowsMiddleware(mwOpts) {
 
 		broker.metrics.register({
 			type: METRIC.TYPE_GAUGE,
-			name: C.METRIC_WORKFLOWS_SIGNAL_TOTAL,
+			name: C.METRIC_WORKFLOWS_SIGNALS_TOTAL,
 			labelNames: ["signal"],
 			rate: true,
 			unit: "signal"
@@ -191,7 +191,7 @@ function WorkflowsMiddleware(mwOpts) {
 				Workflow.checkSignal(signalName, key);
 
 				if (broker.isMetricsEnabled()) {
-					broker.metrics.increment(C.METRIC_WORKFLOWS_SIGNAL_TOTAL, {
+					broker.metrics.increment(C.METRIC_WORKFLOWS_SIGNALS_TOTAL, {
 						signal: signalName
 					});
 				}
@@ -523,15 +523,16 @@ function WorkflowsMiddleware(mwOpts) {
 		/**
 		 * Start lifecycle hook of ServiceBroker
 		 */
-		async started() {
-			//await adapter.connect();
-		},
+		async started() {},
 
 		/**
 		 * Stop lifecycle hook of ServiceBroker
 		 */
 		async stopped() {
-			await adapter?.disconnect();
+			if (adapter) {
+				await adapter.disconnect();
+				adapter = null;
+			}
 		}
 	};
 

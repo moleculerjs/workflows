@@ -22,5 +22,5 @@ module.exports = {
 	METRIC_WORKFLOWS_JOBS_ERRORS_TOTAL: "moleculer.workflows.jobs.errors.total",
 	METRIC_WORKFLOWS_JOBS_RETRIES_TOTAL: "moleculer.workflows.jobs.retries.total",
 
-	METRIC_WORKFLOWS_SIGNAL_TOTAL: "moleculer.workflows.signal.total"
+	METRIC_WORKFLOWS_SIGNALS_TOTAL: "moleculer.workflows.signals.total"
 };
