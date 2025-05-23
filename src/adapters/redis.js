@@ -265,7 +265,7 @@ class RedisAdapter extends BaseAdapter {
 		this.disconnecting = true;
 		this.connected = false;
 
-		await super.disconnect();
+		// await super.disconnect();
 
 		if (this.commandClient) {
 			await this.closeClient(this.commandClient);
