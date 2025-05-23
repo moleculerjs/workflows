@@ -118,7 +118,7 @@ describe("Workflows Common Test", () => {
 	});
 
 	afterAll(async () => {
-		await broker.wf.adapter?.dumpWorkflows("./tmp", [
+		await (await broker.wf.getAdapter()).dumpWorkflows("./tmp", [
 			"test.silent",
 			"test.simple",
 			"test.error",

@@ -298,7 +298,7 @@ In case of retry, the workflow job will be restarted from the beginning, skippin
 
 ### ServiceBroker workflow methods
 
-#### `broker.wf.run(workflowName, payload, options?)`
+#### `async broker.wf.run(workflowName, payload, options?)`
 - **Description:** Starts a new workflow job with the given parameters.
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -311,7 +311,7 @@ const job = await broker.wf.run("users.signupWorkflow", { email: "a@b.com", name
 const result = await job.promise();
 ```
 
-#### `broker.wf.getState(workflowName, jobId)`
+#### `async broker.wf.getState(workflowName, jobId)`
 - **Description:** Gets the current state of a workflow job.
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -322,7 +322,7 @@ const result = await job.promise();
 const state = await broker.wf.getState("users.signupWorkflow", "abc123");
 ```
 
-#### `broker.wf.get(workflowName, jobId)`
+#### `async broker.wf.get(workflowName, jobId)`
 - **Description:** Gets all job details.
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -333,7 +333,7 @@ const state = await broker.wf.getState("users.signupWorkflow", "abc123");
 const job = await broker.wf.get("users.signupWorkflow", "abc123");
 ```
 
-#### `broker.wf.getEvents(workflowName, jobId)`
+#### `async broker.wf.getEvents(workflowName, jobId)`
 - **Description:** Gets job event history.
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -344,7 +344,7 @@ const job = await broker.wf.get("users.signupWorkflow", "abc123");
 const getEvents = await broker.wf.getEvents("users.signupWorkflow", "abc123");
 ```
 
-#### `broker.wf.triggerSignal(signal, key, payload?)`
+#### `async broker.wf.triggerSignal(signal, key, payload?)`
 - **Description:** Triggers a signal for a workflow (e.g., for user verification).
 - **Parameters:**
   - `signal` (`string`): Signal name.
@@ -356,7 +356,7 @@ const getEvents = await broker.wf.getEvents("users.signupWorkflow", "abc123");
 await broker.wf.triggerSignal("email.verification", user.id);
 ```
 
-#### `broker.wf.removeSignal(signal, key?)`
+#### `async broker.wf.removeSignal(signal, key?)`
 - **Description:** Removes a signal from a workflow (e.g., for user verification).
 - **Parameters:**
   - `signal` (`string`): Signal name.
@@ -367,7 +367,7 @@ await broker.wf.triggerSignal("email.verification", user.id);
 await broker.wf.removeSignal("email.verification", user.id);
 ```
 
-#### `broker.wf.listCompletedJobs(workflowName)`
+#### `async broker.wf.listCompletedJobs(workflowName)`
 - **Description:** Lists completed workflow job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -377,7 +377,7 @@ await broker.wf.removeSignal("email.verification", user.id);
 const jobIds = await broker.wf.listCompletedJobs("users.signupWorkflow");
 ```
 
-#### `broker.wf.listFailedJobs(workflowName)`
+#### `async broker.wf.listFailedJobs(workflowName)`
 - **Description:** Lists failed job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -387,7 +387,7 @@ const jobIds = await broker.wf.listCompletedJobs("users.signupWorkflow");
 const jobIds = await broker.wf.listFailedJobs("users.signupWorkflow");
 ```
 
-#### `broker.wf.listDelayedJobs(workflowName)`
+#### `async broker.wf.listDelayedJobs(workflowName)`
 - **Description:** Lists delayed job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -397,7 +397,7 @@ const jobIds = await broker.wf.listFailedJobs("users.signupWorkflow");
 const jobIds = await broker.wf.listDelayedJobs("users.signupWorkflow");
 ```
 
-#### `broker.wf.listActiveJobs(workflowName)`
+#### `async broker.wf.listActiveJobs(workflowName)`
 - **Description:** Lists active job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -407,7 +407,7 @@ const jobIds = await broker.wf.listDelayedJobs("users.signupWorkflow");
 const jobIds = await broker.wf.listActiveJobs("users.signupWorkflow");
 ```
 
-#### `broker.wf.listWaitingJobs(workflowName)`
+#### `async broker.wf.listWaitingJobs(workflowName)`
 - **Description:** Lists waiting job IDs
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -417,7 +417,7 @@ const jobIds = await broker.wf.listActiveJobs("users.signupWorkflow");
 const jobIds = await broker.wf.listWaitingJobs("users.signupWorkflow");
 ```
 
-#### `broker.wf.cleanUp(workflowName)`
+#### `async broker.wf.cleanUp(workflowName)`
 - **Description:** Retries a failed workflow job.
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -428,7 +428,7 @@ const jobIds = await broker.wf.listWaitingJobs("users.signupWorkflow");
 const job = await broker.wf.cleanUp("users.signupWorkflow");
 ```
 
-#### `broker.wf.remove(workflowName, jobId)`
+#### `async broker.wf.remove(workflowName, jobId)`
 - **Description:** Removes a workflow job by jobId.
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
@@ -437,6 +437,14 @@ const job = await broker.wf.cleanUp("users.signupWorkflow");
 - **Example:**
 ```js
 await broker.wf.remove("users.signupWorkflow", "abc123");
+```
+
+#### `async broker.wf.getAdapter()`
+- **Description:** Return a connected adapter instance for direct access.
+- **Returns:** `Adapter`
+- **Example:**
+```js
+await (await broker.wf.getAdapter()).getJob("users.signupWorkflow", "abc123");
 ```
 
 ### Context workflow properties & methods

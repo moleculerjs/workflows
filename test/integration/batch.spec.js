@@ -39,7 +39,7 @@ describe("Workflows Batch Test (on single node)", () => {
 	});
 
 	afterAll(async () => {
-		// await broker.wf.adapter?.dumpWorkflows("./tmp", ["batch.serial", "batch.parallel"]);
+		// await (await broker.wf.getAdapter()).dumpWorkflows("./tmp", ["batch.serial", "batch.parallel"]);
 		await cleanup();
 		await broker.stop();
 	});

@@ -126,9 +126,14 @@ function WorkflowsMiddleware(mwOpts) {
 				broker.wf = {};
 			}
 
-			// Common adapter without worker
-			adapter = Adapters.resolve(mwOpts.adapter);
-			adapter.init(null, broker, logger, mwOpts);
+			broker.wf.getAdapter = async () => {
+				if (!adapter) {
+					adapter = Adapters.resolve(mwOpts.adapter);
+					adapter.init(null, broker, logger, mwOpts);
+					await adapter.connect();
+				}
+				return adapter;
+			};
 
 			/**
 			 * Execute a workflow
@@ -138,7 +143,7 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {CreateJobOptions} opts
 			 * @returns {Promise<Job>}
 			 */
-			broker.wf.run = (workflowName, payload, opts) => {
+			broker.wf.run = async (workflowName, payload, opts) => {
 				Workflow.checkWorkflowName(workflowName);
 
 				if (broker.isMetricsEnabled()) {
@@ -146,7 +151,8 @@ function WorkflowsMiddleware(mwOpts) {
 						workflow: workflowName
 					});
 				}
-				return adapter.createJob(workflowName, payload, opts);
+
+				return (await broker.wf.getAdapter()).createJob(workflowName, payload, opts);
 			};
 
 			/**
@@ -156,7 +162,7 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} jobId
 			 * @returns
 			 */
-			broker.wf.remove = (workflowName, jobId) => {
+			broker.wf.remove = async (workflowName, jobId) => {
 				Workflow.checkWorkflowName(workflowName);
 
 				if (!jobId) {
@@ -164,7 +170,7 @@ function WorkflowsMiddleware(mwOpts) {
 						new MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
 					);
 				}
-				return adapter.cleanUp(workflowName, jobId);
+				return (await broker.wf.getAdapter()).cleanUp(workflowName, jobId);
 			};
 
 			/**
@@ -175,7 +181,7 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {unknown} payload
 			 * @returns
 			 */
-			broker.wf.triggerSignal = (signalName, key, payload) => {
+			broker.wf.triggerSignal = async (signalName, key, payload) => {
 				if (!signalName) {
 					return Promise.reject(
 						new MoleculerError("Signal name is required!", 400, "SIGNAL_NAME_REQUIRED")
@@ -189,7 +195,7 @@ function WorkflowsMiddleware(mwOpts) {
 						signal: signalName
 					});
 				}
-				return adapter.triggerSignal(signalName, key, payload);
+				return (await broker.wf.getAdapter()).triggerSignal(signalName, key, payload);
 			};
 
 			/**
@@ -199,7 +205,7 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} key
 			 * @returns
 			 */
-			broker.wf.removeSignal = (signalName, key) => {
+			broker.wf.removeSignal = async (signalName, key) => {
 				if (!signalName) {
 					return Promise.reject(
 						new MoleculerError("Signal name is required!", 400, "SIGNAL_NAME_REQUIRED")
@@ -208,7 +214,7 @@ function WorkflowsMiddleware(mwOpts) {
 
 				Workflow.checkSignal(signalName, key);
 
-				return adapter.removeSignal(signalName, key);
+				return (await broker.wf.getAdapter()).removeSignal(signalName, key);
 			};
 
 			/**
@@ -218,7 +224,7 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} jobId
 			 * @returns
 			 */
-			broker.wf.getState = (workflowName, jobId) => {
+			broker.wf.getState = async (workflowName, jobId) => {
 				Workflow.checkWorkflowName(workflowName);
 
 				if (!jobId) {
@@ -226,7 +232,7 @@ function WorkflowsMiddleware(mwOpts) {
 						new MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
 					);
 				}
-				return adapter.getState(workflowName, jobId);
+				return (await broker.wf.getAdapter()).getState(workflowName, jobId);
 			};
 
 			/**
@@ -236,7 +242,7 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} jobId
 			 * @returns
 			 */
-			broker.wf.get = (workflowName, jobId) => {
+			broker.wf.get = async (workflowName, jobId) => {
 				Workflow.checkWorkflowName(workflowName);
 
 				if (!jobId) {
@@ -244,7 +250,7 @@ function WorkflowsMiddleware(mwOpts) {
 						new MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
 					);
 				}
-				return adapter.getJob(workflowName, jobId, true);
+				return (await broker.wf.getAdapter()).getJob(workflowName, jobId, true);
 			};
 
 			/**
@@ -254,7 +260,7 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} jobId
 			 * @returns
 			 */
-			broker.wf.getEvents = (workflowName, jobId) => {
+			broker.wf.getEvents = async (workflowName, jobId) => {
 				Workflow.checkWorkflowName(workflowName);
 
 				if (!jobId) {
@@ -262,7 +268,7 @@ function WorkflowsMiddleware(mwOpts) {
 						new MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
 					);
 				}
-				return adapter.getJobEvents(workflowName, jobId, true);
+				return (await broker.wf.getAdapter()).getJobEvents(workflowName, jobId, true);
 			};
 
 			/**
@@ -271,10 +277,10 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} workflowName
 			 * @returns
 			 */
-			broker.wf.listCompletedJobs = workflowName => {
+			broker.wf.listCompletedJobs = async workflowName => {
 				Workflow.checkWorkflowName(workflowName);
 
-				return adapter.listCompletedJobs(workflowName);
+				return (await broker.wf.getAdapter()).listCompletedJobs(workflowName);
 			};
 
 			/**
@@ -283,10 +289,10 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} workflowName
 			 * @returns
 			 */
-			broker.wf.listFailedJobs = workflowName => {
+			broker.wf.listFailedJobs = async workflowName => {
 				Workflow.checkWorkflowName(workflowName);
 
-				return adapter.listFailedJobs(workflowName);
+				return (await broker.wf.getAdapter()).listFailedJobs(workflowName);
 			};
 
 			/**
@@ -295,10 +301,10 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} workflowName
 			 * @returns
 			 */
-			broker.wf.listDelayedJobs = workflowName => {
+			broker.wf.listDelayedJobs = async workflowName => {
 				Workflow.checkWorkflowName(workflowName);
 
-				return adapter.listDelayedJobs(workflowName);
+				return (await broker.wf.getAdapter()).listDelayedJobs(workflowName);
 			};
 
 			/**
@@ -307,10 +313,10 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} workflowName
 			 * @returns
 			 */
-			broker.wf.listActiveJobs = workflowName => {
+			broker.wf.listActiveJobs = async workflowName => {
 				Workflow.checkWorkflowName(workflowName);
 
-				return adapter.listActiveJobs(workflowName);
+				return (await broker.wf.getAdapter()).listActiveJobs(workflowName);
 			};
 
 			/**
@@ -319,10 +325,10 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} workflowName
 			 * @returns
 			 */
-			broker.wf.listWaitingJobs = workflowName => {
+			broker.wf.listWaitingJobs = async workflowName => {
 				Workflow.checkWorkflowName(workflowName);
 
-				return adapter.listWaitingJobs(workflowName);
+				return (await broker.wf.getAdapter()).listWaitingJobs(workflowName);
 			};
 
 			/**
@@ -331,14 +337,11 @@ function WorkflowsMiddleware(mwOpts) {
 			 * @param {string} workflowName
 			 * @returns
 			 */
-			broker.wf.cleanUp = workflowName => {
+			broker.wf.cleanUp = async workflowName => {
 				Workflow.checkWorkflowName(workflowName);
 
-				return adapter.cleanUp(workflowName);
+				return (await broker.wf.getAdapter()).cleanUp(workflowName);
 			};
-
-			// Add adapter reference to the broker instance
-			broker.wf.adapter = adapter;
 
 			registerMetrics(broker);
 		},
@@ -471,7 +474,7 @@ function WorkflowsMiddleware(mwOpts) {
 					}
 
 					/* TODO:
-					const ctx = adapter.createWorkflowContext(workflow, job, events);
+					const ctx = (await broker.wf.getAdapter()).createWorkflowContext(workflow, job, events);
 
 					// Shorthand definition
 					if (typeof svc.schema[mwOpts.schemaProperty][workflowName] === "function")
@@ -521,18 +524,14 @@ function WorkflowsMiddleware(mwOpts) {
 		 * Start lifecycle hook of ServiceBroker
 		 */
 		async started() {
-			//logger.info("Workflows adapter is connecting...");
-			await adapter.connect();
-			//logger.debug("Workflows adapter connected.");
+			//await adapter.connect();
 		},
 
 		/**
 		 * Stop lifecycle hook of ServiceBroker
 		 */
 		async stopped() {
-			//logger.info("Workflows adapter is disconnecting...");
-			await adapter.disconnect();
-			//logger.debug("Workflows adapter disconnected.");
+			await adapter?.disconnect();
 		}
 	};
 

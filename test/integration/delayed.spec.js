@@ -31,7 +31,7 @@ describe("Workflows Delayed Test", () => {
 	});
 
 	afterAll(async () => {
-		await broker.wf.adapter?.dumpWorkflows("./tmp", ["delayed.simple"]);
+		await (await broker.wf.getAdapter()).dumpWorkflows("./tmp", ["delayed.simple"]);
 		await cleanup();
 		await broker.stop();
 	});
