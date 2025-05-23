@@ -8,6 +8,5 @@
 
 module.exports = {
 	Middleware: require("./src"),
-	Tracing: require("./src/tracing"),
 	Adapters: require("./src/adapters")
 };

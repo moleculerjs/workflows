@@ -12,7 +12,6 @@ const { inspect } = require("util");
 const _ = require("lodash");
 
 const WorkflowsMiddleware = require("../../index").Middleware;
-const WfTracingMw = require("../../index").Tracing;
 
 let c = 1;
 
@@ -72,9 +71,9 @@ const broker = new ServiceBroker({
 
 	middlewares: [
 		WorkflowsMiddleware({
+			tracing: true
 			//jobEventType: "broadcast"
-		}),
-		WfTracingMw()
+		})
 	],
 
 	replCommands: [

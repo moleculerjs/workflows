@@ -12,6 +12,7 @@ const { ServiceSchemaError, MoleculerError, ValidationError } = require("molecul
 const Workflow = require("./workflow");
 const Adapters = require("./adapters");
 const C = require("./constants");
+const Tracing = require("./tracing");
 
 /**
  * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
@@ -108,7 +109,7 @@ function WorkflowsMiddleware(mwOpts) {
 		});
 	}
 
-	return {
+	const middleware = {
 		name: "Workflows",
 
 		/**
@@ -534,6 +535,12 @@ function WorkflowsMiddleware(mwOpts) {
 			//logger.debug("Workflows adapter disconnected.");
 		}
 	};
+
+	if (mwOpts.tracing) {
+		middleware.localWorkflow = Tracing;
+	}
+
+	return middleware;
 }
 
 module.exports = WorkflowsMiddleware;

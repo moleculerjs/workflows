@@ -81,6 +81,9 @@ broker.createService({
                 email: { type: "email" },
                 name: { type: "string" }
             },
+            // Enable tracing
+            tracing: true,
+
             async handler(ctx) {
                 // Create user
                 const user = await ctx.call("users.create", ctx.params);
@@ -262,6 +265,7 @@ In case of retry, the workflow job will be restarted from the beginning, skippin
 | `maintenanceTime` | `number`                                                    | Maintenance process time (sec). **Default:** `10`                                                     |
 | `lockExpiration` | `number`                                                    | Job lock expiration time (sec). **Default:** `30`                                                     |
 | `jobIdCollision` | `string`                                                    | Job ID collision policy. Available values: `reject`, `skip`, `rerun`, **Default:** `reject`                                                     |
+| `tracing` | `boolean`                                                    | Enable tracing feature for workflow jobs. **Default:** `false`                                                     |
 
 ### RedisAdapter Options
 
@@ -288,6 +292,7 @@ In case of retry, the workflow job will be restarted from the beginning, skippin
 | `retryPolicy.maxDelay`        | `number`  | Maximum delay between retries (ms). **Default:** `1000`      |
 | `retryPolicy.factor`        | `number`  | Exponential backoff factor. **Default:** `1` (fixed)      |
 | `maxStalledCount`        | `number`  | Number of maximum put back the stalled job. `0` or `null` value disables it. **Default:** `null`      |
+| `tracing`        | `boolean`  | Enable tracing feature for workflow jobs. **Default:** `false`      |
 
 ## References
 
