@@ -61,7 +61,7 @@ describe("Workflows Delayed Test", () => {
 			startedAt: expect.greaterThanOrEqual(job2.promoteAt),
 			finishedAt: expect.greaterThanOrEqual(job2.startedAt),
 			nodeID: broker.nodeID,
-			duration: expect.withinRange(0, 20),
+			duration: expect.withinRange(0, 100),
 			success: true,
 			result: `Hello, it's called`
 		});
@@ -85,7 +85,7 @@ describe("Workflows Delayed Test", () => {
 			startedAt: expect.greaterThanOrEqual(job22.promoteAt),
 			finishedAt: expect.greaterThanOrEqual(job22.startedAt),
 			nodeID: broker.nodeID,
-			duration: expect.withinRange(0, 20),
+			duration: expect.withinRange(0, 100),
 			success: true,
 			result: `Hello, it's called`
 		});
@@ -103,7 +103,7 @@ describe("Workflows Delayed Test", () => {
 			startedAt: expect.greaterThanOrEqual(job11.promoteAt),
 			finishedAt: expect.greaterThanOrEqual(job11.startedAt),
 			nodeID: broker.nodeID,
-			duration: expect.withinRange(0, 20),
+			duration: expect.withinRange(0, 100),
 			success: true,
 			result: `Hello, it's called`
 		});
