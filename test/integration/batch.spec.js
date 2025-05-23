@@ -110,7 +110,6 @@ describe("Workflows Batch Test (on multiple nodes)", () => {
 	});
 
 	afterAll(async () => {
-		// await workers[0]?.wf.adapter?.dumpWorkflows("./tmp", ["batch.multi"]);
 		await cleanup();
 		await broker.stop();
 		for (const worker of workers) {

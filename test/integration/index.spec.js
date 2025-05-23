@@ -468,7 +468,6 @@ describe("Workflows Common Test", () => {
 				expect(result).toBe(`Processed ${index}`);
 			});
 
-			
 			expect(FLOWS.length).toBe(20);
 			expect(FLOWS[0]).toBe("START-0");
 
@@ -638,12 +637,9 @@ describe("Workflows Remote worker Test", () => {
 	});
 
 	afterAll(async () => {
-		await worker.wf.adapter?.dumpWorkflows("./tmp", [
-			"remote.good",
-			"remote.bad",
-			"remote.signal",
-			"remote.new"
-		]);
+		await (
+			await worker.wf.getAdapter()
+		).dumpWorkflows("./tmp", ["remote.good", "remote.bad", "remote.signal", "remote.new"]);
 		await cleanup();
 		await broker.stop();
 		await worker.stop();

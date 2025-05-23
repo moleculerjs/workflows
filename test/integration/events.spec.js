@@ -215,7 +215,7 @@ describe("Workflows Events Test with 'broadcast'", () => {
 	});
 
 	afterAll(async () => {
-		await worker.wf.adapter?.dumpWorkflows("./tmp", ["events.good", "events.bad"]);
+		await (await worker.wf.getAdapter()).dumpWorkflows("./tmp", ["events.good", "events.bad"]);
 		await cleanup();
 		await broker.stop();
 		await worker.stop();
