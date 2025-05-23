@@ -51,7 +51,7 @@ describe("Workflows Signal Test", () => {
 	});
 
 	afterAll(async () => {
-		await worker.wf.adapter?.dumpWorkflows("./tmp", [
+		await (await worker.wf.getAdapter()).dumpWorkflows("./tmp", [
 			"signal.good",
 			"signal.time",
 			"signal.bad"

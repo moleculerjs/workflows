@@ -468,7 +468,7 @@ describe("Workflows Common Test", () => {
 				expect(result).toBe(`Processed ${index}`);
 			});
 
-			// console.log(FLOWS);
+			
 			expect(FLOWS.length).toBe(20);
 			expect(FLOWS[0]).toBe("START-0");
 
