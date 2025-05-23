@@ -50,8 +50,28 @@ const broker = new ServiceBroker({
 		}
 	},
 
+	// Enable built-in tracing function. More info: https://moleculer.services/docs/0.14/tracing.html
+	tracing: {
+		enabled: true,
+		// Available built-in exporters: "Console", "Datadog", "Event", "EventLegacy", "Jaeger", "Zipkin"
+		exporter: {
+			type: "Console", // Console exporter is only for development!
+			options: {
+				// Custom logger
+				logger: null,
+				// Using colors
+				colors: true,
+				// Width of row
+				width: 100,
+				// Gauge width in the row
+				gaugeWidth: 40
+			}
+		}
+	},
+
 	middlewares: [
 		WorkflowsMiddleware({
+			tracing: true
 			//jobEventType: "broadcast"
 		})
 	],
@@ -430,6 +450,8 @@ if (!isNoService) {
 					status: { type: "boolean" }
 				},
 
+				tracing: true,
+
 				// Workflow handler
 				async handler(ctx) {
 					this.logger.info("WF handler start", ctx.params, ctx.wf);
@@ -454,7 +476,7 @@ if (!isNoService) {
 					// 	await ctx.wf.setState("afterSleep-" + (i + 1));
 					// }
 
-					// await ctx.wf.sleep("20s");
+					await ctx.wf.sleep("1s");
 					// await ctx.wf.setState("afterSleep-20s");
 
 					const signalRes = await ctx.wf.waitForSignal("test.signal", 123, {
@@ -462,7 +484,7 @@ if (!isNoService) {
 					});
 					this.logger.info("Signal result", signalRes);
 
-					await ctx.call("test.danger", { name: "John Doe" });
+					// await ctx.call("test.danger", { name: "John Doe" });
 
 					this.logger.info("WF handler end", ctx.wf.jobId);
 

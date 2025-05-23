@@ -31,13 +31,13 @@ unit.placeholder = " _";
 /**
  * Parse a duration string into a numeric value based on the specified format.
  *
- * @param {string} str The duration string to parse.
+ * @param {string|number} str The duration string to parse.
  * @param {string} [format="ms"] The format to return the duration in (e.g., "ms", "s").
  * @returns {number|null} The parsed duration in the specified format, or null if invalid.
  */
 function parseDuration(str, format = "ms") {
 	if (str == null) {
-		return str;
+		return null;
 	}
 
 	let result = null,
@@ -46,6 +46,7 @@ function parseDuration(str, format = "ms") {
 	String(str)
 		.replace(new RegExp(`(\\d)[${unit.placeholder}${unit.group}](\\d)`, "g"), "$1$2") // clean up group separators / placeholders
 		.replace(unit.decimal, ".") // normalize decimal separator
+		// @ts-ignore
 		.replace(durationRE, (_, n, units) => {
 			// if no units, find next smallest units or fall back to format value
 			// eg. 1h30 -> 1h30m
@@ -104,7 +105,7 @@ function humanize(milli) {
  * Calculate the next execution time for a given cron expression.
  *
  * @param {string} cron The cron expression to evaluate.
- * @param {Date} currentDate The current date to base the calculation on.
+ * @param {number} currentDate The current date to base the calculation on.
  * @param {string} [tz] The timezone to use for the calculation.
  * @returns {number} The timestamp of the next execution time.
  */

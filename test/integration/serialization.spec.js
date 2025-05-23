@@ -52,7 +52,7 @@ describe("Workflows Serialization Test", () => {
 	});
 
 	afterAll(async () => {
-		await broker.wf.adapter?.dumpWorkflows("./tmp");
+		await (await broker.wf.getAdapter()).dumpWorkflows("./tmp", ["serialize.good", "serialize.bad"]);
 		await cleanup();
 		await broker.stop();
 	});

@@ -48,7 +48,18 @@ describe("Workflows Common Test", () => {
 				},
 				context: {
 					async handler(ctx) {
-						return ctx.wf;
+						expect(ctx.wf).toStrictEqual({
+							name: "test.context",
+							jobId: expect.any(String),
+							retries: undefined,
+							retryAttempts: undefined,
+							timeout: undefined,
+							setState: expect.any(Function),
+							sleep: expect.any(Function),
+							task: expect.any(Function),
+							waitForSignal: expect.any(Function)
+						});
+						return true;
 					}
 				},
 				state: {
@@ -107,7 +118,20 @@ describe("Workflows Common Test", () => {
 	});
 
 	afterAll(async () => {
-		await broker.wf.adapter?.dumpWorkflows("./tmp");
+		await (
+			await broker.wf.getAdapter()
+		).dumpWorkflows("./tmp", [
+			"test.silent",
+			"test.simple",
+			"test.error",
+			"test.context",
+			"test.state",
+			"test.signal",
+			"test.serial",
+			"test.long",
+			"test.valid",
+			"test.disabled"
+		]);
 		await cleanup();
 		await broker.stop();
 	});
@@ -244,18 +268,8 @@ describe("Workflows Common Test", () => {
 	it("should execute a workflow and check ctx.wf properties", async () => {
 		const job = await broker.wf.run("test.context", { a: 5 });
 
-		const result = await job.promise();
-		expect(result).toStrictEqual({
-			name: "test.context",
-			jobId: job.id,
-			retries: undefined,
-			retryAttempts: undefined,
-			timeout: undefined,
-			setState: expect.any(Function),
-			sleep: expect.any(Function),
-			task: expect.any(Function),
-			waitForSignal: expect.any(Function)
-		});
+		// Expects in the action handler
+		await job.promise();
 	});
 
 	it("should set workflow status correctly (string)", async () => {
@@ -623,7 +637,9 @@ describe("Workflows Remote worker Test", () => {
 	});
 
 	afterAll(async () => {
-		await worker.wf.adapter?.dumpWorkflows("./tmp");
+		await (
+			await worker.wf.getAdapter()
+		).dumpWorkflows("./tmp", ["remote.good", "remote.bad", "remote.signal", "remote.new"]);
 		await cleanup();
 		await broker.stop();
 		await worker.stop();

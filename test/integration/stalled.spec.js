@@ -204,7 +204,11 @@ describe("Workflows Stalled Job Test", () => {
 	});
 
 	afterAll(async () => {
-		await worker.wf.adapter?.dumpWorkflows("./tmp");
+		await (await worker.wf.getAdapter()).dumpWorkflows("./tmp", [
+			"stalled.fiveSec",
+			"stalled.tenSec",
+			"stalled.complex"
+		]);
 		await cleanup();
 		await broker.stop();
 		await worker.stop();
