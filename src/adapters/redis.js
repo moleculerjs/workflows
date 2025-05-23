@@ -1380,65 +1380,80 @@ class RedisAdapter extends BaseAdapter {
 			await pipeline.exec();
 			this.log("info", workflowName, jobId, "Cleaned up job store.");
 		} else if (workflowName) {
-			await this.cleanDb(this.getKey(workflowName) + ":*");
+			await this.deleteKeys(this.getKey(workflowName) + ":*");
 			this.log("info", workflowName, null, "Cleaned up workflow store.");
 		} else {
-			await this.cleanDb(this.prefix + ":*");
+			await this.deleteKeys(this.prefix + ":*");
 			this.logger.info(`Cleaned up entire store.`);
 		}
 	}
 
-	async cleanDb(pattern) {
+	/**
+	 * Delete keys from Redis based on a pattern.
+	 *
+	 * @param {string} pattern
+	 * @returns
+	 */
+	async deleteKeys(pattern) {
 		if (this.commandClient instanceof Redis.Cluster) {
-			return this.clusterCleanDb(pattern);
+			return this.deleteKeysOnCluster(pattern);
 		} else {
-			return this.nodeCleanDb(this.commandClient, pattern);
+			return this.deleteKeysOnNode(this.commandClient, pattern);
 		}
 	}
 
-	async clusterCleanDb(pattern) {
+	/**
+	 * Delete keys on a Redis cluster.
+	 *
+	 * @param {string} pattern
+	 * @returns
+	 */
+	async deleteKeysOnCluster(pattern) {
 		// get only master nodes to scan for deletion,
 		// if we get slave nodes, it would be failed for deletion.
-		return this.commandClient
-			.nodes("master")
-			.map(async node => this.nodeCleanDb(node, pattern));
+		return Promise.all(
+			this.commandClient
+				.nodes("master")
+				.map(async node => this.deleteKeysOnNode(node, pattern))
+		);
 	}
 
-	async nodeCleanDb(node, pattern) {
+	/**
+	 * Delete keys on a Redis node.
+	 *
+	 * @param {Redis} node
+	 * @param {string} pattern
+	 * @returns
+	 */
+	async deleteKeysOnNode(node, pattern) {
 		return new Promise((resolve, reject) => {
 			const stream = node.scanStream({
 				match: pattern,
 				count: 100
 			});
 
-			stream.on("data", (keys = []) => {
-				if (!keys.length) {
-					return;
-				}
+			stream.on("data", async (keys = []) => {
+				if (!keys.length) return;
 
 				stream.pause();
-				node.del(keys)
-					.then(() => {
-						stream.resume();
-					})
-					.catch(err => {
-						err.pattern = pattern;
-						return reject(err);
-					});
+				try {
+					await node.del(keys);
+					stream.resume();
+				} catch (err) {
+					err.pattern = pattern;
+					return reject(err);
+				}
 			});
 
 			stream.on("error", err => {
 				this.logger.error(
-					`Error occured while deleting keys '${pattern}' from Redis node.`,
+					`Error occured while deleting keys '${pattern}' on Redis node.`,
 					err
 				);
 				reject(err);
 			});
 
-			stream.on("end", () => {
-				// End deleting keys from node
-				resolve();
-			});
+			stream.on("end", () => resolve());
 		});
 	}
 
