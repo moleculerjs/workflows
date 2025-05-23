@@ -54,7 +54,7 @@ export interface JobEvent {
 export interface Job {
 	id: string;
 	parent?: string;
-	payload?: Record<string, any>;
+	payload?: unknown;
 
 	delay?: number;
 	timeout?: number;
@@ -78,7 +78,7 @@ export interface Job {
 	result?: unknown;
 	duration?: number;
 
-	promise?: () => Promise<any>;
+	promise?: () => Promise<unknown>;
 }
 
 export class Workflow {
