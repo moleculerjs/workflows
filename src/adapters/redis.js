@@ -6,6 +6,7 @@
 
 "use strict";
 
+// @ts-ignore
 const _ = require("lodash");
 const Redis = require("ioredis");
 
@@ -39,7 +40,7 @@ const { parseDuration, humanize, getCronNextTime } = require("../utils");
  * @typedef {import("../index.d.ts").Job} Job Job definition
  * @typedef {import("../index.d.ts").JobEvent} JobEvent Job event definition
  * @typedef {import("../index.d.ts").CreateJobOptions} CreateJobOptions Job options for creation
- * @typedef {import("../index.d.ts").Workflow} Workflow2 Workflow definition
+ * @typedef {import("../index.d.ts").Workflow} Workflow Workflow definition
  * @typedef {import("../index.d.ts").WorkflowsMiddlewareOptions} WorkflowsMiddlewareOptions Workflow middleware options
  * @typedef {import("../index.d.ts").SignalWaitOptions} SignalWaitOptions
 
@@ -124,7 +125,7 @@ class RedisAdapter extends BaseAdapter {
 	/**
 	 * Initialize the adapter.
 	 *
-	 * @param {Workflow2} wf
+	 * @param {Workflow} wf
 	 * @param {ServiceBroker} broker
 	 * @param {Logger} logger
 	 * @param {WorkflowsMiddlewareOptions} mwOpts - Middleware options.
@@ -187,15 +188,15 @@ class RedisAdapter extends BaseAdapter {
 			client.on("ready", () => {
 				this.connected = true;
 				resolve(client);
-				this.log("info", this.wf?.name, null, "Redis adapter connected.");
+				this.log("info", this.wf?.name ?? "", null, "Redis adapter connected.");
 			});
 			client.on("error", err => {
 				this.connected = false;
-				this.log("info", this.wf?.name, null, "Redis adapter error", err.message);
+				this.log("info", this.wf?.name ?? "", null, "Redis adapter error", err.message);
 			});
 			client.on("end", () => {
 				this.connected = false;
-				this.log("info", this.wf?.name, null, "Redis adapter disconnected.");
+				this.log("info", this.wf?.name ?? "", null, "Redis adapter disconnected.");
 			});
 		});
 	}
@@ -333,6 +334,7 @@ class RedisAdapter extends BaseAdapter {
 	async closeClient(client) {
 		if (client) {
 			try {
+				// @ts-ignore
 				if (client.blocked) {
 					await client.disconnect();
 				} else {
@@ -719,6 +721,7 @@ class RedisAdapter extends BaseAdapter {
 
 		await this.addJobEvent(this.wf.name, job.id, {
 			type: "failed",
+			// @ts-ignore
 			error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
 		});
 
@@ -730,6 +733,7 @@ class RedisAdapter extends BaseAdapter {
 		pipeline.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
 		await pipeline.exec();
 
+		// @ts-ignore
 		if (err?.retryable) {
 			let retryFields = await this.commandClient.hmget(
 				this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
@@ -1090,6 +1094,7 @@ class RedisAdapter extends BaseAdapter {
 			// If the job is finished, return the result or error
 			if (job2.finishedAt) {
 				if (job2.success) return job2.result;
+				// @ts-ignore
 				throw this.broker.errorRegenerator.restore(job2.error);
 			}
 
@@ -1328,7 +1333,13 @@ class RedisAdapter extends BaseAdapter {
 				await this.sendDelayedJobPromoteAt(workflowName, nextJob.id, nextJob.promoteAt);
 			}
 		} catch (err) {
-			this.log("error", workflowName, job.id, "Error while rescheduling job", err);
+			this.log(
+				"error",
+				workflowName,
+				typeof job == "string" ? job : job.id,
+				"Error while rescheduling job",
+				err
+			);
 		}
 	}
 

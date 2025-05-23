@@ -86,7 +86,8 @@ class BaseAdapter {
 	 * Close the adapter.
 	 */
 	disconnect() {
-		// TODO: Implement adapter close logic
+		/* istanbul ignore next */
+		throw new Error("Abstract method is not implemented.");
 	}
 
 	/**
