@@ -56,7 +56,7 @@ describe("Workflows Middleware Test", () => {
 	});
 
 	afterAll(async () => {
-		await worker.wf.adapter?.dumpWorkflows("./tmp", ["mw.good"]);
+		await (await worker.wf.getAdapter()).dumpWorkflows("./tmp", ["mw.good"]);
 		await cleanup();
 		await broker.stop();
 		await worker.stop();
