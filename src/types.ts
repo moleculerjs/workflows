@@ -119,13 +119,3 @@ export interface WorkflowServiceBroker {
 
 	adapter: RedisAdapter | BaseAdapter;
 }
-
-export interface RedisAdapterOptions extends BaseDefaultOptions {
-	redis?:
-		| RedisOptions
-		| { url: string }
-		| { cluster: { nodes: string[]; clusterOptions?: ClusterOptions } };
-	prefix?: string;
-	serializer?: string;
-	drainDelay?: number;
-}

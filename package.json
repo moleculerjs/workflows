@@ -2,7 +2,20 @@
   "name": "@moleculer/workflows",
   "version": "0.0.0",
   "description": "Advanced Workflow feature for Moleculer microservices framework",
-  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "default": "./dist/src/index.js",
+        "types": "./types/src/index.d.ts"
+      },
+      "require": {
+        "default": "./dist/src/index.js",
+        "types": "./types/src/index.d.ts"
+      }
+    }
+  },
+  "types": "./types/index.d.ts",
   "scripts": {
     "dev": "nodemon --inspect examples/index.js",
     "dev:noservice": "nodemon --inspect=9228 examples/index.js simple noservice",
@@ -19,7 +32,7 @@
     "deps": "ncu -i && npm audit fix",
     "ci-update-deps": "ncu -u --target minor",
     "check": "tsc --noEmit true",
-    "types": "tsc --emitDeclarationOnly true --noEmitOnError false",
+    "build": "tsc",
     "coverall": "cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js",
     "release": "npm publish --access public && git push --tags"
   },

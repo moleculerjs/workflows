@@ -95,16 +95,6 @@ export default abstract class BaseAdapter {
 	abstract stopJobProcessor();
 
 	/**
-	 * Create a job
-	 *
-	 * @param workflowName
-	 * @param payload
-	 * @param opts
-	 * @returns
-	 */
-	abstract run(workflowName: string, payload: unknown, opts: object): Promise<void>;
-
-	/**
 	 * Save state of a job.
 	 *
 	 * @param workflowName The name of workflow.
@@ -225,35 +215,35 @@ export default abstract class BaseAdapter {
 	 * @param workflowName
 	 * @returns
 	 */
-	abstract listCompletedJobs(workflowName: string): Promise<string[]>;
+	abstract listCompletedJobs(workflowName: string): Promise<{ id: string; finishedAt: number }[]>;
 
 	/**
 	 * List all failed job IDs for a workflow.
-	 * @param {string} workflowName
-	 * @returns {Promise<string[]>}
+	 * @param workflowName
+	 * @returns
 	 */
-	abstract listFailedJobs(workflowName: string): Promise<string[]>;
+	abstract listFailedJobs(workflowName: string): Promise<{ id: string; finishedAt: number }[]>;
 
 	/**
 	 * List all delayed job IDs for a workflow.
-	 * @param {string} workflowName
-	 * @returns {Promise<string[]>}
+	 * @param workflowName
+	 * @returns
 	 */
-	abstract listDelayedJobs(workflowName: string): Promise<string[]>;
+	abstract listDelayedJobs(workflowName: string): Promise<{ id: string; promoteAt: number }[]>;
 
 	/**
 	 * List all active job IDs for a workflow.
-	 * @param {string} workflowName
-	 * @returns {Promise<string[]>}
+	 * @param workflowName
+	 * @returns
 	 */
-	abstract listActiveJobs(workflowName: string): Promise<string[]>;
+	abstract listActiveJobs(workflowName: string): Promise<{ id: string }[]>;
 
 	/**
 	 * List all waiting job IDs for a workflow.
-	 * @param {string} workflowName
-	 * @returns {Promise<string[]>}
+	 * @param workflowName
+	 * @returns
 	 */
-	abstract listWaitingJobs(workflowName: string): Promise<string[]>;
+	abstract listWaitingJobs(workflowName: string): Promise<{ id: string }[]>;
 
 	/**
 	 * Clean up the adapter store. Workflowname and jobId are optional.

@@ -6,14 +6,10 @@
 
 "use strict";
 
-/**
- * @typedef {import("./base")} BaseAdapter
- */
 import { isObject, isString } from "lodash";
 import { Errors } from "moleculer";
 import BaseAdapter from "./base";
-import RedisAdapter from "./redis";
-import { RedisAdapterOptions } from "..";
+import RedisAdapter, { RedisAdapterOptions } from "./redis";
 
 const Adapters = {
 	Base: BaseAdapter,
@@ -31,11 +27,10 @@ function getByName(name: string): BaseAdapter | null {
 /**
  * Resolve adapter by name
  *
- * @param {object|string} opt
- * @returns {BaseAdapter}
+ * @param opt
  */
-function resolve(opt: BaseAdapter | string): BaseAdapter {
-	if (opt instanceof Adapters.Base) {
+function resolve(opt: BaseAdapter | string | { type: string; options: object }): BaseAdapter {
+	if (opt instanceof BaseAdapter) {
 		return opt;
 	} else if (isString(opt)) {
 		const AdapterClass = getByName(opt);

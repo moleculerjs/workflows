@@ -50,7 +50,7 @@ export interface WorkflowSchema extends WorkflowOptions {
 
 export default class Workflow {
 	opts: WorkflowOptions;
-	name: string;
+	name: string | undefined;
 	svc?: Service;
 	handler: WorkflowHandler;
 	adapter: BaseAdapter | null;

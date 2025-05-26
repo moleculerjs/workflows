@@ -4,14 +4,15 @@
 		"strict": false,
 		"checkJs": true,
 		"skipLibCheck": true,
-		"moduleResolution": "nodenext",
+		"moduleResolution": "NodeNext",
 		"module": "NodeNext",
 		"declaration": true,
 		"declarationDir": "types",
 		"outDir": "dist",
 		"target": "ES2023",
+		"lib": ["es2023"],
 		"esModuleInterop": true
 	},
 	"include": ["**.js"],
-	"exclude": ["node_modules", ".eslintrc.js", "prettier.config.js", "types"]
+	"exclude": ["node_modules", ".eslintrc.js", "prettier.config.js", "dist"]
 }
