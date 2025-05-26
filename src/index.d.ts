@@ -7,15 +7,15 @@ import { Cluster, Redis, RedisOptions } from "ioredis";
  * Options for the Workflows middleware
  */
 export interface WorkflowsMiddlewareOptions {
-    adapter: string | BaseAdapter | RedisAdapterOptions;
-    schemaProperty?: string;
-    workflowHandlerTrigger?: string;
-    jobEventType?: string;
+	adapter: string | BaseAdapter | RedisAdapterOptions;
+	schemaProperty?: string;
+	workflowHandlerTrigger?: string;
+	jobEventType?: string;
 	jobIdCollision: "reject" | "skip" | "rerun";
 
-    signalExpiration?: string;
-    maintenanceTime?: number;
-    lockExpiration?: number;
+	signalExpiration?: string;
+	maintenanceTime?: number;
+	lockExpiration?: number;
 	tracing?: boolean;
 }
 
@@ -30,7 +30,7 @@ export interface CreateJobOptions {
 }
 
 export interface SignalWaitOptions {
-	timeout?: number|string;
+	timeout?: number | string;
 }
 
 export type JobRepeat = {
@@ -38,7 +38,7 @@ export type JobRepeat = {
 	cron?: string;
 	tz?: string;
 	limit?: number;
-}
+};
 
 export interface JobEvent {
 	type: string;
@@ -84,7 +84,7 @@ export interface Job {
 export class Workflow {
 	opts: WorkflowOptions;
 	name: string;
-    handler: WorkflowHandler;
+	handler: WorkflowHandler;
 
 	callHandler: (job: Job, events: JobEvent[]) => Promise<unknown>;
 	setNextDelayedMaintenance: (time: number) => Promise<void>;
@@ -92,33 +92,38 @@ export class Workflow {
 	removeRunningJob: (jobId: string) => void;
 	getNumberOfActiveJobs: () => number;
 
-	static createJob: (adapter: BaseAdapter, workflowName: string, payload: unknown, opts: CreateJobOptions) => Promise<Job>;
+	static createJob: (
+		adapter: BaseAdapter,
+		workflowName: string,
+		payload: unknown,
+		opts: CreateJobOptions
+	) => Promise<Job>;
 	static rescheduleJob: (adapter: BaseAdapter, workflowName: string, job: Job) => Promise<void>;
 }
 
 export interface WorkflowOptions {
-    name?: string;
-    timeout?: string | number;
-    retention?: string | number;
-    concurrency?: number;
-    retryPolicy?: {
-        retries?: number;
-        delay?: number;
-        maxDelay?: number;
-        factor?: number;
-    };
+	name?: string;
+	timeout?: string | number;
+	retention?: string | number;
+	concurrency?: number;
+	retryPolicy?: {
+		retries?: number;
+		delay?: number;
+		maxDelay?: number;
+		factor?: number;
+	};
 
 	removeOnCompleted?: boolean;
 	removeOnFailed?: boolean;
 
-    params?: Record<string, any>;
+	params?: Record<string, any>;
 	tracing?: boolean;
 	maxStalledCount?: number;
 }
 
 export interface WorkflowSchema extends WorkflowOptions {
-    fullName?: string;
-    handler: (ctx: WorkflowContext) => Promise<unknown>;
+	fullName?: string;
+	handler: (ctx: WorkflowContext) => Promise<unknown>;
 }
 
 export interface WorkflowContext extends Context {
@@ -130,10 +135,10 @@ export interface WorkflowContextProps {
 	jobId: string;
 	retryAttempts?: number;
 	retries?: number;
-	timeout?: string|number;
+	timeout?: string | number;
 
 	sleep: (duration: number) => Promise<void>;
-	setState: (state: any) => Promise<void>;
+	setState: (state: unknown) => Promise<void>;
 	waitForSignal: (signalName: string, key?: any, opts?: any) => Promise<unknown>;
 	task: (name: string, fn: () => Promise<unknown>) => Promise<unknown>;
 }
@@ -159,33 +164,38 @@ export interface WorkflowServiceBroker {
 export interface BaseDefaultOptions {}
 
 export interface RedisAdapterOptions extends BaseDefaultOptions {
-    redis?: RedisOptions | { url: string } | { cluster: { nodes: string[]; clusterOptions?: any } };
-    prefix?: string;
-    serializer?: string;
-    drainDelay?: number;
+	redis?: RedisOptions | { url: string } | { cluster: { nodes: string[]; clusterOptions?: any } };
+	prefix?: string;
+	serializer?: string;
+	drainDelay?: number;
 }
 
 export class BaseAdapter {
 	broker: ServiceBroker;
 	connected: boolean;
 
-    constructor(opts?: BaseDefaultOptions);
-    init(wf: Workflow|null, broker: ServiceBroker, logger: LoggerInstance, mwOpts: WorkflowsMiddlewareOptions): void;
-    connect(): Promise<void>;
-    disconnect(): Promise<void>;
+	constructor(opts?: BaseDefaultOptions);
+	init(
+		wf: Workflow | null,
+		broker: ServiceBroker,
+		logger: LoggerInstance,
+		mwOpts: WorkflowsMiddlewareOptions
+	): void;
+	connect(): Promise<void>;
+	disconnect(): Promise<void>;
 
 	startJobProcessor(): void;
 	stopJobProcessor(): void;
 
 	newJob(workflowName: string, job: Job, opts?: Record<string, any>): Promise<Job>;
 	newRepeatChildJob(workflowName: string, job: Job): Promise<void>;
-	getJob(workflowName:string, jobId: string, fields?: string[]|boolean): Promise<Job | null>;
+	getJob(workflowName: string, jobId: string, fields?: string[] | boolean): Promise<Job | null>;
 	finishParentJob(workflowName: string, jobId: string): Promise<void>;
-    cleanUp(workflowName?: string, jobId?: string): Promise<void>;
+	cleanUp(workflowName?: string, jobId?: string): Promise<void>;
 
 	sendJobEvent: (workflowName: string, jobId: string, type: string) => void;
 
-	addJobEvent(workflowName: string, jobId: string, event: JobEvent): Promise<void>;
+	addJobEvent(workflowName: string, jobId: string, event: Partial<JobEvent>): Promise<void>;
 	saveJobState(workflowName: string, jobId: string, state: unknown): Promise<void>;
 
 	waitForSignal(signalName: string, key?: string, opts?: SignalWaitOptions): Promise<unknown>;
@@ -199,7 +209,7 @@ export class BaseAdapter {
 	maintenanceRemoveOldJobs(queueName: string, retention: number): Promise<void>;
 	maintenanceDelayedJobs(): Promise<void>;
 
-	getNextDelayedJobTime(): Promise<number|null>;
+	getNextDelayedJobTime(): Promise<number | null>;
 
 	checkJobId(jobId: string): string;
 	log(level: string, workflowName: string, jobId: string, msg: string, ...args: any[]): void;
@@ -207,7 +217,7 @@ export class BaseAdapter {
 
 export class RedisAdapter extends BaseAdapter {
 	opts: RedisAdapterOptions;
-    constructor(opts?: RedisAdapterOptions);
+	constructor(opts?: RedisAdapterOptions);
 
 	getKey: (name: string, type?: string, id?: string) => string;
 }

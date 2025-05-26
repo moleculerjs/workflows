@@ -39,9 +39,10 @@
     "moleculer": "^0.14.12 || ^0.15.0-0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.27.0",
     "axios": "^1.9.0",
     "benchmarkify": "^4.0.0",
-    "eslint": "^8.57.0",
+    "eslint": "^9.27.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-prettier": "^5.2.3",
@@ -59,7 +60,8 @@
     "nodemon": "^3.1.10",
     "npm-check-updates": "^18.0.1",
     "prettier": "^3.5.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.1"
   },
   "jest": {
     "testEnvironment": "node",
