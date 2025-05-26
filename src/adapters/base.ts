@@ -269,7 +269,7 @@ export default abstract class BaseAdapter {
 	 * @param lockName - Lock name
 	 * @returns Resolves with true if the lock is acquired, false otherwise.
 	 */
-	abstract lockMaintenance(lockTime: number, lockName: string): Promise<boolean>;
+	abstract lockMaintenance(lockTime: number, lockName?: string): Promise<boolean>;
 
 	/**
 	 * Release the maintenance lock for a workflow.
@@ -277,7 +277,7 @@ export default abstract class BaseAdapter {
 	 * @param lockName - Lock name
 	 * @returns Resolves when the lock is released.
 	 */
-	abstract unlockMaintenance(lockName: string): Promise<void>;
+	abstract unlockMaintenance(lockName?: string): Promise<void>;
 
 	/**
 	 * Process stalled jobs for a workflow and move them back to the waiting queue.

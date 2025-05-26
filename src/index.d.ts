@@ -27,6 +27,7 @@ export interface CreateJobOptions {
 	delay?: number;
 	timeout?: number;
 	repeat?: JobRepeat;
+	isCustomJobId?: boolean;
 }
 
 export interface SignalWaitOptions {

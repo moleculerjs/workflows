@@ -9,19 +9,22 @@
 /**
  * @typedef {import("./base")} BaseAdapter
  */
-const { isObject, isString } = require("lodash");
-const { ServiceSchemaError } = require("moleculer").Errors;
+import { isObject, isString } from "lodash";
+import { Errors } from "moleculer";
+import BaseAdapter from "./base";
+import RedisAdapter from "./redis";
+import { RedisAdapterOptions } from "..";
 
 const Adapters = {
-	Base: require("./base"),
-	Fake: require("./fake"),
-	Redis: require("./redis")
+	Base: BaseAdapter,
+	// Fake: require("./fake"),
+	Redis: RedisAdapter
 };
 
-function getByName(name) {
+function getByName(name: string): BaseAdapter | null {
 	if (!name) return null;
 
-	let n = Object.keys(Adapters).find(n => n.toLowerCase() == name.toLowerCase());
+	const n = Object.keys(Adapters).find(n => n.toLowerCase() == name.toLowerCase());
 	if (n) return Adapters[n];
 }
 
@@ -31,7 +34,7 @@ function getByName(name) {
  * @param {object|string} opt
  * @returns {BaseAdapter}
  */
-function resolve(opt) {
+function resolve(opt: BaseAdapter | string): BaseAdapter {
 	if (opt instanceof Adapters.Base) {
 		return opt;
 	} else if (isString(opt)) {
@@ -39,16 +42,16 @@ function resolve(opt) {
 		if (AdapterClass) {
 			return new AdapterClass();
 		} else if (opt.startsWith("redis://") || opt.startsWith("rediss://")) {
-			return new Adapters.Redis(opt);
+			return new Adapters.Redis(opt as RedisAdapterOptions);
 		} else {
-			throw new ServiceSchemaError(`Invalid Adapter type '${opt}'.`, { type: opt });
+			throw new Errors.ServiceSchemaError(`Invalid Adapter type '${opt}'.`, { type: opt });
 		}
 	} else if (isObject(opt)) {
 		const AdapterClass = getByName(opt.type || "Redis");
 		if (AdapterClass) {
 			return new AdapterClass(opt.options);
 		} else {
-			throw new ServiceSchemaError(`Invalid Adapter type '${opt.type}'.`, {
+			throw new Errors.ServiceSchemaError(`Invalid Adapter type '${opt.type}'.`, {
 				type: opt.type
 			});
 		}
@@ -59,11 +62,12 @@ function resolve(opt) {
 
 /**
  * Register a new Channel Adapter
- * @param {String} name
- * @param {BaseAdapter} value
+ *
+ * @param name
+ * @param value
  */
-function register(name, value) {
+function register(name: string, value: BaseAdapter) {
 	Adapters[name] = value;
 }
 
-module.exports = Object.assign(Adapters, { resolve, register });
+export default Object.assign(Adapters, { resolve, register });

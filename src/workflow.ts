@@ -13,8 +13,8 @@ import { parseDuration, getCronNextTime } from "./utils";
 import Adapters from "./adapters";
 
 import type { ServiceBroker, Service, Context, LoggerInstance as Logger } from "moleculer";
+import type BaseAdapter from "./adapters/base";
 import type {
-	BaseAdapter,
 	WorkflowSchema,
 	WorkflowOptions,
 	WorkflowHandler,
