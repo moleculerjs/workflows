@@ -4,14 +4,15 @@
 		"strict": false,
 		"checkJs": true,
 		"skipLibCheck": true,
+		//"module": "Node16",
 		"module": "commonjs",
 		"declaration": true,
 		"declarationDir": "types",
 		"outDir": "dist",
-		"target": "ES2023",
+		"target": "ESNext",
 		"lib": ["es2023"],
 		"esModuleInterop": true
 	},
-	"include": ["**.js"],
+	"include": ["**.ts"],
 	"exclude": ["node_modules", ".eslintrc.js", "prettier.config.js", "dist"]
 }

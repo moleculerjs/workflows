@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* eslint-disable @/no-console */
 "use strict";
 
 /**
@@ -6,12 +6,14 @@
  * use the workflow middleware
  */
 
-const { ServiceBroker } = require("moleculer");
-const { MoleculerRetryableError } = require("moleculer").Errors;
-const { inspect } = require("util");
-const _ = require("lodash");
+import { ServiceBroker, Errors } from "moleculer";
+const { MoleculerRetryableError } = Errors;
 
-const WorkflowsMiddleware = require("../../index").Middleware;
+import { inspect } from "node:util";
+import process from "node:process";
+import _ from "lodash";
+
+import { Middleware } from "../../dist/index.js";
 
 let c = 1;
 
@@ -70,7 +72,7 @@ const broker = new ServiceBroker({
 	},
 
 	middlewares: [
-		WorkflowsMiddleware({
+		Middleware({
 			tracing: true
 			//jobEventType: "broadcast"
 		})

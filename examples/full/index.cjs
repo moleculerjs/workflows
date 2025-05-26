@@ -10,7 +10,7 @@ const { ServiceBroker } = require("moleculer");
 const { MoleculerClientError } = require("moleculer").Errors;
 const ApiGateway = require("moleculer-web");
 
-const WorkFlowsMiddleware = require("../../index").Middleware;
+const WorkFlowsMiddleware = require("../../dist/index").Middleware;
 
 // Create broker
 const broker = new ServiceBroker({

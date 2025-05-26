@@ -2,7 +2,7 @@
 
 import { ServiceBroker, LoggerInstance, Context, PlainMoleculerError } from "moleculer";
 
-import BaseAdapter, { BaseDefaultOptions } from "./adapters/base";
+import BaseAdapter from "./adapters/base";
 import RedisAdapter, { RedisAdapterOptions } from "./adapters/redis";
 
 /**

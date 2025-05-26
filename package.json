@@ -47,7 +47,6 @@
   },
   "author": "MoleculerJS",
   "license": "MIT",
-  "typings": "index.d.ts",
   "peerDependencies": {
     "moleculer": "^0.14.12 || ^0.15.0-0"
   },

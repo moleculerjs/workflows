@@ -17,12 +17,14 @@ const Adapters = {
 	Redis: RedisAdapter
 };
 
+type AdapterTypes = (typeof Adapters)[keyof typeof Adapters];
+
 type ResolvableAdapterType =
 	| keyof typeof Adapters
 	| BaseAdapter
 	| { type: keyof typeof Adapters; options: BaseDefaultOptions | RedisAdapterOptions };
 
-function getByName(name: string): (typeof Adapters)[keyof typeof Adapters] | null {
+function getByName(name: string): AdapterTypes | null {
 	if (!name) return null;
 
 	const n = Object.keys(Adapters).find(n => n.toLowerCase() == name.toLowerCase());

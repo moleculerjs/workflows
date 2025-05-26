@@ -6,7 +6,7 @@
 
 "use strict";
 
-module.exports = {
-	Middleware: require("./src"),
-	Adapters: require("./src/adapters")
-};
+import Middleware from "./src/index.js";
+import Adapters from "./src/adapters/index.js";
+
+export default { Middleware, Adapters };

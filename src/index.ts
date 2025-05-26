@@ -26,7 +26,7 @@ import type { WorkflowSchema } from "./workflow";
 /**
  * WorkflowsMiddleware for Moleculer
  */
-export function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) {
+export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) {
 	mwOpts = _.defaultsDeep({}, mwOpts, {
 		adapter: "Redis",
 		schemaProperty: "workflows",
