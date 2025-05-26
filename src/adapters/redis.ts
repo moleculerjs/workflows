@@ -21,7 +21,13 @@ import * as C from "../constants";
 import { parseDuration, humanize } from "../utils";
 import Workflow from "../workflow";
 import type { BaseDefaultOptions } from "./base";
-import { CreateJobOptions, Job, JobEvent, WorkflowsMiddlewareOptions } from "../types";
+import {
+	CreateJobOptions,
+	Job,
+	JobEvent,
+	WorkflowsMiddlewareOptions,
+	SignalWaitOptions
+} from "../types";
 
 export interface RedisAdapterOptions extends BaseDefaultOptions {
 	redis?:
@@ -63,7 +69,7 @@ export default class RedisAdapter extends BaseAdapter {
 	/**
 	 * Constructor of adapter.
 	 */
-	constructor(opts: RedisAdapterOptions) {
+	constructor(opts?: string | RedisAdapterOptions) {
 		if (typeof opts == "string")
 			opts = {
 				redis: {
@@ -516,7 +522,7 @@ export default class RedisAdapter extends BaseAdapter {
 				"finishedAt"
 			);
 
-			if (finishedAt > 0) {
+			if (Number(finishedAt) > 0) {
 				this.log("debug", this.wf.name, jobId, "Job is finished. Unlocking...");
 				clearInterval(timer);
 				await this.commandClient.del(this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId));
@@ -563,7 +569,7 @@ export default class RedisAdapter extends BaseAdapter {
 	async getJob(
 		workflowName: string,
 		jobId: string,
-		fields: string[] | boolean = null
+		fields?: string[] | true
 	): Promise<Job | null> {
 		if (fields == null) {
 			fields = ["payload", "parent", "startedAt", "retries", "retryAttempts", "timeout"];
@@ -583,10 +589,9 @@ export default class RedisAdapter extends BaseAdapter {
 		} else {
 			const values = await this.commandClient.hmgetBuffer(
 				this.getKey(workflowName, C.QUEUE_JOB, jobId),
-				fields
+				...fields
 			);
 
-			// @ts-ignore
 			job = fields.reduce((acc, field, i) => {
 				if (values[i] == null) return acc;
 				acc[field] = values[i];
@@ -909,9 +914,14 @@ export default class RedisAdapter extends BaseAdapter {
 	 *
 	 * @param signalName - The name of the signal.
 	 * @param key - The key associated with the signal.
+	 * @param opts Options for waiting for the signal.
 	 * @returns Resolves with the signal payload.
 	 */
-	async waitForSignal(signalName: string, key?: string): Promise<unknown> {
+	async waitForSignal<TSignalResult = unknown>(
+		signalName: string,
+		key?: string,
+		opts?: SignalWaitOptions
+	): Promise<TSignalResult> {
 		if (key == null) key = C.SIGNAL_EMPTY_KEY;
 		const content = await this.commandClient.getBuffer(this.getSignalKey(signalName, key));
 		if (content) {
@@ -925,13 +935,13 @@ export default class RedisAdapter extends BaseAdapter {
 		const pKey = signalName + ":" + key;
 		const found = this.signalPromises.get(pKey);
 		if (found) {
-			return found.promise;
+			return found.promise as Promise<TSignalResult>;
 		}
 
 		await this.subClient.subscribe(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName));
 
-		const item = {};
-		item.promise = new Promise(resolve => (item.resolve = resolve));
+		const item = { promise: null, resolve: null };
+		item.promise = new Promise<TSignalResult>(resolve => (item.resolve = resolve));
 		this.signalPromises.set(pKey, item);
 		this.logger.debug("Waiting for signal", signalName, key);
 

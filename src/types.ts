@@ -1,7 +1,6 @@
 // TypeScript type definitions for the Moleculer Workflow project
 
 import { ServiceBroker, LoggerInstance, Context, PlainMoleculerError } from "moleculer";
-import { ClusterOptions, RedisOptions } from "ioredis";
 
 import BaseAdapter, { BaseDefaultOptions } from "./adapters/base";
 import RedisAdapter, { RedisAdapterOptions } from "./adapters/redis";
@@ -22,7 +21,7 @@ export interface WorkflowsMiddlewareOptions {
 	tracing?: boolean;
 }
 
-export type WorkflowHandler = (ctx: WorkflowContext) => Promise<unknown>;
+export type WorkflowHandler = (ctx: WorkflowContext) => Promise<void>;
 
 export interface CreateJobOptions {
 	jobId?: string;

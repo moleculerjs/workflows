@@ -20,12 +20,8 @@ import Adapters from "./adapters";
 
 import * as C from "./constants";
 import Tracing from "./tracing";
-import type {
-	WorkflowsMiddlewareOptions,
-	WorkflowSchema,
-	Job,
-	CreateJobOptions
-} from "./index.d.ts";
+import type { WorkflowsMiddlewareOptions, Job, CreateJobOptions } from "./types";
+import type { WorkflowSchema } from "./workflow";
 
 /**
  * WorkflowsMiddleware for Moleculer
@@ -186,7 +182,7 @@ export function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) {
 					const handler2 = broker.middlewares.wrapHandler("localWorkflow", handler, wf);
 					wf.handler = handler2;
 					if (broker.isMetricsEnabled()) {
-						wf.handler = async (...args: unknown[]) => {
+						wf.handler = async (ctx: Context) => {
 							const labels = { workflow: wf.name };
 							const timeEnd = broker.metrics.timer(
 								C.METRIC_WORKFLOWS_JOBS_TIME,
@@ -194,7 +190,7 @@ export function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) {
 							);
 							broker.metrics.increment(C.METRIC_WORKFLOWS_JOBS_ACTIVE, labels);
 							try {
-								const result = await handler2(...args);
+								const result = await handler2(ctx);
 								return result;
 							} catch (err) {
 								broker.metrics.increment(

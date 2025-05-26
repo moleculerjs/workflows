@@ -32,12 +32,10 @@ export default abstract class BaseAdapter {
 
 	/**
 	 * Constructor of adapter
-	 * @param {BaseDefaultOptions=} opts
+	 * @param opts
 	 */
-	constructor(opts) {
-		/** @type {BaseDefaultOptions} */
+	constructor(opts?: BaseDefaultOptions) {
 		this.opts = _.defaultsDeep({}, opts, {});
-
 		this.connected = false;
 	}
 
@@ -176,7 +174,7 @@ export default abstract class BaseAdapter {
 	abstract getJob(
 		workflowName: string,
 		jobId: string,
-		fields: string[] | boolean
+		fields?: string[] | true
 	): Promise<Job | null>;
 
 	/**

@@ -28,7 +28,7 @@ export class WorkflowTimeoutError extends WorkflowRetryableError {
 }
 
 export class WorkflowSignalTimeoutError extends WorkflowRetryableError {
-	constructor(signal: string, key: string, timeout: number) {
+	constructor(signal: string, key: string, timeout: number | string) {
 		super("Signal timed out", 500, "WORKFLOW_SIGNAL_TIMEOUT", { signal, key, timeout });
 	}
 }

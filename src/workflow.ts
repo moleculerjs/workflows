@@ -44,6 +44,7 @@ export interface WorkflowOptions {
 }
 
 export interface WorkflowSchema extends WorkflowOptions {
+	enabled?: boolean;
 	fullName?: string;
 	handler: (ctx: WorkflowContext) => Promise<unknown>;
 }

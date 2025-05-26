@@ -8,7 +8,7 @@
 
 import { isObject, isString } from "lodash";
 import { Errors } from "moleculer";
-import BaseAdapter from "./base";
+import BaseAdapter, { BaseDefaultOptions } from "./base";
 import RedisAdapter, { RedisAdapterOptions } from "./redis";
 
 const Adapters = {
@@ -17,7 +17,12 @@ const Adapters = {
 	Redis: RedisAdapter
 };
 
-function getByName(name: string): BaseAdapter | null {
+type ResolvableAdapterType =
+	| keyof typeof Adapters
+	| BaseAdapter
+	| { type: keyof typeof Adapters; options: BaseDefaultOptions | RedisAdapterOptions };
+
+function getByName(name: string): (typeof Adapters)[keyof typeof Adapters] | null {
 	if (!name) return null;
 
 	const n = Object.keys(Adapters).find(n => n.toLowerCase() == name.toLowerCase());
@@ -29,7 +34,7 @@ function getByName(name: string): BaseAdapter | null {
  *
  * @param opt
  */
-function resolve(opt: BaseAdapter | string | { type: string; options: object }): BaseAdapter {
+function resolve(opt: ResolvableAdapterType): BaseAdapter {
 	if (opt instanceof BaseAdapter) {
 		return opt;
 	} else if (isString(opt)) {
@@ -37,7 +42,7 @@ function resolve(opt: BaseAdapter | string | { type: string; options: object }):
 		if (AdapterClass) {
 			return new AdapterClass();
 		} else if (opt.startsWith("redis://") || opt.startsWith("rediss://")) {
-			return new Adapters.Redis(opt as RedisAdapterOptions);
+			return new Adapters.Redis(opt);
 		} else {
 			throw new Errors.ServiceSchemaError(`Invalid Adapter type '${opt}'.`, { type: opt });
 		}
