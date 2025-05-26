@@ -1,4 +1,4 @@
-const { CronExpressionParser } = require("cron-parser");
+import { CronExpressionParser } from "cron-parser";
 
 /**
  * Credits: https://github.com/jkroso/parse-duration
@@ -35,7 +35,7 @@ unit.placeholder = " _";
  * @param {string} [format="ms"] The format to return the duration in (e.g., "ms", "s").
  * @returns {number|null} The parsed duration in the specified format, or null if invalid.
  */
-function parseDuration(str, format = "ms") {
+function parseDuration(str: string | number, format = "ms"): number | null {
 	if (str == null) {
 		return null;
 	}
@@ -46,7 +46,7 @@ function parseDuration(str, format = "ms") {
 	String(str)
 		.replace(new RegExp(`(\\d)[${unit.placeholder}${unit.group}](\\d)`, "g"), "$1$2") // clean up group separators / placeholders
 		.replace(unit.decimal, ".") // normalize decimal separator
-		// @ts-ignore
+		// @ts-expect-error no-overload-method
 		.replace(durationRE, (_, n, units) => {
 			// if no units, find next smallest units or fall back to format value
 			// eg. 1h30 -> 1h30m
@@ -74,7 +74,7 @@ function parseDuration(str, format = "ms") {
  * @param {number} x The base value to randomize.
  * @returns {number} The randomized value.
  */
-function circa(x) {
+function circa(x: number): number {
 	const h = x / 2;
 	const y = Math.floor(Math.random() * h);
 
@@ -87,10 +87,10 @@ const divisors = [60 * 60 * 1000, 60 * 1000, 1000, 1, 1e-3, 1e-6];
 /**
  * Convert a duration in milliseconds into a human-readable string.
  *
- * @param {number} milli The duration in milliseconds.
- * @returns {string} The human-readable duration (e.g., "1h", "30m").
+ * @param milli The duration in milliseconds.
+ * @returns The human-readable duration (e.g., "1h", "30m").
  */
-function humanize(milli) {
+function humanize(milli: number | null): string {
 	if (milli == null) return "?";
 
 	for (let i = 0; i < divisors.length; i++) {
@@ -104,12 +104,12 @@ function humanize(milli) {
 /**
  * Calculate the next execution time for a given cron expression.
  *
- * @param {string} cron The cron expression to evaluate.
- * @param {number} currentDate The current date to base the calculation on.
- * @param {string} [tz] The timezone to use for the calculation.
- * @returns {number} The timestamp of the next execution time.
+ * @param cron The cron expression to evaluate.
+ * @param currentDate The current date to base the calculation on.
+ * @param tz The timezone to use for the calculation.
+ * @returns The timestamp of the next execution time.
  */
-function getCronNextTime(cron, currentDate, tz) {
+function getCronNextTime(cron: string, currentDate?: number, tz?: string): number {
 	const interval = CronExpressionParser.parse(cron, {
 		currentDate,
 		tz
@@ -120,9 +120,4 @@ function getCronNextTime(cron, currentDate, tz) {
 	return next.getTime();
 }
 
-module.exports = {
-	parseDuration,
-	circa,
-	humanize,
-	getCronNextTime
-};
+export { parseDuration, circa, humanize, getCronNextTime };

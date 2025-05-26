@@ -9,7 +9,8 @@
 		"declaration": true,
 		"declarationDir": "types",
 		"outDir": "dist",
-		"target": "ES2023"
+		"target": "ES2023",
+		"esModuleInterop": true
 	},
 	"include": ["**.js"],
 	"exclude": ["node_modules", ".eslintrc.js", "prettier.config.js", "types"]

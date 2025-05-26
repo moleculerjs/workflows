@@ -25,7 +25,7 @@ import type {
 	CreateJobOptions
 } from "./index.d.ts";
 
-class Workflow {
+export default class Workflow {
 	opts: WorkflowOptions;
 	name: string;
 	svc?: Service;
@@ -771,5 +771,3 @@ class Workflow {
 		}
 	}
 }
-
-export = Workflow;

@@ -81,26 +81,6 @@ export interface Job {
 	promise?: () => Promise<unknown>;
 }
 
-export class Workflow {
-	opts: WorkflowOptions;
-	name: string;
-	handler: WorkflowHandler;
-
-	callHandler: (job: Job, events: JobEvent[]) => Promise<unknown>;
-	setNextDelayedMaintenance: (time: number) => Promise<void>;
-	addRunningJob: (jobId: string) => void;
-	removeRunningJob: (jobId: string) => void;
-	getNumberOfActiveJobs: () => number;
-
-	static createJob: (
-		adapter: BaseAdapter,
-		workflowName: string,
-		payload: unknown,
-		opts: CreateJobOptions
-	) => Promise<Job>;
-	static rescheduleJob: (adapter: BaseAdapter, workflowName: string, job: Job) => Promise<void>;
-}
-
 export interface WorkflowOptions {
 	name?: string;
 	timeout?: string | number;
@@ -168,51 +148,6 @@ export interface RedisAdapterOptions extends BaseDefaultOptions {
 	prefix?: string;
 	serializer?: string;
 	drainDelay?: number;
-}
-
-export class BaseAdapter {
-	broker: ServiceBroker;
-	connected: boolean;
-
-	constructor(opts?: BaseDefaultOptions);
-	init(
-		wf: Workflow | null,
-		broker: ServiceBroker,
-		logger: LoggerInstance,
-		mwOpts: WorkflowsMiddlewareOptions
-	): void;
-	connect(): Promise<void>;
-	disconnect(): Promise<void>;
-
-	startJobProcessor(): void;
-	stopJobProcessor(): void;
-
-	newJob(workflowName: string, job: Job, opts?: Record<string, any>): Promise<Job>;
-	newRepeatChildJob(workflowName: string, job: Job): Promise<void>;
-	getJob(workflowName: string, jobId: string, fields?: string[] | boolean): Promise<Job | null>;
-	finishParentJob(workflowName: string, jobId: string): Promise<void>;
-	cleanUp(workflowName?: string, jobId?: string): Promise<void>;
-
-	sendJobEvent: (workflowName: string, jobId: string, type: string) => void;
-
-	addJobEvent(workflowName: string, jobId: string, event: Partial<JobEvent>): Promise<void>;
-	saveJobState(workflowName: string, jobId: string, state: unknown): Promise<void>;
-
-	waitForSignal(signalName: string, key?: string, opts?: SignalWaitOptions): Promise<unknown>;
-
-	lockMaintenance(lockTime: number, lockName?: string): Promise<boolean>;
-	unlockMaintenance(lockName?: string): Promise<void>;
-
-	maintenanceStalledJobs(): Promise<void>;
-	maintenanceDelayedJobs(): Promise<void>;
-	maintenanceActiveJobs(): Promise<void>;
-	maintenanceRemoveOldJobs(queueName: string, retention: number): Promise<void>;
-	maintenanceDelayedJobs(): Promise<void>;
-
-	getNextDelayedJobTime(): Promise<number | null>;
-
-	checkJobId(jobId: string): string;
-	log(level: string, workflowName: string, jobId: string, msg: string, ...args: any[]): void;
 }
 
 export class RedisAdapter extends BaseAdapter {
