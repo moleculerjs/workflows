@@ -12,10 +12,12 @@ import type {
 	JobEvent,
 	WorkflowsMiddlewareOptions,
 	SignalWaitOptions,
-	BaseDefaultOptions,
 	CreateJobOptions
-} from "../index.d.ts";
+} from "../types";
 import type Workflow from "../workflow";
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface BaseDefaultOptions extends Record<string, unknown> {}
 
 /**
  * Base adapter class

@@ -8,22 +8,45 @@
 
 import _ from "lodash";
 import { WorkflowError, WorkflowTaskMismatchError, WorkflowSignalTimeoutError } from "./errors";
-import C from "./constants";
+import * as C from "./constants";
 import { parseDuration, getCronNextTime } from "./utils";
 import Adapters from "./adapters";
 
 import type { ServiceBroker, Service, Context, LoggerInstance as Logger } from "moleculer";
 import type BaseAdapter from "./adapters/base";
 import type {
-	WorkflowSchema,
-	WorkflowOptions,
 	WorkflowHandler,
 	WorkflowsMiddlewareOptions,
 	WorkflowContext,
 	Job,
 	JobEvent,
 	CreateJobOptions
-} from "./index.d.ts";
+} from "./types";
+
+export interface WorkflowOptions {
+	name?: string;
+	timeout?: string | number;
+	retention?: string | number;
+	concurrency?: number;
+	retryPolicy?: {
+		retries?: number;
+		delay?: number;
+		maxDelay?: number;
+		factor?: number;
+	};
+
+	removeOnCompleted?: boolean;
+	removeOnFailed?: boolean;
+
+	params?: Record<string, unknown>;
+	tracing?: boolean;
+	maxStalledCount?: number;
+}
+
+export interface WorkflowSchema extends WorkflowOptions {
+	fullName?: string;
+	handler: (ctx: WorkflowContext) => Promise<unknown>;
+}
 
 export default class Workflow {
 	opts: WorkflowOptions;

@@ -1,7 +1,10 @@
 // TypeScript type definitions for the Moleculer Workflow project
 
 import { ServiceBroker, LoggerInstance, Context, PlainMoleculerError } from "moleculer";
-import { Cluster, Redis, RedisOptions } from "ioredis";
+import { ClusterOptions, RedisOptions } from "ioredis";
+
+import BaseAdapter, { BaseDefaultOptions } from "./adapters/base";
+import RedisAdapter, { RedisAdapterOptions } from "./adapters/redis";
 
 /**
  * Options for the Workflows middleware
@@ -82,31 +85,6 @@ export interface Job {
 	promise?: () => Promise<unknown>;
 }
 
-export interface WorkflowOptions {
-	name?: string;
-	timeout?: string | number;
-	retention?: string | number;
-	concurrency?: number;
-	retryPolicy?: {
-		retries?: number;
-		delay?: number;
-		maxDelay?: number;
-		factor?: number;
-	};
-
-	removeOnCompleted?: boolean;
-	removeOnFailed?: boolean;
-
-	params?: Record<string, any>;
-	tracing?: boolean;
-	maxStalledCount?: number;
-}
-
-export interface WorkflowSchema extends WorkflowOptions {
-	fullName?: string;
-	handler: (ctx: WorkflowContext) => Promise<unknown>;
-}
-
 export interface WorkflowContext extends Context {
 	wf: WorkflowContextProps;
 }
@@ -120,12 +98,12 @@ export interface WorkflowContextProps {
 
 	sleep: (duration: number) => Promise<void>;
 	setState: (state: unknown) => Promise<void>;
-	waitForSignal: (signalName: string, key?: any, opts?: any) => Promise<unknown>;
+	waitForSignal: (signalName: string, key?: string, opts?: SignalWaitOptions) => Promise<unknown>;
 	task: (name: string, fn: () => Promise<unknown>) => Promise<unknown>;
 }
 
 export interface WorkflowServiceBroker {
-	run: (workflowName: string, payload: any, opts?: any) => Promise<unknown>;
+	run: (workflowName: string, payload: unknown, opts?: unknown) => Promise<unknown>;
 	remove: (workflowName: string, jobId: string) => Promise<void>;
 	triggerSignal: (signalName: string, key?: unknown, payload?: unknown) => Promise<void>;
 	removeSignal: (signalName: string, key?: unknown) => Promise<void>;
@@ -142,18 +120,12 @@ export interface WorkflowServiceBroker {
 	adapter: RedisAdapter | BaseAdapter;
 }
 
-export interface BaseDefaultOptions {}
-
 export interface RedisAdapterOptions extends BaseDefaultOptions {
-	redis?: RedisOptions | { url: string } | { cluster: { nodes: string[]; clusterOptions?: any } };
+	redis?:
+		| RedisOptions
+		| { url: string }
+		| { cluster: { nodes: string[]; clusterOptions?: ClusterOptions } };
 	prefix?: string;
 	serializer?: string;
 	drainDelay?: number;
-}
-
-export class RedisAdapter extends BaseAdapter {
-	opts: RedisAdapterOptions;
-	constructor(opts?: RedisAdapterOptions);
-
-	getKey: (name: string, type?: string, id?: string) => string;
 }
