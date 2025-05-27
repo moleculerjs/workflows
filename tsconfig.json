@@ -21,7 +21,6 @@
 		//"allowImportingTsExtensions": true
 		"rewriteRelativeImportExtensions": true,
 		"isolatedModules": true,
-		"types": ["test/vitest.d.ts"]
 	},
 	"include": ["src/**/*.ts"],
 	"exclude": ["node_modules", ".eslintrc.js", "prettier.config.js", "dist"],

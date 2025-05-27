@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 import { expect } from "vitest";
 
 const minDate = new Date("2020-01-01T00:00:00Z").getTime();
@@ -63,3 +64,16 @@ expect.extend({
 		};
 	}
 });
+
+interface CustomMatchers<T = unknown> {
+	withinRange(min: number, max: number): T;
+	greaterThan(min: number): T;
+	greaterThanOrEqual(min: number): T;
+	epoch(): T;
+	toBeItemAfter(array: unknown[], item: unknown, afterItem: unknown): T;
+}
+
+declare module "vitest" {
+	interface Assertion extends CustomMatchers {}
+	interface AsymmetricMatchersContaining extends CustomMatchers {}
+}

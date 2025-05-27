@@ -4,7 +4,7 @@ import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 import _ from "lodash";
 
-import "../setup.ts";
+import "../vitest-extensions.ts";
 
 describe("Workflows Batch Test (on single node)", () => {
 	let broker;
