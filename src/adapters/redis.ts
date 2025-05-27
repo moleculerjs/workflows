@@ -691,7 +691,7 @@ export default class RedisAdapter extends BaseAdapter {
 			this.jobResultPromises.delete(job.id);
 			storePromise.resolve(result);
 		} else {
-			this.commandClient.publish(
+			await this.commandClient.publish(
 				this.getKey(this.wf.name, C.FINISHED),
 				this.serializer.serialize({
 					jobId: job.id,
@@ -820,7 +820,7 @@ export default class RedisAdapter extends BaseAdapter {
 			this.jobResultPromises.delete(job.id);
 			storePromise.reject(err);
 		} else {
-			this.commandClient.publish(
+			await this.commandClient.publish(
 				this.getKey(this.wf.name, C.FINISHED),
 				this.serializer.serialize({
 					jobId: job.id,
