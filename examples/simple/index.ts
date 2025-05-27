@@ -13,7 +13,9 @@ import { inspect } from "node:util";
 import process from "node:process";
 import _ from "lodash";
 
-import Middleware from "../../dist/index.js";
+import Middleware from "../../src/index.ts";
+import { CreateJobOptions } from "../../src/types.ts";
+// import { Adapters } from "../../src/index.ts";
 
 let c = 1;
 
@@ -119,7 +121,7 @@ const broker = new ServiceBroker({
 			async action(broker, args) {
 				const { options } = args;
 				console.log(args);
-				const jobOpts = {
+				const jobOpts: CreateJobOptions = {
 					jobId: options.jobId,
 					delay: options.delay,
 					retries: options.retries != null ? parseInt(options.retries) : null,

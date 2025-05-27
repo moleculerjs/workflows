@@ -6,19 +6,25 @@
   "exports": {
     ".": {
       "import": {
-        "default": "./dist/src/index.js",
-        "types": "./types/src/index.d.ts"
+        "default": "./dist/index.js",
+        "types": "./dist/index.d.ts"
       },
       "require": {
-        "default": "./dist/src/index.js",
-        "types": "./types/src/index.d.ts"
+        "default": "./dist/index.js",
+        "types": "./dist/index.d.ts"
       }
     }
   },
-  "types": "./types/index.d.ts",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "README.md",
+    "LICENSE",
+    "dist"
+  ],
+  "main": "./dist/index.js",
   "scripts": {
-    "dev": "nodemon --inspect examples/index.js",
-    "dev:noservice": "nodemon --inspect=9228 examples/index.js simple noservice",
+    "dev": "nodemon --inspect examples/index.ts",
+    "dev:noservice": "nodemon --inspect=9228 examples/index.ts simple noservice",
     "ci:unit": "jest --testMatch \"**/unit/**/*.spec.js\" --watch",
     "ci:integration": "jest --testMatch \"**/integration/**/*.spec.js\" --runInBand --watch",
     "ci:leak": "jest --testMatch \"**/leak-detection/**/index.spec.js\" --runInBand --watch",
@@ -26,7 +32,7 @@
     "test:integration": "jest --testMatch \"**/integration/**/*.spec.js\" --runInBand --coverage --force-exit",
     "test:leak": "jest --testMatch \"**/leak-detection/**/*.spec.js\" --runInBand --force-exit",
     "test": "jest --testMatch \"**/*.spec.js\" --runInBand --coverage --force-exit",
-    "lint": "eslint --ext=.js src examples test",
+    "lint": "eslint --ext=.ts src examples test",
     "bench": "node benchmark/index.js",
     "bench:watch": "nodemon benchmark/index.js",
     "deps": "ncu -i && npm audit fix",
@@ -34,7 +40,9 @@
     "check": "tsc --noEmit true",
     "build": "tsc",
     "coverall": "cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js",
-    "release": "npm publish --access public && git push --tags"
+    "release": "npm publish --access public && git push --tags",
+    "prerelease": "npm run build && npm run lint",
+    "postrelease": "git push origin && git push origin -f --tags"
   },
   "keywords": [
     "workflow",
@@ -72,6 +80,7 @@
     "nodemon": "^3.1.10",
     "npm-check-updates": "^18.0.1",
     "prettier": "^3.5.3",
+    "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.32.1"
   },

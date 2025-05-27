@@ -9,7 +9,6 @@
 		"moduleResolution": "NodeNext",
 		"lib": ["ESNext", "ESNext.Promise"],
 		"declaration": true,
-		"declarationDir": "types",
 		"outDir": "dist",
 		"esModuleInterop": true,
 		"allowSyntheticDefaultImports": true,
