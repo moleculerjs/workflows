@@ -6,7 +6,7 @@
  * use the workflow middleware
  */
 
-import { ServiceBroker, Errors } from "moleculer";
+import { ServiceBroker, Errors, Context } from "moleculer";
 const { MoleculerRetryableError } = Errors;
 
 import { inspect } from "node:util";
@@ -15,6 +15,7 @@ import _ from "lodash";
 
 import Middleware from "../../src/index.ts";
 import { CreateJobOptions } from "../../src/types.ts";
+import "../../src/moleculer-types.ts";
 // import { Adapters } from "../../src/index.ts";
 
 let c = 1;
@@ -80,349 +81,369 @@ const broker = new ServiceBroker({
 		})
 	],
 
-	replCommands: [
-		{
-			command: "run",
-			alias: ["r"],
-			options: [
-				{
-					option: "-w, --workflow <workflowName>",
-					description: "Name of the workflow. Default: 'test.wf1'"
-				},
-				{
-					option: "-j, --jobId <jobId>",
-					description: "Job ID to run the workflow with"
-				},
-				{
-					option: "-d, --delay <text_value_or_int>",
-					description: "Delay before running (like: 5s, 1m, 6h, 2d)"
-				},
-				{
-					option: "-r, --retries <count>",
-					description: "Number of retry if failed"
-				},
-				{
-					option: "-t, --timeout <text_value_or_int>",
-					description: "Execution timeout (like: 5s, 1m, 6h, 2d)"
-				},
-				{
-					option: "--cron <cron timing> [limit]",
-					description: "Repeatable job with cron timing (e.g.: 15 3 * * * )"
-				},
-				{
-					option: "--limit <limit>",
-					description: "Number of executions"
-				},
-				{
-					option: "--wait",
-					description: "Wait for exection result"
-				}
-			],
-			async action(broker, args) {
-				const { options } = args;
-				console.log(args);
-				const jobOpts: CreateJobOptions = {
-					jobId: options.jobId,
-					delay: options.delay,
-					retries: options.retries != null ? parseInt(options.retries) : null,
-					timeout: options.timeout
-				};
-
-				if (options.cron) {
-					jobOpts.repeat = {
-						cron: options.cron /*endDate: "2025-05-06T19:25:00Z"*/,
-						limit: options.limit != null ? Number(options.limit) : null
-					};
-				}
-
-				const job = await broker.wf.run(
-					options.workflow || "test.wf1",
+	replOptions: {
+		customCommands: [
+			{
+				command: "run",
+				alias: ["r"],
+				options: [
 					{
-						c: c++,
-						name: "John",
-						pid: process.pid,
-						nodeID: broker.nodeID
+						option: "-w, --workflow <workflowName>",
+						description: "Name of the workflow. Default: 'test.wf1'"
 					},
-					jobOpts
-				);
-
-				lastJobId = job.id;
-				console.log("Job started", job);
-
-				if (options.wait) {
-					try {
-						const res = await job.promise();
-						console.log("Job result", res);
-					} catch (err) {
-						console.log("Job failed", err.message);
+					{
+						option: "-j, --jobId <jobId>",
+						description: "Job ID to run the workflow with"
+					},
+					{
+						option: "-d, --delay <text_value_or_int>",
+						description: "Delay before running (like: 5s, 1m, 6h, 2d)"
+					},
+					{
+						option: "-r, --retries <count>",
+						description: "Number of retry if failed"
+					},
+					{
+						option: "-t, --timeout <text_value_or_int>",
+						description: "Execution timeout (like: 5s, 1m, 6h, 2d)"
+					},
+					{
+						option: "--cron <cron timing> [limit]",
+						description: "Repeatable job with cron timing (e.g.: 15 3 * * * )"
+					},
+					{
+						option: "--limit <limit>",
+						description: "Number of executions"
+					},
+					{
+						option: "--wait",
+						description: "Wait for exection result"
 					}
-				}
-			}
-		},
+				],
+				async action(broker, args) {
+					const { options } = args;
+					console.log(args);
+					const jobOpts: CreateJobOptions = {
+						jobId: options.jobId,
+						delay: options.delay,
+						retries: options.retries != null ? parseInt(options.retries) : undefined,
+						timeout: options.timeout
+					};
 
-		{
-			command: "batch",
-			options: [
-				{
-					option: "-w, --workflow <workflowName>",
-					description: "Name of the workflow. Default: 'test.wf1'"
-				},
-				{
-					option: "-c, --count <count>",
-					description: "Number of jobs to run"
-				}
-			],
-			async action(broker, args) {
-				const { options } = args;
-				//console.log(options);
-				const count = options.count || 100;
+					if (options.cron) {
+						jobOpts.repeat = {
+							cron: options.cron /*endDate: "2025-05-06T19:25:00Z"*/,
+							limit: options.limit != null ? Number(options.limit) : undefined
+						};
+					}
 
-				const jobs = new Map();
-				const start = Date.now();
-
-				console.log(`Generate ${count} jobs...`);
-				for (let i = 0; i < count; i++) {
-					const jobId = "batch-" + i;
 					const job = await broker.wf.run(
 						options.workflow || "test.wf1",
-						{ i },
-						{ jobId }
+						{
+							c: c++,
+							name: "John",
+							pid: process.pid,
+							nodeID: broker.nodeID
+						},
+						jobOpts
 					);
 
-					job.promise().then(() => {
-						jobs.delete(jobId);
-						if (jobs.size === 0) {
-							console.log(
-								`All ${count} jobs finished. Time:`,
-								Date.now() - start,
-								"ms"
-							);
+					lastJobId = job.id;
+					console.log("Job started", job);
+
+					if (options.wait) {
+						try {
+							const res = await job.promise();
+							console.log("Job result", res);
+						} catch (err) {
+							console.log("Job failed", err.message);
 						}
-					});
-
-					jobs.set(jobId, job);
+					}
 				}
-				console.log(`Generated ${count} jobs. Time:`, Date.now() - start, "ms");
-			}
-		},
+			},
 
-		{
-			command: "delete",
-			alias: ["d"],
-			options: [
-				{
-					option: "-w, --workflow <workflowName>",
-					description: "Name of the workflow. Default: 'test.wf1'"
-				},
-				{
-					option: "-j, --jobId <jobId>",
-					description: "Job ID to run the workflow with"
-				}
-			],
-			async action(broker, args) {
-				const { options } = args;
-				//console.log(options);
-				return broker.wf.remove(options.workflow || "test.wf1", options.jobId || lastJobId);
-			}
-		},
-
-		{
-			command: "state",
-			alias: ["t"],
-			options: [
-				{
-					option: "-w, --workflow <workflowName>",
-					description: "Name of the workflow. Default: 'test.wf1'"
-				},
-				{
-					option: "-j, --jobId <jobId>",
-					description: "Job ID to run the workflow with"
-				}
-			],
-			async action(broker, args) {
-				const { options } = args;
-				//console.log(options);
-				const state = await broker.wf.getState(
-					options.workflow || "test.wf1",
-					options.jobId || lastJobId
-				);
-				console.log("State", state);
-			}
-		},
-
-		{
-			command: "get",
-			alias: ["g"],
-			options: [
-				{
-					option: "-w, --workflow <workflowName>",
-					description: "Name of the workflow. Default: 'test.wf1'"
-				},
-				{
-					option: "-j, --jobId <jobId>",
-					description: "Job ID to run the workflow with"
-				}
-			],
-			async action(broker, args) {
-				const { options } = args;
-				//console.log(options);
-				const job = await broker.wf.get(
-					options.workflow || "test.wf1",
-					options.jobId || lastJobId
-				);
-				console.log(job);
-			}
-		},
-
-		{
-			command: "jobEvents",
-			alias: ["e"],
-			options: [
-				{
-					option: "-w, --workflow <workflowName>",
-					description: "Name of the workflow. Default: 'test.wf1'"
-				},
-				{
-					option: "-j, --jobId <jobId>",
-					description: "Job ID to run the workflow with"
-				}
-			],
-			async action(broker, args) {
-				const { options } = args;
-				//console.log(options);
-				const job = await broker.wf.getEvents(
-					options.workflow || "test.wf1",
-					options.jobId || lastJobId
-				);
-				console.log(job);
-			}
-		},
-
-		{
-			command: "signal [signalName]",
-			alias: ["s"],
-			options: [
-				{
-					option: "-k, --key <key>",
-					description: "Signal key"
-				}
-			],
-			async action(broker, args) {
-				const { options } = args;
-				// console.log(args);
-				const signalName = options.signalName ?? "test.signal";
-				const key = !Number.isNaN(Number(options.key)) ? Number(options.key) : options.key;
-				broker.wf.triggerSignal(signalName, key, { user: "John Doe" });
-			}
-		},
-
-		{
-			command: "remsignal [signalName]",
-			alias: ["z"],
-			options: [
-				{
-					option: "-k, --key <key>",
-					description: "Signal key"
-				}
-			],
-			async action(broker, args) {
-				const { options } = args;
-				// console.log(args);
-				const signalName = options.signalName ?? "test.signal";
-				const key = !Number.isNaN(Number(options.key)) ? Number(options.key) : options.key;
-				broker.wf.removeSignal(signalName, key);
-			}
-		},
-
-		{
-			command: "jobs [type]",
-			alias: ["j"],
-			options: [
-				{
-					option: "-w, --workflow <workflowName>",
-					description: "Name of the workflow. Default: 'test.wf1'"
-				}
-			],
-			async action(broker, args, { table, kleur, getBorderCharacters }) {
-				const { options } = args;
-				//console.log(args);
-
-				const tableConf = {
-					border: _.mapValues(getBorderCharacters("honeywell"), char => kleur.gray(char)),
-					columns: {
-						1: { alignment: "center" }
+			{
+				command: "batch",
+				options: [
+					{
+						option: "-w, --workflow <workflowName>",
+						description: "Name of the workflow. Default: 'test.wf1'"
 					},
-					drawHorizontalLine: (index, count) => index == 0 || index == 1 || index == count
-				};
-
-				const rows = [[kleur.bold("Job ID"), kleur.bold("Status"), kleur.bold("Time")]];
-
-				if (!args.type || args.type == "active" || args.type == "live") {
-					const active = await broker.wf.listActiveJobs(options.workflow || "test.wf1");
-					for (const item of active) {
-						rows.push([item.id, kleur.magenta("Active"), ""]);
+					{
+						option: "-c, --count <count>",
+						description: "Number of jobs to run"
 					}
-				}
-				if (!args.type || args.type == "delayed" || args.type == "live") {
-					const delayed = await broker.wf.listDelayedJobs(options.workflow || "test.wf1");
-					for (const item of delayed) {
-						rows.push([
-							item.id,
-							kleur.yellow("Delayed"),
-							new Date(item.promoteAt).toLocaleTimeString()
-						]);
-					}
-				}
-				if (!args.type || args.type == "waiting" || args.type == "live") {
-					const waiting = await broker.wf.listWaitingJobs(options.workflow || "test.wf1");
-					for (const jobId of waiting) {
-						rows.push([jobId, kleur.cyan("Waiting"), ""]);
-					}
-				}
+				],
+				async action(broker, args) {
+					const { options } = args;
+					//console.log(options);
+					const count = options.count || 100;
 
-				if (!args.type || args.type == "completed" || args.type == "closed") {
-					const completed = await broker.wf.listCompletedJobs(
-						options.workflow || "test.wf1"
+					const jobs = new Map();
+					const start = Date.now();
+
+					console.log(`Generate ${count} jobs...`);
+					for (let i = 0; i < count; i++) {
+						const jobId = "batch-" + i;
+						const job = await broker.wf.run(
+							options.workflow || "test.wf1",
+							{ i },
+							{ jobId }
+						);
+
+						job.promise().then(() => {
+							jobs.delete(jobId);
+							if (jobs.size === 0) {
+								console.log(
+									`All ${count} jobs finished. Time:`,
+									Date.now() - start,
+									"ms"
+								);
+							}
+						});
+
+						jobs.set(jobId, job);
+					}
+					console.log(`Generated ${count} jobs. Time:`, Date.now() - start, "ms");
+				}
+			},
+
+			{
+				command: "delete",
+				alias: ["d"],
+				options: [
+					{
+						option: "-w, --workflow <workflowName>",
+						description: "Name of the workflow. Default: 'test.wf1'"
+					},
+					{
+						option: "-j, --jobId <jobId>",
+						description: "Job ID to run the workflow with"
+					}
+				],
+				async action(broker, args) {
+					const { options } = args;
+					//console.log(options);
+					return broker.wf.remove(
+						options.workflow || "test.wf1",
+						options.jobId || lastJobId
 					);
-					for (const item of completed) {
-						rows.push([
-							item.id,
-							kleur.green("Completed"),
-							new Date(item.finishedAt).toLocaleTimeString()
-						]);
-					}
 				}
-				if (!args.type || args.type == "failed" || args.type == "closed") {
-					const failed = await broker.wf.listFailedJobs(options.workflow || "test.wf1");
-					for (const item of failed) {
-						rows.push([
-							item.id,
-							kleur.red("Failed"),
-							new Date(item.finishedAt).toLocaleTimeString()
-						]);
-					}
-				}
+			},
 
-				console.log(table(rows, tableConf));
-			}
-		},
-
-		{
-			command: "cleanup",
-			alias: ["c"],
-			options: [
-				{
-					option: "-w, --workflow <workflowName>",
-					description: "Name of the workflow. Default: 'test.wf1'"
+			{
+				command: "state",
+				alias: ["t"],
+				options: [
+					{
+						option: "-w, --workflow <workflowName>",
+						description: "Name of the workflow. Default: 'test.wf1'"
+					},
+					{
+						option: "-j, --jobId <jobId>",
+						description: "Job ID to run the workflow with"
+					}
+				],
+				async action(broker, args) {
+					const { options } = args;
+					//console.log(options);
+					const state = await broker.wf.getState(
+						options.workflow || "test.wf1",
+						options.jobId || lastJobId
+					);
+					console.log("State", state);
 				}
-			],
-			async action(broker, args) {
-				const { options } = args;
-				//console.log(options);
-				broker.wf.cleanUp(options.workflow ?? "test.wf1");
+			},
+
+			{
+				command: "get",
+				alias: ["g"],
+				options: [
+					{
+						option: "-w, --workflow <workflowName>",
+						description: "Name of the workflow. Default: 'test.wf1'"
+					},
+					{
+						option: "-j, --jobId <jobId>",
+						description: "Job ID to run the workflow with"
+					}
+				],
+				async action(broker, args) {
+					const { options } = args;
+					//console.log(options);
+					const job = await broker.wf.get(
+						options.workflow || "test.wf1",
+						options.jobId || lastJobId
+					);
+					console.log(job);
+				}
+			},
+
+			{
+				command: "jobEvents",
+				alias: ["e"],
+				options: [
+					{
+						option: "-w, --workflow <workflowName>",
+						description: "Name of the workflow. Default: 'test.wf1'"
+					},
+					{
+						option: "-j, --jobId <jobId>",
+						description: "Job ID to run the workflow with"
+					}
+				],
+				async action(broker, args) {
+					const { options } = args;
+					//console.log(options);
+					const job = await broker.wf.getEvents(
+						options.workflow || "test.wf1",
+						options.jobId || lastJobId
+					);
+					console.log(job);
+				}
+			},
+
+			{
+				command: "signal [signalName]",
+				alias: ["s"],
+				options: [
+					{
+						option: "-k, --key <key>",
+						description: "Signal key"
+					}
+				],
+				async action(broker, args) {
+					const { options } = args;
+					// console.log(args);
+					const signalName = options.signalName ?? "test.signal";
+					const key = !Number.isNaN(Number(options.key))
+						? Number(options.key)
+						: options.key;
+					broker.wf.triggerSignal(signalName, key, { user: "John Doe" });
+				}
+			},
+
+			{
+				command: "remsignal [signalName]",
+				alias: ["z"],
+				options: [
+					{
+						option: "-k, --key <key>",
+						description: "Signal key"
+					}
+				],
+				async action(broker, args) {
+					const { options } = args;
+					// console.log(args);
+					const signalName = options.signalName ?? "test.signal";
+					const key = !Number.isNaN(Number(options.key))
+						? Number(options.key)
+						: options.key;
+					broker.wf.removeSignal(signalName, key);
+				}
+			},
+
+			{
+				command: "jobs [type]",
+				alias: ["j"],
+				options: [
+					{
+						option: "-w, --workflow <workflowName>",
+						description: "Name of the workflow. Default: 'test.wf1'"
+					}
+				],
+				async action(broker, args, { table, kleur, getBorderCharacters }) {
+					const { options } = args;
+					//console.log(args);
+
+					const tableConf = {
+						border: _.mapValues(getBorderCharacters("honeywell"), char =>
+							kleur.gray(char)
+						),
+						columns: {
+							1: { alignment: "center" }
+						},
+						drawHorizontalLine: (index, count) =>
+							index == 0 || index == 1 || index == count
+					};
+
+					const rows = [[kleur.bold("Job ID"), kleur.bold("Status"), kleur.bold("Time")]];
+
+					if (!args.type || args.type == "active" || args.type == "live") {
+						const active = await broker.wf.listActiveJobs(
+							options.workflow || "test.wf1"
+						);
+						for (const item of active) {
+							rows.push([item.id, kleur.magenta("Active"), ""]);
+						}
+					}
+					if (!args.type || args.type == "delayed" || args.type == "live") {
+						const delayed = await broker.wf.listDelayedJobs(
+							options.workflow || "test.wf1"
+						);
+						for (const item of delayed) {
+							rows.push([
+								item.id,
+								kleur.yellow("Delayed"),
+								new Date(item.promoteAt).toLocaleTimeString()
+							]);
+						}
+					}
+					if (!args.type || args.type == "waiting" || args.type == "live") {
+						const waiting = await broker.wf.listWaitingJobs(
+							options.workflow || "test.wf1"
+						);
+						for (const jobId of waiting) {
+							rows.push([jobId, kleur.cyan("Waiting"), ""]);
+						}
+					}
+
+					if (!args.type || args.type == "completed" || args.type == "closed") {
+						const completed = await broker.wf.listCompletedJobs(
+							options.workflow || "test.wf1"
+						);
+						for (const item of completed) {
+							rows.push([
+								item.id,
+								kleur.green("Completed"),
+								new Date(item.finishedAt).toLocaleTimeString()
+							]);
+						}
+					}
+					if (!args.type || args.type == "failed" || args.type == "closed") {
+						const failed = await broker.wf.listFailedJobs(
+							options.workflow || "test.wf1"
+						);
+						for (const item of failed) {
+							rows.push([
+								item.id,
+								kleur.red("Failed"),
+								new Date(item.finishedAt).toLocaleTimeString()
+							]);
+						}
+					}
+
+					console.log(table(rows, tableConf));
+				}
+			},
+
+			{
+				command: "cleanup",
+				alias: ["c"],
+				options: [
+					{
+						option: "-w, --workflow <workflowName>",
+						description: "Name of the workflow. Default: 'test.wf1'"
+					}
+				],
+				async action(broker, args) {
+					const { options } = args;
+					//console.log(options);
+					broker.wf.cleanUp(options.workflow ?? "test.wf1");
+				}
 			}
-		}
-	]
+		]
+	}
 });
 
 if (!isNoService) {
@@ -446,6 +467,7 @@ if (!isNoService) {
 					factor: 2
 				},
 
+				// @ts-expect-error skip param validation
 				__params: {
 					c: { type: "number" },
 					name: { type: "string" },
@@ -457,7 +479,7 @@ if (!isNoService) {
 				tracing: true,
 
 				// Workflow handler
-				async handler(ctx) {
+				async handler(ctx: Context) {
 					this.logger.info("WF handler start", ctx.params, ctx.wf);
 
 					const res = await ctx.call("test.list");
@@ -483,7 +505,7 @@ if (!isNoService) {
 					await ctx.wf.sleep("1s");
 					// await ctx.wf.setState("afterSleep-20s");
 
-					const signalRes = await ctx.wf.waitForSignal("test.signal", 123, {
+					const signalRes = await ctx.wf.waitForSignal("test.signal", "123", {
 						timeout: "1h"
 					});
 					this.logger.info("Signal result", signalRes);

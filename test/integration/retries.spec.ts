@@ -26,7 +26,7 @@ describe("Workflows Retries Test", () => {
 				name: "retry",
 				workflows: {
 					simple: {
-						async handler(ctx: Context) {
+						async handler(ctx) {
 							FLOWS.push(ctx.wf.name);
 							if ((ctx.wf.retryAttempts ?? 0) < 3) {
 								throw new Errors.MoleculerRetryableError("Simulated failure");
@@ -72,21 +72,21 @@ describe("Workflows Retries Test", () => {
 			it("should fail the job without retries", async () => {
 				const job = await broker.wf.run("retry.simple");
 				expect(job.id).toEqual(expect.any(String));
-				await expect(job.promise()).rejects.toThrow("Simulated failure");
+				await expect(job.promise!()).rejects.toThrow("Simulated failure");
 				expect(FLOWS).toEqual(["retry.simple"]);
 			});
 
 			it("should fail the job after 2 retries", async () => {
 				const job = await broker.wf.run("retry.simple", {}, { retries: 2 });
 				expect(job.id).toEqual(expect.any(String));
-				await expect(job.promise()).rejects.toThrow("Simulated failure");
+				await expect(job.promise!()).rejects.toThrow("Simulated failure");
 				expect(FLOWS).toEqual(["retry.simple", "retry.simple", "retry.simple"]);
 			});
 
 			it("should success the job after 3 retries", async () => {
 				const job = await broker.wf.run("retry.simple", {}, { retries: 3 });
 				expect(job.id).toEqual(expect.any(String));
-				const result = await job.promise();
+				const result = await job.promise!();
 				expect(result).toBe("Success on attempt 3");
 				expect(FLOWS).toEqual([
 					"retry.simple",
@@ -101,21 +101,21 @@ describe("Workflows Retries Test", () => {
 			it("should fail the job without retries", async () => {
 				const job = await broker.wf.run("retry.policy", {}, { retries: 0 });
 				expect(job.id).toEqual(expect.any(String));
-				await expect(job.promise()).rejects.toThrow("Simulated failure");
+				await expect(job.promise!()).rejects.toThrow("Simulated failure");
 				expect(FLOWS).toEqual(["retry.policy"]);
 			});
 
 			it("should fail the job after 2 retries", async () => {
 				const job = await broker.wf.run("retry.policy", {}, { retries: 2 });
 				expect(job.id).toEqual(expect.any(String));
-				await expect(job.promise()).rejects.toThrow("Simulated failure");
+				await expect(job.promise!()).rejects.toThrow("Simulated failure");
 				expect(FLOWS).toEqual(["retry.policy", "retry.policy", "retry.policy"]);
 			});
 
 			it("should success the job after 3 retries (from retryPolicy)", async () => {
 				const job = await broker.wf.run("retry.policy", {});
 				expect(job.id).toEqual(expect.any(String));
-				const result = await job.promise();
+				const result = await job.promise!();
 				expect(result).toBe("Success on attempt 3");
 				expect(FLOWS).toEqual([
 					"retry.policy",

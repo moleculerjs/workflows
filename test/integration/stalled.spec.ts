@@ -378,7 +378,9 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				event: "user.registered",
 				nodeID: "worker",
-				result: [null],
+				// result: [null], // Moleculer 0.14
+				result: true, // Moleculer 0.15
+
 				taskId: 5,
 				taskType: "eventEmit",
 				ts: expect.epoch(),
@@ -464,7 +466,9 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				event: "user.verified",
 				nodeID: "worker",
-				result: [[null]],
+				// result: [[null]], // Moleculer 0.14
+				result: true, // Moleculer 0.15
+
 				taskId: 14,
 				taskType: "actionBroadcast",
 				ts: expect.epoch(),
@@ -630,7 +634,8 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				event: "user.registered",
 				nodeID: "worker",
-				result: [null],
+				// result: [null], // Moleculer 0.14
+				result: true, // Moleculer 0.15
 				taskId: 5,
 				taskType: "eventEmit",
 				ts: expect.epoch(),
@@ -716,7 +721,8 @@ describe("Workflows Stalled Job Test", () => {
 				duration: expect.any(Number),
 				event: "user.verified",
 				nodeID: "worker",
-				result: [[null]],
+				// result: [[null]], // Moleculer 0.14
+				result: true, // Moleculer 0.15
 				taskId: 14,
 				taskType: "actionBroadcast",
 				ts: expect.epoch(),

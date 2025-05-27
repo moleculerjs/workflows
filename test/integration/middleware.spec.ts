@@ -68,7 +68,7 @@ describe("Workflows Middleware Test", () => {
 	it("should wrap local workflow handler", async () => {
 		const job = await broker.wf.run("mw.good", { name: "John" });
 
-		const result = await job.promise();
+		const result = await job.promise!();
 		expect(result).toBe("OK -> John");
 
 		expect(FLOWS).toEqual([

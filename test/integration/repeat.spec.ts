@@ -91,7 +91,7 @@ describe("Workflows Repeat Test", () => {
 			expect(j).toStrictEqual({
 				id: jobId,
 				parent: "rep1",
-				createdAt: expect.greaterThan(job2.createdAt),
+				createdAt: expect.greaterThan(job2!.createdAt),
 				promoteAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
@@ -138,7 +138,7 @@ describe("Workflows Repeat Test", () => {
 			expect(j).toStrictEqual({
 				id: jobId,
 				parent: "rep2",
-				createdAt: expect.greaterThanOrEqual(job2.createdAt),
+				createdAt: expect.greaterThanOrEqual(job2!.createdAt),
 				promoteAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
@@ -186,7 +186,7 @@ describe("Workflows Repeat Test", () => {
 			expect(j).toStrictEqual({
 				id: jobId,
 				parent: "rep3",
-				createdAt: expect.greaterThanOrEqual(job2.createdAt),
+				createdAt: expect.greaterThanOrEqual(job2!.createdAt),
 				promoteAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),

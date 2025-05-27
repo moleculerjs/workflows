@@ -12,7 +12,7 @@ import * as C from "./constants.ts";
 import { parseDuration, getCronNextTime } from "./utils.ts";
 import Adapters from "./adapters/index.ts";
 
-import type { ServiceBroker, Service, Context, LoggerInstance as Logger, Errors } from "moleculer";
+import type { ServiceBroker, Service, Context, Logger, Errors } from "moleculer";
 
 import type BaseAdapter from "./adapters/base.ts";
 import type {
@@ -54,7 +54,7 @@ export interface WorkflowOptions {
 export interface WorkflowSchema extends WorkflowOptions {
 	enabled?: boolean;
 	fullName?: string;
-	handler: (ctx: Context) => Promise<void>;
+	handler: WorkflowHandler;
 }
 
 export default class Workflow {

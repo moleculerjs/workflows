@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
-import { Middleware, ServiceBroker } from "moleculer";
+import { ServiceBroker } from "moleculer";
 import { Job } from "../../src/types.ts";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 import _ from "lodash";
@@ -23,6 +23,7 @@ describe("Workflows Batch Test (on single node)", () => {
 
 		broker.createService({
 			name: "batch",
+			// @ts-expect-error different schema property name
 			WF: {
 				serial: {
 					async handler() {

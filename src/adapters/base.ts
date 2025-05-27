@@ -6,7 +6,7 @@
 
 import _ from "lodash";
 import { WorkflowError } from "../errors.ts";
-import type { ServiceBroker, LoggerInstance as Logger } from "moleculer";
+import type { ServiceBroker, Logger } from "moleculer";
 import type {
 	Job,
 	JobEvent,

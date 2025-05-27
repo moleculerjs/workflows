@@ -66,9 +66,9 @@ expect.extend({
 });
 
 interface CustomMatchers<T = unknown> {
-	withinRange(min: number, max: number): T;
-	greaterThan(min: number): T;
-	greaterThanOrEqual(min: number): T;
+	withinRange(min?: number, max?: number): T;
+	greaterThan(min?: number): T;
+	greaterThanOrEqual(min?: number): T;
 	epoch(): T;
 	toBeItemAfter(item: unknown, afterItem: unknown): T;
 }

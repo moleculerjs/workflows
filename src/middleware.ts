@@ -9,7 +9,7 @@ import {
 	METRIC,
 	Errors,
 	ServiceBroker,
-	LoggerInstance as Logger,
+	Logger,
 	Service,
 	Context,
 	Middleware,
@@ -30,14 +30,15 @@ import type {
 	WorkflowServiceBrokerMethods,
 	Job,
 	CreateJobOptions,
-	JobEvent
+	JobEvent,
+	WorkflowHandler
 } from "./types.ts";
 import type { WorkflowSchema } from "./workflow.ts";
 
 /**
  * WorkflowsMiddleware for Moleculer
  */
-export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) {
+export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions): Middleware {
 	mwOpts = _.defaultsDeep({}, mwOpts, {
 		adapter: "Redis",
 		schemaProperty: "workflows",
@@ -410,7 +411,7 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) 
 						wf as ActionSchema
 					);
 
-					wf.handler = handler2;
+					wf.handler = handler2 as WorkflowHandler;
 
 					// Add metrics for the handler
 					if (broker.isMetricsEnabled()) {
@@ -441,14 +442,14 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) 
 						const handler3 = wf.handler;
 
 						const check = broker.validator.compile(wf.params);
-						wf.handler = async (ctx: Context) => {
+						wf.handler = async (ctx: Context<Record<string, unknown>>) => {
 							const res = await check(ctx.params != null ? ctx.params : {});
 							if (res === true) return handler3(ctx);
 							else {
 								throw new Errors.ValidationError(
 									"Parameters validation error!",
 									null,
-									res
+									res as unknown
 								);
 							}
 						};

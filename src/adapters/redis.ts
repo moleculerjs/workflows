@@ -8,7 +8,7 @@
 
 import _ from "lodash";
 import { Cluster, ClusterOptions, Redis as RedisClient, RedisOptions } from "ioredis";
-import { Serializers, ServiceBroker, LoggerInstance, Serializer, Errors } from "moleculer";
+import { Serializers, ServiceBroker, Logger, Errors } from "moleculer";
 import { Utils } from "moleculer";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -72,10 +72,10 @@ export default class RedisAdapter extends BaseAdapter {
 	public running: boolean;
 	public disconnecting: boolean;
 	public prefix!: string;
-	public serializer!: Serializer;
+	public serializer!: Serializers.Base;
 	declare wf: Workflow;
 	declare broker: ServiceBroker;
-	declare logger: LoggerInstance;
+	declare logger: Logger;
 	declare mwOpts: WorkflowsMiddlewareOptions;
 
 	/**
@@ -130,7 +130,7 @@ export default class RedisAdapter extends BaseAdapter {
 	init(
 		wf: Workflow | null,
 		broker: ServiceBroker,
-		logger: LoggerInstance,
+		logger: Logger,
 		mwOpts: WorkflowsMiddlewareOptions
 	) {
 		super.init(wf, broker, logger, mwOpts);

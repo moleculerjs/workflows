@@ -7,7 +7,11 @@
 import { Context, Errors } from "moleculer";
 
 import type { ResolvableAdapterType } from "./adapters/index.ts";
-import BaseAdapter from "./adapters/base.ts";
+import BaseAdapter, {
+	ListDelayedJobResult,
+	ListFinishedJobResult,
+	ListJobResult
+} from "./adapters/base.ts";
 import RedisAdapter from "./adapters/redis.ts";
 
 /**
@@ -26,7 +30,7 @@ export interface WorkflowsMiddlewareOptions {
 	tracing?: boolean;
 }
 
-export type WorkflowHandler = (ctx: Context) => Promise<void>;
+export type WorkflowHandler = (ctx: Context) => Promise<unknown | void>;
 
 export interface CreateJobOptions {
 	jobId?: string;
@@ -96,26 +100,26 @@ export interface WorkflowContextProps {
 	retries?: number;
 	timeout?: string | number;
 
-	sleep: (duration: number) => Promise<void>;
+	sleep: (duration: number | string) => Promise<void>;
 	setState: (state: unknown) => Promise<void>;
 	waitForSignal: (signalName: string, key?: string, opts?: SignalWaitOptions) => Promise<unknown>;
 	task: (name: string, fn: () => Promise<unknown>) => Promise<unknown>;
 }
 
 export interface WorkflowServiceBrokerMethods {
-	run: (workflowName: string, payload: unknown, opts?: unknown) => Promise<unknown>;
+	run: (workflowName: string, payload?: unknown, opts?: unknown) => Promise<Job>;
 	remove: (workflowName: string, jobId: string) => Promise<void>;
 	triggerSignal: (signalName: string, key?: unknown, payload?: unknown) => Promise<void>;
 	removeSignal: (signalName: string, key?: unknown) => Promise<void>;
 	getAdapter: () => Promise<BaseAdapter>;
 	getState: (workflowName: string, jobId: string) => Promise<unknown>;
-	get: (workflowName: string, jobId: string) => Promise<unknown>;
-	getEvents: (workflowName: string, jobId: string) => Promise<unknown>;
-	listCompletedJobs: (workflowName: string) => Promise<unknown>;
-	listFailedJobs: (workflowName: string) => Promise<unknown>;
-	listDelayedJobs: (workflowName: string) => Promise<unknown>;
-	listActiveJobs: (workflowName: string) => Promise<unknown>;
-	listWaitingJobs: (workflowName: string) => Promise<unknown>;
+	get: (workflowName: string, jobId: string) => Promise<Job | null>;
+	getEvents: (workflowName: string, jobId: string) => Promise<JobEvent[] | null>;
+	listCompletedJobs: (workflowName: string) => Promise<ListFinishedJobResult[]>;
+	listFailedJobs: (workflowName: string) => Promise<ListFinishedJobResult[]>;
+	listDelayedJobs: (workflowName: string) => Promise<ListDelayedJobResult[]>;
+	listActiveJobs: (workflowName: string) => Promise<ListJobResult[]>;
+	listWaitingJobs: (workflowName: string) => Promise<ListJobResult[]>;
 	cleanUp: (workflowName: string) => Promise<void>;
 
 	adapter: RedisAdapter | BaseAdapter;
