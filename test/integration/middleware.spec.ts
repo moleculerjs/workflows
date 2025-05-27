@@ -5,8 +5,9 @@ import WorkflowsMiddleware from "../../src/middleware.ts";
 
 import "../vitest-extensions.ts";
 describe("Workflows Middleware Test", () => {
-	let broker, worker;
-	let FLOWS = [];
+	let broker: ServiceBroker;
+	let worker: ServiceBroker;
+	let FLOWS: string[] = [];
 
 	const cleanup = async () => {
 		await broker.wf.cleanUp("mw.good");

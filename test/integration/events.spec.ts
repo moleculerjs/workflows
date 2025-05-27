@@ -5,7 +5,7 @@ import WorkflowsMiddleware from "../../src/middleware.ts";
 
 import "../vitest-extensions.ts";
 
-let EVENTS = [];
+let EVENTS: [string, string, string, object][] = [];
 
 const svc = {
 	name: "events",

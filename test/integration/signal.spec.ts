@@ -279,7 +279,7 @@ describe("Workflows Signal Test", () => {
 		});
 
 		// No await, it'run in background
-		new Promise(resolve => {
+		new Promise<void>(resolve => {
 			setTimeout(() => {
 				broker.wf.triggerSignal("signal.test", 555);
 				resolve();
@@ -374,7 +374,7 @@ describe("Workflows Signal Test", () => {
 		});
 
 		// No await, it'run in background
-		new Promise(resolve => {
+		new Promise<void>(resolve => {
 			setTimeout(() => {
 				broker.wf.triggerSignal("signal.test", 555);
 				resolve();

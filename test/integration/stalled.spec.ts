@@ -10,7 +10,7 @@ import "../vitest-extensions.ts";
 describe("Workflows Stalled Job Test", () => {
 	let broker, worker;
 	let errorState = 0;
-	let FLOWS = [];
+	let FLOWS: string[] = [];
 
 	const cleanup = async () => {
 		await worker.wf.cleanUp("stalled.fiveSec");

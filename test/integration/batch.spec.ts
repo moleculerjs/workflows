@@ -54,7 +54,7 @@ describe("Workflows Batch Test (on single node)", () => {
 			promises.push(broker.wf.run("batch.serial", { i }));
 		}
 
-		const results = await Promise.all(promises.map(p => p.then(job => job.promise())));
+		const results = await Promise.all(promises.map(p => p.then(job => job.promise!())));
 		expect(results.length).toBe(1000);
 		expect(results[0]).toBe("Serial called");
 		expect(_.uniq(results).length).toBe(1);
@@ -66,7 +66,7 @@ describe("Workflows Batch Test (on single node)", () => {
 			promises.push(broker.wf.run("batch.parallel", { i }));
 		}
 
-		const results = await Promise.all(promises.map(p => p.then(job => job.promise())));
+		const results = await Promise.all(promises.map(p => p.then(job => job.promise!())));
 		expect(results.length).toBe(1000);
 		expect(results[0]).toBe("Parallel called");
 		expect(_.uniq(results).length).toBe(1);
@@ -74,8 +74,8 @@ describe("Workflows Batch Test (on single node)", () => {
 });
 
 describe("Workflows Batch Test (on multiple nodes)", () => {
-	let broker;
-	const workers = [];
+	let broker: ServiceBroker;
+	const workers: ServiceBroker[] = [];
 
 	const cleanup = async () => {
 		await broker.wf.cleanUp("batch.multi");
@@ -122,12 +122,12 @@ describe("Workflows Batch Test (on multiple nodes)", () => {
 	});
 
 	it("should execute 5000 workflows (multi-worker)", async () => {
-		const promises = [];
+		const promises: Promise<Job>[] = [];
 		for (let i = 0; i < 5000; i++) {
 			promises.push(broker.wf.run("batch.multi", { i }));
 		}
 
-		const results = await Promise.all(promises.map(p => p.then(job => job.promise())));
+		const results = await Promise.all(promises.map(p => p.then(job => job.promise!())));
 		expect(results.length).toBe(5000);
 		//expect(results[0]).toBe("Multi worker called");
 		expect(_.uniq(results).length).toBe(5);

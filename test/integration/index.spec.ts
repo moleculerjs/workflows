@@ -5,6 +5,7 @@ import WorkflowsMiddleware from "../../src/middleware.ts";
 import { delay } from "../utils";
 
 import "../vitest-extensions.ts";
+import { Job } from "../../src/types.ts";
 
 describe("Workflows Common Test", () => {
 	let broker;
@@ -409,7 +410,7 @@ describe("Workflows Common Test", () => {
 
 	describe("Workflow concurrency", () => {
 		it("should execute jobs one-by-one", async () => {
-			const promises = [];
+			const promises: Promise<Job>[] = [];
 			for (let i = 0; i < 5; i++) {
 				promises.push((await broker.wf.run("test.serial", { id: i })).promise());
 			}
@@ -434,7 +435,7 @@ describe("Workflows Common Test", () => {
 		});
 
 		it("should handle concurrent workflows", async () => {
-			const promises = [];
+			const promises: Promise<Job>[] = [];
 			for (let i = 0; i < 5; i++) {
 				promises.push((await broker.wf.run("test.long", { id: i })).promise());
 			}
@@ -460,7 +461,7 @@ describe("Workflows Common Test", () => {
 		});
 
 		it("should handle concurrent workflows", async () => {
-			const promises = [];
+			const promises: Promise<Job>[] = [];
 			for (let i = 0; i < 10; i++) {
 				promises.push((await broker.wf.run("test.long", { id: i })).promise());
 			}

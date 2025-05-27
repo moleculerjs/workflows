@@ -70,7 +70,7 @@ interface CustomMatchers<T = unknown> {
 	greaterThan(min: number): T;
 	greaterThanOrEqual(min: number): T;
 	epoch(): T;
-	toBeItemAfter(array: unknown[], item: unknown, afterItem: unknown): T;
+	toBeItemAfter(item: unknown, afterItem: unknown): T;
 }
 
 declare module "vitest" {

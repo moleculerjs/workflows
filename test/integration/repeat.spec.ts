@@ -7,8 +7,8 @@ import { delay } from "../utils";
 import "../vitest-extensions.ts";
 
 describe("Workflows Repeat Test", () => {
-	let broker;
-	const FLOWS = [];
+	let broker: ServiceBroker;
+	const FLOWS: string[] = [];
 
 	const cleanup = async () => {
 		await broker.wf.cleanUp("repeat.work");

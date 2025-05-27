@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
 
-import { ServiceBroker } from "moleculer";
+import { ServiceBroker, Context } from "moleculer";
 import { Errors } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 
@@ -8,8 +8,8 @@ import "../vitest-extensions.ts";
 
 describe("Workflows Retries Test", () => {
 	describe("Retry in run", () => {
-		let broker;
-		let FLOWS = [];
+		let broker: ServiceBroker;
+		let FLOWS: string[] = [];
 
 		const cleanup = async () => {
 			await broker.wf.cleanUp("retry.simple");
@@ -26,7 +26,7 @@ describe("Workflows Retries Test", () => {
 				name: "retry",
 				workflows: {
 					simple: {
-						async handler(ctx) {
+						async handler(ctx: Context) {
 							FLOWS.push(ctx.wf.name);
 							if ((ctx.wf.retryAttempts ?? 0) < 3) {
 								throw new Errors.MoleculerRetryableError("Simulated failure");
