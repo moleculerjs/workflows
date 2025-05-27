@@ -7,9 +7,12 @@
 "use strict";
 
 import _ from "lodash";
-import Redis, { Cluster, ClusterOptions, Redis as RedisClient, RedisOptions } from "ioredis";
-import { Serializers, ServiceBroker, LoggerInstance, Serializer } from "moleculer";
+import { Cluster, ClusterOptions, Redis as RedisClient, RedisOptions } from "ioredis";
+import { Serializers, ServiceBroker, LoggerInstance, Serializer, Errors } from "moleculer";
 import { Utils } from "moleculer";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
 import BaseAdapter, { ListJobResult, ListDelayedJobResult, ListFinishedJobResult } from "./base.ts";
 import {
 	WorkflowError,
@@ -30,13 +33,28 @@ import {
 } from "../types.ts";
 
 export interface RedisAdapterOptions extends BaseDefaultOptions {
-	redis?:
-		| RedisOptions
-		| { url: string }
-		| { cluster: { nodes: string[]; clusterOptions?: ClusterOptions } };
+	url?: string;
+	redis?: RedisOptions;
+	cluster?: { nodes: string[]; clusterOptions?: ClusterOptions };
 	prefix?: string;
 	serializer?: string;
 	drainDelay?: number;
+}
+
+export type StoredPromise<T = unknown> = {
+	promise: Promise<T>;
+	resolve: (v: T) => void;
+	reject: (e: Error) => void;
+};
+
+declare module "ioredis" {
+	interface Redis {
+		blocked?: boolean; // Custom property to track if the client is blocked
+	}
+
+	interface Cluster {
+		blocked?: boolean; // Custom property to track if the client is blocked
+	}
 }
 
 /**
@@ -45,17 +63,11 @@ export interface RedisAdapterOptions extends BaseDefaultOptions {
 export default class RedisAdapter extends BaseAdapter {
 	declare opts: RedisAdapterOptions;
 	public isWorker: boolean;
-	public commandClient: RedisClient;
-	public blockerClient: RedisClient;
-	public subClient: RedisClient;
-	public signalPromises: Map<
-		string,
-		{ promise: Promise<unknown>; resolve: (v: unknown) => void }
-	>;
-	public jobResultPromises: Map<
-		string,
-		{ promise: Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void }
-	>;
+	public commandClient: RedisClient | Cluster;
+	public blockerClient: RedisClient | Cluster;
+	public subClient: RedisClient | Cluster;
+	public signalPromises: Map<string, StoredPromise<unknown>>;
+	public jobResultPromises: Map<string, StoredPromise<unknown>>;
 
 	public running: boolean;
 	public disconnecting: boolean;
@@ -72,17 +84,13 @@ export default class RedisAdapter extends BaseAdapter {
 	constructor(opts?: string | RedisAdapterOptions) {
 		if (typeof opts == "string")
 			opts = {
-				redis: {
-					url: opts
-				}
+				url: opts
 			};
 
 		if (opts && typeof opts.redis == "string") {
 			opts = {
 				...opts,
-				redis: {
-					url: opts.redis
-				}
+				url: opts.redis
 			};
 		}
 
@@ -171,18 +179,18 @@ export default class RedisAdapter extends BaseAdapter {
 		return new Promise(resolve => {
 			let client;
 
-			const opts = this.opts.redis;
-
-			if (opts && opts.cluster) {
-				if (!opts.cluster.nodes || opts.cluster.nodes.length === 0) {
-					throw new BrokerOptionsError(
+			if (this.opts.cluster) {
+				if (!this.opts.cluster.nodes || this.opts.cluster.nodes.length === 0) {
+					throw new Errors.BrokerOptionsError(
 						"No nodes defined for Redis cluster in Workflow adapter.",
 						"ERR_NO_REDIS_CLUSTER_NODES"
 					);
 				}
-				client = new Redis.Cluster(opts.cluster.nodes, opts.cluster.clusterOptions);
+				client = new Cluster(this.opts.cluster.nodes, this.opts.cluster.clusterOptions);
+			} else if (this.opts.url) {
+				client = new RedisClient(this.opts.url);
 			} else {
-				client = new Redis.Redis(opts && opts.url ? opts.url : opts);
+				client = new RedisClient(this.opts.redis);
 			}
 
 			client.on("ready", () => {
@@ -341,7 +349,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 *
 	 * @param client
 	 */
-	async closeClient(client: RedisClient): Promise<void> {
+	async closeClient(client: RedisClient | Cluster): Promise<void> {
 		if (client) {
 			try {
 				if (client.blocked) {
@@ -670,8 +678,7 @@ export default class RedisAdapter extends BaseAdapter {
 		if (this.wf.opts.removeOnCompleted) {
 			pipeline.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
 		} else {
-			/** @type {Partial<Job>} */
-			const fields = {
+			const fields: Partial<Job> = {
 				success: true,
 				finishedAt: Date.now(),
 				nodeID: this.broker.nodeID,
@@ -737,7 +744,7 @@ export default class RedisAdapter extends BaseAdapter {
 
 		await this.addJobEvent(this.wf.name, job.id, {
 			type: "failed",
-			error: err ? this.broker.errorRegenerator.extractPlainError(err) : true
+			error: this.broker.errorRegenerator.extractPlainError(err)
 		});
 
 		this.sendJobEvent(this.wf.name, job.id, "finished");
@@ -748,17 +755,18 @@ export default class RedisAdapter extends BaseAdapter {
 		pipeline.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
 		await pipeline.exec();
 
-		// @ts-ignore
+		// @ts-expect-error retryable property is not exist on Error but on MoleculerError
 		if (err?.retryable) {
 			const retryFields = await this.commandClient.hmget(
 				this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
-				["retries", "retryAttempts"]
+				"retries",
+				"retryAttempts"
 			);
 			const retries =
 				(retryFields[0] != null
 					? parseInt(retryFields[0])
 					: this.wf.opts.retryPolicy?.retries) ?? 0;
-			const retryAttempts = parseInt(retryFields[1] ?? 0);
+			const retryAttempts = parseInt(retryFields[1] ?? "0");
 
 			if (retries > 0 && retryAttempts < retries) {
 				const pipeline = this.commandClient.pipeline();
@@ -795,13 +803,14 @@ export default class RedisAdapter extends BaseAdapter {
 		if (this.wf.opts.removeOnFailed) {
 			await this.commandClient.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
 		} else {
-			const fields = {
+			const fields: Partial<Job> = {
 				success: false,
 				finishedAt: Date.now(),
 				nodeID: this.broker.nodeID,
 				duration: Date.now() - job.startedAt
 			};
 			if (err != null) {
+				// @ts-expect-error it's not a real job object, just to store properties
 				fields.error = this.serializer.serialize(
 					this.broker.errorRegenerator.extractPlainError(err)
 				);
@@ -940,7 +949,7 @@ export default class RedisAdapter extends BaseAdapter {
 
 		await this.subClient.subscribe(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName));
 
-		const item = { promise: null, resolve: null };
+		const item = { promise: null, resolve: null } as StoredPromise<TSignalResult>;
 		item.promise = new Promise<TSignalResult>(resolve => (item.resolve = resolve));
 		this.signalPromises.set(pKey, item);
 		this.logger.debug("Waiting for signal", signalName, key);
@@ -984,7 +993,7 @@ export default class RedisAdapter extends BaseAdapter {
 						// Remove previous job data
 						await this.commandClient.hdel(
 							this.getKey(workflowName, C.QUEUE_JOB, job.id),
-							C.RERUN_REMOVABLE_FIELDS
+							...C.RERUN_REMOVABLE_FIELDS
 						);
 					} else {
 						isLoadedJob = true;
@@ -1060,7 +1069,7 @@ export default class RedisAdapter extends BaseAdapter {
 			}
 
 			// Store Job finished promise
-			const storePromise = {};
+			const storePromise = {} as StoredPromise;
 			storePromise.promise = new Promise((resolve, reject) => {
 				storePromise.resolve = resolve;
 				storePromise.reject = reject;
@@ -1161,7 +1170,6 @@ export default class RedisAdapter extends BaseAdapter {
 		for (const [key, value] of Object.entries(job)) {
 			if (C.JOB_FIELDS_JSON.includes(key)) {
 				if (value != null) {
-					// @ts-ignore
 					res[key] = value !== "" ? this.serializer.deserialize(value) : null;
 				}
 			} else if (C.JOB_FIELDS_NUMERIC.includes(key)) {
@@ -1261,10 +1269,10 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns
 	 */
 	async deleteKeys(pattern: string): Promise<void> {
-		if (this.commandClient instanceof Redis.Cluster) {
-			return this.deleteKeysOnCluster(pattern);
+		if (this.commandClient instanceof Cluster) {
+			await this.deleteKeysOnCluster(pattern);
 		} else {
-			return this.deleteKeysOnNode(this.commandClient, pattern);
+			await this.deleteKeysOnNode(this.commandClient, pattern);
 		}
 	}
 
@@ -1277,8 +1285,8 @@ export default class RedisAdapter extends BaseAdapter {
 	async deleteKeysOnCluster(pattern: string): Promise<void> {
 		// get only master nodes to scan for deletion,
 		// if we get slave nodes, it would be failed for deletion.
-		return Promise.all(
-			this.commandClient
+		await Promise.all(
+			(this.commandClient as Cluster)
 				.nodes("master")
 				.map(async node => this.deleteKeysOnNode(node, pattern))
 		);
@@ -1291,7 +1299,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param pattern
 	 * @returns
 	 */
-	async deleteKeysOnNode(node: Redis, pattern: string): Promise<void> {
+	async deleteKeysOnNode(node: RedisClient, pattern: string): Promise<void> {
 		return new Promise((resolve, reject) => {
 			const stream = node.scanStream({
 				match: pattern,
@@ -1654,10 +1662,10 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param timeField
 	 * @returns
 	 */
-	formatZrangeResultToObject(
+	formatZrangeResultToObject<TResult>(
 		list: string[],
 		timeField: string = "finishedAt"
-	): { id: string; [timeField]: number }[] {
+	): TResult[] {
 		const arr = [];
 		for (let i = 0; i < list.length; i += 2) {
 			arr.push({
@@ -1675,7 +1683,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns
 	 */
 	async listCompletedJobs(workflowName: string): Promise<ListFinishedJobResult[]> {
-		return this.formatZrangeResultToObject(
+		return this.formatZrangeResultToObject<ListFinishedJobResult>(
 			await this.commandClient.zrange(
 				this.getKey(workflowName, C.QUEUE_COMPLETED),
 				0,
@@ -1691,7 +1699,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns
 	 */
 	async listFailedJobs(workflowName: string): Promise<ListFinishedJobResult[]> {
-		return this.formatZrangeResultToObject(
+		return this.formatZrangeResultToObject<ListFinishedJobResult>(
 			await this.commandClient.zrange(
 				this.getKey(workflowName, C.QUEUE_FAILED),
 				0,
@@ -1707,7 +1715,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns
 	 */
 	async listDelayedJobs(workflowName): Promise<ListDelayedJobResult[]> {
-		return this.formatZrangeResultToObject(
+		return this.formatZrangeResultToObject<ListDelayedJobResult>(
 			await this.commandClient.zrange(
 				this.getKey(workflowName, C.QUEUE_DELAYED),
 				0,
@@ -1750,7 +1758,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param folder - The folder to save the dump files.
 	 * @param wfNames - The names of the workflows to dump.
 	 */
-	async dumpWorkflows(folder: string, wfNames: string[]): Promise<string[]> {
+	async dumpWorkflows(folder: string, wfNames: string[]) {
 		Utils.makeDirs(folder);
 		for (const name of wfNames) {
 			await this.dumpWorkflow(name, folder);
@@ -1764,10 +1772,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param folder - The folder to save the dump files.
 	 * @returns Path to the dump file.
 	 */
-	async dumpWorkflow(workflowName: string, folder: string = "."): Promise<string> {
-		const fs = require("fs").promises;
-		const path = require("path");
-
+	async dumpWorkflow(workflowName: string, folder: string = ".") {
 		const pattern = this.getKey(workflowName) + ":*";
 		const client = this.commandClient;
 		let cursor = "0";
@@ -1782,15 +1787,15 @@ export default class RedisAdapter extends BaseAdapter {
 		const deserializeData = value => {
 			if (_.isString(value) || Buffer.isBuffer(value)) {
 				try {
-					return this.serializer.deserialize(value);
-				} catch (e) {
+					return this.serializer.deserialize(value as Buffer);
+				} catch {
 					// If deserialization fails, return the original value
 					return value;
 				}
 			} else if (_.isObject(value)) {
 				try {
-					return this.deserializeJob(value);
-				} catch (e) {
+					return this.deserializeJob(value as Job);
+				} catch {
 					// If deserialization fails, return the original value
 					return value;
 				}

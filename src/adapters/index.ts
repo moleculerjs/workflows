@@ -43,6 +43,7 @@ function resolve(opt: ResolvableAdapterType): BaseAdapter {
 	} else if (_.isString(opt)) {
 		const AdapterClass = getByName(opt);
 		if (AdapterClass) {
+			// @ts-expect-error Solve it later
 			return new AdapterClass();
 		} else if (opt.startsWith("redis://") || opt.startsWith("rediss://")) {
 			return new Adapters.Redis(opt);
@@ -52,6 +53,7 @@ function resolve(opt: ResolvableAdapterType): BaseAdapter {
 	} else if (_.isObject(opt)) {
 		const AdapterClass = getByName(opt.type || "Redis");
 		if (AdapterClass) {
+			// @ts-expect-error Solve it later
 			return new AdapterClass(opt.options);
 		} else {
 			throw new Errors.ServiceSchemaError(`Invalid Adapter type '${opt.type}'.`, {

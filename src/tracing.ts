@@ -18,9 +18,9 @@ export default function tracingLocalChannelMiddleware(
 	handler: WorkflowHandler,
 	wf: WorkflowOptions
 ): WorkflowHandler {
-	let opts = wf.tracing;
-	if (opts === true || opts === false) opts = { enabled: !!opts };
-	opts = _.defaultsDeep({}, opts, { enabled: true });
+	let opts: Exclude<WorkflowOptions["tracing"], boolean>;
+	if (wf.tracing === true || wf.tracing === false) opts = { enabled: !!wf.tracing };
+	else opts = _.defaultsDeep({}, opts, { enabled: true });
 
 	// eslint-disable-next-line @typescript-eslint/no-this-alias
 	const broker: ServiceBroker = this;
@@ -34,8 +34,8 @@ export default function tracingLocalChannelMiddleware(
 			let tags: Record<string, unknown> = {
 				callingLevel: ctx.level,
 				workflow: {
-					name: wf.name,
-					jobId: wf.jobId
+					name: ctx.wf.name,
+					jobId: ctx.wf.jobId
 				},
 				remoteCall: ctx.nodeID !== broker.nodeID,
 				callerNodeID: ctx.nodeID,

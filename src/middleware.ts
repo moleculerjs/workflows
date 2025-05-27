@@ -12,7 +12,8 @@ import {
 	LoggerInstance as Logger,
 	Service,
 	Context,
-	Middleware
+	Middleware,
+	ActionSchema
 } from "moleculer";
 import Workflow from "./workflow.ts";
 import BaseAdapter, {
@@ -24,13 +25,19 @@ import Adapters from "./adapters/index.ts";
 
 import * as C from "./constants.ts";
 import Tracing from "./tracing.ts";
-import type { WorkflowsMiddlewareOptions, Job, CreateJobOptions, JobEvent } from "./types.ts";
+import type {
+	WorkflowsMiddlewareOptions,
+	WorkflowServiceBrokerMethods,
+	Job,
+	CreateJobOptions,
+	JobEvent
+} from "./types.ts";
 import type { WorkflowSchema } from "./workflow.ts";
 
 /**
  * WorkflowsMiddleware for Moleculer
  */
-export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions): Middleware {
+export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) {
 	mwOpts = _.defaultsDeep({}, mwOpts, {
 		adapter: "Redis",
 		schemaProperty: "workflows",
@@ -114,7 +121,7 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions):
 
 			// Populate broker with new methods
 			if (!broker.wf) {
-				broker.wf = {};
+				broker.wf = {} as WorkflowServiceBrokerMethods;
 			}
 
 			broker.wf.getAdapter = async (): Promise<BaseAdapter> => {
@@ -279,7 +286,7 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions):
 						new Errors.MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
 					);
 				}
-				return (await broker.wf.getAdapter()).getJobEvents(workflowName, jobId, true);
+				return (await broker.wf.getAdapter()).getJobEvents(workflowName, jobId);
 			};
 
 			/**
@@ -394,10 +401,14 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions):
 					Workflow.checkWorkflowName(wf.name);
 
 					// Wrap the original handler
-					const handler = broker.Promise.method(wf.handler).bind(svc);
+					const handler = wf.handler.bind(svc);
 
 					// Wrap the handler with custom middlewares
-					const handler2 = broker.middlewares.wrapHandler("localWorkflow", handler, wf);
+					const handler2 = broker.middlewares.wrapHandler(
+						"localWorkflow",
+						handler,
+						wf as ActionSchema
+					);
 
 					wf.handler = handler2;
 
@@ -459,7 +470,7 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions):
 				 * @param {Object} payload
 				 * @param {string?} jobId
 				 * @returns
-				 */
+				 *
 				svc[mwOpts.channelHandlerTrigger] = (workflowName, payload, jobId) => {
 					if (!jobId) {
 						jobId = broker.generateUid();
@@ -480,7 +491,6 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions):
 						);
 					}
 
-					/* TODO:
 					const ctx = (await broker.wf.getAdapter()).createWorkflowContext(workflow, job, events);
 
 					// Shorthand definition
@@ -495,8 +505,8 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions):
 						svc, // Attach reference to service
 						ctx
 					);
-					*/
 				};
+				*/
 			}
 		},
 

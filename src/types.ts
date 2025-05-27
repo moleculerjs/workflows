@@ -4,7 +4,7 @@
  * MIT Licensed
  */
 
-import { Context, PlainMoleculerError } from "moleculer";
+import { Context, Errors } from "moleculer";
 
 import type { ResolvableAdapterType } from "./adapters/index.ts";
 import BaseAdapter from "./adapters/base.ts";
@@ -26,7 +26,7 @@ export interface WorkflowsMiddlewareOptions {
 	tracing?: boolean;
 }
 
-export type WorkflowHandler = (ctx: WorkflowContext) => Promise<void>;
+export type WorkflowHandler = (ctx: Context) => Promise<void>;
 
 export interface CreateJobOptions {
 	jobId?: string;
@@ -56,7 +56,7 @@ export interface JobEvent {
 	taskType: string;
 	duration?: number;
 	result?: unknown;
-	error?: PlainMoleculerError;
+	error?: Errors.PlainMoleculerError;
 }
 
 export interface Job {
@@ -82,15 +82,11 @@ export interface Job {
 	success?: boolean;
 	finishedAt?: number;
 	nodeID?: string;
-	error?: PlainMoleculerError;
+	error?: Errors.PlainMoleculerError;
 	result?: unknown;
 	duration?: number;
 
 	promise?: () => Promise<unknown>;
-}
-
-export interface WorkflowContext extends Context {
-	wf: WorkflowContextProps;
 }
 
 export interface WorkflowContextProps {
@@ -111,6 +107,7 @@ export interface WorkflowServiceBrokerMethods {
 	remove: (workflowName: string, jobId: string) => Promise<void>;
 	triggerSignal: (signalName: string, key?: unknown, payload?: unknown) => Promise<void>;
 	removeSignal: (signalName: string, key?: unknown) => Promise<void>;
+	getAdapter: () => Promise<BaseAdapter>;
 	getState: (workflowName: string, jobId: string) => Promise<unknown>;
 	get: (workflowName: string, jobId: string) => Promise<unknown>;
 	getEvents: (workflowName: string, jobId: string) => Promise<unknown>;

@@ -12,15 +12,16 @@ import * as C from "./constants.ts";
 import { parseDuration, getCronNextTime } from "./utils.ts";
 import Adapters from "./adapters/index.ts";
 
-import type { ServiceBroker, Service, Context, LoggerInstance as Logger } from "moleculer";
+import type { ServiceBroker, Service, Context, LoggerInstance as Logger, Errors } from "moleculer";
+
 import type BaseAdapter from "./adapters/base.ts";
 import type {
 	WorkflowHandler,
 	WorkflowsMiddlewareOptions,
-	WorkflowContext,
 	Job,
 	JobEvent,
-	CreateJobOptions
+	CreateJobOptions,
+	WorkflowContextProps
 } from "./types.ts";
 
 export interface WorkflowOptions {
@@ -53,7 +54,7 @@ export interface WorkflowOptions {
 export interface WorkflowSchema extends WorkflowOptions {
 	enabled?: boolean;
 	fullName?: string;
-	handler: (ctx: WorkflowContext) => Promise<unknown>;
+	handler: (ctx: Context) => Promise<void>;
 }
 
 export default class Workflow {
@@ -189,24 +190,17 @@ export default class Workflow {
 	 * @param events The list of events associated with the job.
 	 * @returns The created workflow context.
 	 */
-	createWorkflowContext(job: Job, events: JobEvent[]): WorkflowContext {
+	createWorkflowContext(job: Job, events: JobEvent[]): Context {
 		let taskId = 0;
 		const ctxOpts = {};
-		// @ts-ignore
-		const ctx: WorkflowContext = this.broker.ContextFactory.create(
-			this.broker,
-			null,
-			job.payload,
-			ctxOpts
-		);
-		// @ts-ignore
+		const ctx = this.broker.ContextFactory.create(this.broker, null, job.payload, ctxOpts);
 		ctx.wf = {
 			name: this.name,
 			jobId: job.id,
 			retryAttempts: job.retryAttempts,
 			retries: job.retries,
 			timeout: job.timeout ?? this.opts.timeout
-		};
+		} as WorkflowContextProps;
 		const maxEventTaskId = Math.max(
 			0,
 			...(events || []).filter(e => e.type == "task").map(e => e.taskId || 0)
@@ -239,7 +233,10 @@ export default class Workflow {
 					event
 				);
 				if (event.error) {
-					const err = this.broker.errorRegenerator.restore(event.error, {});
+					const err = this.broker.errorRegenerator.restore(
+						event.error as Errors.PlainMoleculerError,
+						{}
+					);
 					throw err;
 				}
 				return event.result;

@@ -210,7 +210,7 @@ export default abstract class BaseAdapter {
 	 * @param jobId - The ID of the job.
 	 * @returns Resolves with an array of job events.
 	 */
-	abstract getJobEvents(workflowName: string, jobId: string): Promise<object[]>;
+	abstract getJobEvents(workflowName: string, jobId: string): Promise<JobEvent[]>;
 
 	/**
 	 * List all completed job IDs for a workflow.
@@ -314,16 +314,15 @@ export default abstract class BaseAdapter {
 	 * @param folder - The folder to save the dump files.
 	 * @param wfNames - The names of the workflows to dump.
 	 */
-	abstract dumpWorkflows(folder: string, wfNames: string[]): Promise<string[]>;
+	abstract dumpWorkflows(folder: string, wfNames: string[]);
 
 	/**
 	 * Dump all Redis data for a workflow to a JSON file.
 	 *
 	 * @param workflowName - The name of the workflow.
 	 * @param folder - The folder to save the dump files.
-	 * @returns Path to the dump file.
 	 */
-	abstract dumpWorkflow(workflowName: string, folder: string): Promise<string>;
+	abstract dumpWorkflow(workflowName: string, folder: string);
 
 	/**
 	 * Send entity lifecycle events
