@@ -4,15 +4,18 @@
 		"strict": false,
 		"checkJs": true,
 		"skipLibCheck": true,
-		//"module": "Node16",
-		"module": "commonjs",
+		"target": "ESNext",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"lib": ["ESNext", "ESNext.Promise"],
 		"declaration": true,
 		"declarationDir": "types",
 		"outDir": "dist",
-		"target": "ESNext",
-		"lib": ["es2023"],
-		"esModuleInterop": true
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		//"allowImportingTsExtensions": true
+		"rewriteRelativeImportExtensions": true
 	},
-	"include": ["**.ts"],
+	"include": ["src/**/*.ts"],
 	"exclude": ["node_modules", ".eslintrc.js", "prettier.config.js", "dist"]
 }

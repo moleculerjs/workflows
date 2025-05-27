@@ -2,8 +2,8 @@
 
 import { ServiceBroker, LoggerInstance, Context, PlainMoleculerError } from "moleculer";
 
-import BaseAdapter from "./adapters/base";
-import RedisAdapter, { RedisAdapterOptions } from "./adapters/redis";
+import BaseAdapter from "./adapters/base.ts";
+import RedisAdapter, { RedisAdapterOptions } from "./adapters/redis.ts";
 
 /**
  * Options for the Workflows middleware

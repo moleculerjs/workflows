@@ -6,7 +6,7 @@
 
 "use strict";
 
-import Middleware from "./src/index.js";
-import Adapters from "./src/adapters/index.js";
+import Middleware from "./src/index.ts";
+import Adapters from "./src/adapters/index.ts";
 
 export default { Middleware, Adapters };

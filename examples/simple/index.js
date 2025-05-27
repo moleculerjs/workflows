@@ -13,7 +13,7 @@ import { inspect } from "node:util";
 import process from "node:process";
 import _ from "lodash";
 
-import { Middleware } from "../../dist/index.js";
+import Middleware from "../../dist/index.js";
 
 let c = 1;
 

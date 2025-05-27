@@ -6,30 +6,32 @@
 
 "use strict";
 
-const _ = require("lodash");
-const { isFunction, isPlainObject, safetyObject } = require("moleculer").Utils;
+import _ from "lodash";
+import { Utils } from "moleculer";
+const { isFunction, isPlainObject, safetyObject } = Utils;
 
-/**
- * @typedef {import("moleculer").ServiceBroker} ServiceBroker Moleculer Service Broker instance
- * @typedef {import("moleculer").Tracer} Tracer Moleculer Tracer instance
- */
+import type { ServiceBroker, Tracer } from "moleculer";
+import type { WorkflowOptions } from "./workflow.ts";
+import { WorkflowHandler } from "./types.ts";
 
-module.exports = function tracingLocalChannelMiddleware(handler, wf) {
+export default function tracingLocalChannelMiddleware(
+	handler: WorkflowHandler,
+	wf: WorkflowOptions
+): WorkflowHandler {
 	let opts = wf.tracing;
 	if (opts === true || opts === false) opts = { enabled: !!opts };
 	opts = _.defaultsDeep({}, opts, { enabled: true });
 
-	/** @type {ServiceBroker} */
-	const broker = this;
-	/** @type {Tracer} */
-	const tracer = this.tracer;
+	// eslint-disable-next-line @typescript-eslint/no-this-alias
+	const broker: ServiceBroker = this;
+	const tracer: Tracer = this.tracer;
 
 	if (broker.isTracingEnabled() && opts.enabled) {
-		return function tracingLocalChannelMiddleware(ctx, ...rest) {
+		return function tracingLocalChannelMiddleware(ctx) {
 			ctx.requestID = ctx.requestID || tracer.getCurrentTraceID();
 			ctx.parentID = ctx.parentID || tracer.getActiveSpanID();
 
-			let tags = {
+			let tags: Record<string, unknown> = {
 				callingLevel: ctx.level,
 				workflow: {
 					name: wf.name,
@@ -44,11 +46,11 @@ module.exports = function tracingLocalChannelMiddleware(handler, wf) {
 					},*/
 				requestID: ctx.requestID
 			};
-			/** @type Record<string, any> */
-			let actionTags;
+
+			let actionTags: Record<string, unknown>;
 			// local action tags take precedence
 			if (isFunction(opts.tags)) {
-				actionTags = opts.tags;
+				actionTags = opts.tags();
 			} else {
 				// By default all params are captured. This can be overridden globally and locally
 				actionTags = { ...{ params: true }, ...opts.tags };
@@ -101,7 +103,7 @@ module.exports = function tracingLocalChannelMiddleware(handler, wf) {
 			ctx.tracing = span.sampled;
 
 			// Call the handler
-			return handler(ctx, ...rest)
+			return handler(ctx)
 				.then(res => {
 					ctx.finishSpan(span);
 					return res;
@@ -115,4 +117,4 @@ module.exports = function tracingLocalChannelMiddleware(handler, wf) {
 	}
 
 	return handler;
-};
+}

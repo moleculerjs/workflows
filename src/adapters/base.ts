@@ -5,7 +5,7 @@
  */
 
 import _ from "lodash";
-import { WorkflowError } from "../errors";
+import { WorkflowError } from "../errors.ts";
 import type { ServiceBroker, LoggerInstance as Logger } from "moleculer";
 import type {
 	Job,
@@ -13,11 +13,15 @@ import type {
 	WorkflowsMiddlewareOptions,
 	SignalWaitOptions,
 	CreateJobOptions
-} from "../types";
-import type Workflow from "../workflow";
+} from "../types.ts";
+import type Workflow from "../workflow.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface BaseDefaultOptions extends Record<string, unknown> {}
+
+export type ListJobResult = { id: string };
+export type ListFinishedJobResult = { id: string; finishedAt: number };
+export type ListDelayedJobResult = { id: string; promoteAt: number };
 
 /**
  * Base adapter class
@@ -213,35 +217,35 @@ export default abstract class BaseAdapter {
 	 * @param workflowName
 	 * @returns
 	 */
-	abstract listCompletedJobs(workflowName: string): Promise<{ id: string; finishedAt: number }[]>;
+	abstract listCompletedJobs(workflowName: string): Promise<ListFinishedJobResult[]>;
 
 	/**
 	 * List all failed job IDs for a workflow.
 	 * @param workflowName
 	 * @returns
 	 */
-	abstract listFailedJobs(workflowName: string): Promise<{ id: string; finishedAt: number }[]>;
+	abstract listFailedJobs(workflowName: string): Promise<ListFinishedJobResult[]>;
 
 	/**
 	 * List all delayed job IDs for a workflow.
 	 * @param workflowName
 	 * @returns
 	 */
-	abstract listDelayedJobs(workflowName: string): Promise<{ id: string; promoteAt: number }[]>;
+	abstract listDelayedJobs(workflowName: string): Promise<ListDelayedJobResult[]>;
 
 	/**
 	 * List all active job IDs for a workflow.
 	 * @param workflowName
 	 * @returns
 	 */
-	abstract listActiveJobs(workflowName: string): Promise<{ id: string }[]>;
+	abstract listActiveJobs(workflowName: string): Promise<ListJobResult[]>;
 
 	/**
 	 * List all waiting job IDs for a workflow.
 	 * @param workflowName
 	 * @returns
 	 */
-	abstract listWaitingJobs(workflowName: string): Promise<{ id: string }[]>;
+	abstract listWaitingJobs(workflowName: string): Promise<ListJobResult[]>;
 
 	/**
 	 * Clean up the adapter store. Workflowname and jobId are optional.

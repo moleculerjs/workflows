@@ -6,10 +6,10 @@
 
 "use strict";
 
-import { isObject, isString } from "lodash";
+import _ from "lodash";
 import { Errors } from "moleculer";
-import BaseAdapter, { BaseDefaultOptions } from "./base";
-import RedisAdapter, { RedisAdapterOptions } from "./redis";
+import BaseAdapter, { BaseDefaultOptions } from "./base.ts";
+import RedisAdapter, { RedisAdapterOptions } from "./redis.ts";
 
 const Adapters = {
 	Base: BaseAdapter,
@@ -39,7 +39,7 @@ function getByName(name: string): AdapterTypes | null {
 function resolve(opt: ResolvableAdapterType): BaseAdapter {
 	if (opt instanceof BaseAdapter) {
 		return opt;
-	} else if (isString(opt)) {
+	} else if (_.isString(opt)) {
 		const AdapterClass = getByName(opt);
 		if (AdapterClass) {
 			return new AdapterClass();
@@ -48,7 +48,7 @@ function resolve(opt: ResolvableAdapterType): BaseAdapter {
 		} else {
 			throw new Errors.ServiceSchemaError(`Invalid Adapter type '${opt}'.`, { type: opt });
 		}
-	} else if (isObject(opt)) {
+	} else if (_.isObject(opt)) {
 		const AdapterClass = getByName(opt.type || "Redis");
 		if (AdapterClass) {
 			return new AdapterClass(opt.options);

@@ -11,17 +11,20 @@ import {
 	ServiceBroker,
 	LoggerInstance as Logger,
 	Service,
-	Middleware,
 	Context
 } from "moleculer";
-import Workflow from "./workflow";
-import BaseAdapter from "./adapters/base";
-import Adapters from "./adapters";
+import Workflow from "./workflow.ts";
+import BaseAdapter, {
+	ListJobResult,
+	ListDelayedJobResult,
+	ListFinishedJobResult
+} from "./adapters/base.ts";
+import Adapters from "./adapters/index.ts";
 
-import * as C from "./constants";
-import Tracing from "./tracing";
-import type { WorkflowsMiddlewareOptions, Job, CreateJobOptions } from "./types";
-import type { WorkflowSchema } from "./workflow";
+import * as C from "./constants.ts";
+import Tracing from "./tracing.ts";
+import type { WorkflowsMiddlewareOptions, Job, CreateJobOptions, JobEvent } from "./types.ts";
+import type { WorkflowSchema } from "./workflow.ts";
 
 /**
  * WorkflowsMiddleware for Moleculer
@@ -147,8 +150,216 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) 
 				);
 			};
 
-			// ...existing code for all broker.wf methods, keeping JSDoc and comments...
-			// ...existing code...
+			/**
+			 * Remove a workflow job
+			 *
+			 * @param workflowName
+			 * @param jobId
+			 * @returns
+			 */
+			broker.wf.remove = async (workflowName?: string, jobId?: string): Promise<void> => {
+				Workflow.checkWorkflowName(workflowName);
+
+				if (!jobId) {
+					return Promise.reject(
+						new Errors.MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
+					);
+				}
+				return (await broker.wf.getAdapter()).cleanUp(workflowName, jobId);
+			};
+
+			/**
+			 * Trigger a named signal.
+			 *
+			 * @param signalName
+			 * @param key
+			 * @param payload
+			 * @returns
+			 */
+			broker.wf.triggerSignal = async (
+				signalName: string,
+				key?: string,
+				payload?: unknown
+			): Promise<void> => {
+				if (!signalName) {
+					return Promise.reject(
+						new Errors.MoleculerError(
+							"Signal name is required!",
+							400,
+							"SIGNAL_NAME_REQUIRED"
+						)
+					);
+				}
+
+				Workflow.checkSignal(signalName, key);
+
+				if (broker.isMetricsEnabled()) {
+					broker.metrics.increment(C.METRIC_WORKFLOWS_SIGNALS_TOTAL, {
+						signal: signalName
+					});
+				}
+				return (await broker.wf.getAdapter()).triggerSignal(signalName, key, payload);
+			};
+
+			/**
+			 * Remove a named signal.
+			 *
+			 * @param signalName
+			 * @param key
+			 * @returns
+			 */
+			broker.wf.removeSignal = async (signalName: string, key?: string): Promise<void> => {
+				if (!signalName) {
+					return Promise.reject(
+						new Errors.MoleculerError(
+							"Signal name is required!",
+							400,
+							"SIGNAL_NAME_REQUIRED"
+						)
+					);
+				}
+
+				Workflow.checkSignal(signalName, key);
+
+				return (await broker.wf.getAdapter()).removeSignal(signalName, key);
+			};
+
+			/**
+			 * Get state of a workflow run.
+			 *
+			 * @param workflowName
+			 * @param jobId
+			 * @returns
+			 */
+			broker.wf.getState = async (workflowName: string, jobId: string): Promise<unknown> => {
+				Workflow.checkWorkflowName(workflowName);
+
+				if (!jobId) {
+					return Promise.reject(
+						new Errors.MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
+					);
+				}
+				return (await broker.wf.getAdapter()).getState(workflowName, jobId);
+			};
+
+			/**
+			 * Get job details of a workflow run.
+			 *
+			 * @param workflowName
+			 * @param jobId
+			 * @returns
+			 */
+			broker.wf.get = async (workflowName: string, jobId: string): Promise<Job> => {
+				Workflow.checkWorkflowName(workflowName);
+
+				if (!jobId) {
+					return Promise.reject(
+						new Errors.MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
+					);
+				}
+				return (await broker.wf.getAdapter()).getJob(workflowName, jobId, true);
+			};
+
+			/**
+			 * Get job events of a workflow run.
+			 *
+			 * @param workflowName
+			 * @param jobId
+			 * @returns
+			 */
+			broker.wf.getEvents = async (
+				workflowName: string,
+				jobId: string
+			): Promise<JobEvent[]> => {
+				Workflow.checkWorkflowName(workflowName);
+
+				if (!jobId) {
+					return Promise.reject(
+						new Errors.MoleculerError("Job ID is required!", 400, "JOB_ID_REQUIRED")
+					);
+				}
+				return (await broker.wf.getAdapter()).getJobEvents(workflowName, jobId, true);
+			};
+
+			/**
+			 * List completed jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listCompletedJobs = async (
+				workflowName: string
+			): Promise<ListFinishedJobResult[]> => {
+				Workflow.checkWorkflowName(workflowName);
+
+				return (await broker.wf.getAdapter()).listCompletedJobs(workflowName);
+			};
+
+			/**
+			 * List failed jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listFailedJobs = async (
+				workflowName: string
+			): Promise<ListFinishedJobResult[]> => {
+				Workflow.checkWorkflowName(workflowName);
+
+				return (await broker.wf.getAdapter()).listFailedJobs(workflowName);
+			};
+
+			/**
+			 * List delayed jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listDelayedJobs = async (
+				workflowName: string
+			): Promise<ListDelayedJobResult[]> => {
+				Workflow.checkWorkflowName(workflowName);
+
+				return (await broker.wf.getAdapter()).listDelayedJobs(workflowName);
+			};
+
+			/**
+			 * List active jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listActiveJobs = async (workflowName: string): Promise<ListJobResult[]> => {
+				Workflow.checkWorkflowName(workflowName);
+
+				return (await broker.wf.getAdapter()).listActiveJobs(workflowName);
+			};
+
+			/**
+			 * List waiting jobs for a workflow.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.listWaitingJobs = async (workflowName: string): Promise<ListJobResult[]> => {
+				Workflow.checkWorkflowName(workflowName);
+
+				return (await broker.wf.getAdapter()).listWaitingJobs(workflowName);
+			};
+
+			/**
+			 * Delete all workflow jobs & history.
+			 *
+			 * @param {string} workflowName
+			 * @returns
+			 */
+			broker.wf.cleanUp = async workflowName => {
+				Workflow.checkWorkflowName(workflowName);
+
+				return (await broker.wf.getAdapter()).cleanUp(workflowName);
+			};
+
+			registerMetrics(broker);
 		},
 
 		/**
@@ -170,17 +381,26 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) 
 						);
 					}
 					if (wf.enabled === false) continue;
+
 					if (!_.isFunction(wf.handler)) {
 						throw new Errors.ServiceSchemaError(
 							`Missing workflow handler on '${name}' workflow in '${svc.fullName}' service!`,
 							svc.schema
 						);
 					}
+
 					wf.name = wf.fullName ? wf.fullName : svc.fullName + "." + (wf.name || name);
 					Workflow.checkWorkflowName(wf.name);
+
+					// Wrap the original handler
 					const handler = broker.Promise.method(wf.handler).bind(svc);
+
+					// Wrap the handler with custom middlewares
 					const handler2 = broker.middlewares.wrapHandler("localWorkflow", handler, wf);
+
 					wf.handler = handler2;
+
+					// Add metrics for the handler
 					if (broker.isMetricsEnabled()) {
 						wf.handler = async (ctx: Context) => {
 							const labels = { workflow: wf.name };
@@ -207,6 +427,7 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) 
 					}
 					if (wf.params && broker.validator) {
 						const handler3 = wf.handler;
+
 						const check = broker.validator.compile(wf.params);
 						wf.handler = async (ctx: Context) => {
 							const res = await check(ctx.params != null ? ctx.params : {});
@@ -220,12 +441,61 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) 
 							}
 						};
 					}
+
 					const workflow = new Workflow(wf, svc);
 					await workflow.init(broker, logger, mwOpts);
+
+					// Register the workflow handler into the adapter
 					svc.$workflows.push(workflow);
 					logger.info(`Workflow '${workflow.name}' is registered.`);
 				}
-				// ...existing code for channel handler...
+
+				/**
+				 * Call a local channel event handler. Useful for unit tests.
+				 * TODO:
+				 *
+				 * @param {String} workflowName
+				 * @param {Object} payload
+				 * @param {string?} jobId
+				 * @returns
+				 */
+				svc[mwOpts.channelHandlerTrigger] = (workflowName, payload, jobId) => {
+					if (!jobId) {
+						jobId = broker.generateUid();
+					}
+
+					svc.logger.debug(
+						`${mwOpts.channelHandlerTrigger} called '${workflowName}' workflow handler`
+					);
+
+					if (!svc.schema[mwOpts.schemaProperty][workflowName]) {
+						return Promise.reject(
+							new MoleculerError(
+								`'${workflowName}' is not registered as local workflow event handler`,
+								500,
+								"NOT_FOUND_WORKFLOW",
+								{ workflowName }
+							)
+						);
+					}
+
+					/* TODO:
+					const ctx = (await broker.wf.getAdapter()).createWorkflowContext(workflow, job, events);
+
+					// Shorthand definition
+					if (typeof svc.schema[mwOpts.schemaProperty][workflowName] === "function")
+						return svc.schema[mwOpts.schemaProperty][workflowName].call(
+							svc, // Attach reference to service
+							ctx
+						);
+
+					// Object definition
+					return svc.schema[mwOpts.schemaProperty][workflowName].handler.call(
+						svc, // Attach reference to service
+						ctx
+					);
+					*/
+				};
 			}
 		},
 

@@ -7,13 +7,13 @@
 "use strict";
 
 import _ from "lodash";
-import { WorkflowError, WorkflowTaskMismatchError, WorkflowSignalTimeoutError } from "./errors";
-import * as C from "./constants";
-import { parseDuration, getCronNextTime } from "./utils";
-import Adapters from "./adapters";
+import { WorkflowError, WorkflowTaskMismatchError, WorkflowSignalTimeoutError } from "./errors.ts";
+import * as C from "./constants.ts";
+import { parseDuration, getCronNextTime } from "./utils.ts";
+import Adapters from "./adapters/index.ts";
 
 import type { ServiceBroker, Service, Context, LoggerInstance as Logger } from "moleculer";
-import type BaseAdapter from "./adapters/base";
+import type BaseAdapter from "./adapters/base.ts";
 import type {
 	WorkflowHandler,
 	WorkflowsMiddlewareOptions,
@@ -21,7 +21,7 @@ import type {
 	Job,
 	JobEvent,
 	CreateJobOptions
-} from "./types";
+} from "./types.ts";
 
 export interface WorkflowOptions {
 	name?: string;
@@ -39,7 +39,14 @@ export interface WorkflowOptions {
 	removeOnFailed?: boolean;
 
 	params?: Record<string, unknown>;
-	tracing?: boolean;
+	tracing?:
+		| boolean
+		| {
+				enabled?: boolean;
+				tags?: Record<string, unknown> | (() => Record<string, unknown>);
+				safetyTags?: boolean;
+				spanName?: string | ((svc: Service, ctx: Context) => string);
+		  };
 	maxStalledCount?: number;
 }
 

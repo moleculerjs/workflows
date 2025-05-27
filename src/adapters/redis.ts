@@ -9,25 +9,25 @@
 import _ from "lodash";
 import Redis, { Cluster, ClusterOptions, Redis as RedisClient, RedisOptions } from "ioredis";
 import { Serializers, ServiceBroker, LoggerInstance, Serializer } from "moleculer";
-import { makeDirs } from "moleculer";
-import BaseAdapter from "./base";
+import { Utils } from "moleculer";
+import BaseAdapter, { ListJobResult, ListDelayedJobResult, ListFinishedJobResult } from "./base.ts";
 import {
 	WorkflowError,
 	WorkflowAlreadyLocked,
 	WorkflowTimeoutError,
 	WorkflowMaximumStalled
-} from "../errors";
-import * as C from "../constants";
-import { parseDuration, humanize } from "../utils";
-import Workflow from "../workflow";
-import type { BaseDefaultOptions } from "./base";
+} from "../errors.ts";
+import * as C from "../constants.ts";
+import { parseDuration, humanize } from "../utils.ts";
+import Workflow from "../workflow.ts";
+import type { BaseDefaultOptions } from "./base.ts";
 import {
 	CreateJobOptions,
 	Job,
 	JobEvent,
 	WorkflowsMiddlewareOptions,
 	SignalWaitOptions
-} from "../types";
+} from "../types.ts";
 
 export interface RedisAdapterOptions extends BaseDefaultOptions {
 	redis?:
@@ -182,7 +182,7 @@ export default class RedisAdapter extends BaseAdapter {
 				}
 				client = new Redis.Cluster(opts.cluster.nodes, opts.cluster.clusterOptions);
 			} else {
-				client = new Redis.Command(opts && opts.url ? opts.url : opts);
+				client = new Redis.Redis(opts && opts.url ? opts.url : opts);
 			}
 
 			client.on("ready", () => {
@@ -1674,7 +1674,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param workflowName
 	 * @returns
 	 */
-	async listCompletedJobs(workflowName: string): Promise<{ id: string; finishedAt: number }[]> {
+	async listCompletedJobs(workflowName: string): Promise<ListFinishedJobResult[]> {
 		return this.formatZrangeResultToObject(
 			await this.commandClient.zrange(
 				this.getKey(workflowName, C.QUEUE_COMPLETED),
@@ -1690,7 +1690,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param workflowName
 	 * @returns
 	 */
-	async listFailedJobs(workflowName: string): Promise<{ id: string; finishedAt: number }[]> {
+	async listFailedJobs(workflowName: string): Promise<ListFinishedJobResult[]> {
 		return this.formatZrangeResultToObject(
 			await this.commandClient.zrange(
 				this.getKey(workflowName, C.QUEUE_FAILED),
@@ -1706,7 +1706,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param workflowName
 	 * @returns
 	 */
-	async listDelayedJobs(workflowName): Promise<{ id: string; promoteAt: number }[]> {
+	async listDelayedJobs(workflowName): Promise<ListDelayedJobResult[]> {
 		return this.formatZrangeResultToObject(
 			await this.commandClient.zrange(
 				this.getKey(workflowName, C.QUEUE_DELAYED),
@@ -1723,7 +1723,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param workflowName
 	 * @returns
 	 */
-	async listActiveJobs(workflowName): Promise<{ id: string }[]> {
+	async listActiveJobs(workflowName): Promise<ListJobResult[]> {
 		return (
 			await this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_ACTIVE), 0, -1)
 		).map(jobId => {
@@ -1736,7 +1736,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param  workflowName
 	 * @returns
 	 */
-	async listWaitingJobs(workflowName): Promise<{ id: string }[]> {
+	async listWaitingJobs(workflowName): Promise<ListJobResult[]> {
 		return (
 			await this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_WAITING), 0, -1)
 		).map(jobId => {
@@ -1751,7 +1751,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param wfNames - The names of the workflows to dump.
 	 */
 	async dumpWorkflows(folder: string, wfNames: string[]): Promise<string[]> {
-		makeDirs(folder);
+		Utils.makeDirs(folder);
 		for (const name of wfNames) {
 			await this.dumpWorkflow(name, folder);
 		}
