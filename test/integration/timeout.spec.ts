@@ -1,7 +1,10 @@
-const { ServiceBroker } = require("moleculer");
-const WorkflowsMiddleware = require("../../src");
-const { delay } = require("../utils.js");
-require("../jest.setup.js");
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+
+import { ServiceBroker } from "moleculer";
+import WorkflowsMiddleware from "../../src/middleware.ts";
+import { delay } from "../utils";
+
+import "../setup.ts";
 
 describe("Workflows Timeout Test", () => {
 	let broker;

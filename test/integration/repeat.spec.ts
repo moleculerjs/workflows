@@ -1,11 +1,14 @@
-const { ServiceBroker } = require("moleculer");
-const WorkflowsMiddleware = require("../../src");
-const { delay } = require("../utils");
-require("../jest.setup");
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+
+import { ServiceBroker } from "moleculer";
+import WorkflowsMiddleware from "../../src/middleware.ts";
+import { delay } from "../utils";
+
+import "../setup.ts";
 
 describe("Workflows Repeat Test", () => {
 	let broker;
-	let FLOWS = [];
+	const FLOWS = [];
 
 	const cleanup = async () => {
 		await broker.wf.cleanUp("repeat.work");
@@ -40,13 +43,13 @@ describe("Workflows Repeat Test", () => {
 	});
 
 	it("should throw error if no jobID for repeat job", async () => {
-		expect(
+		await expect(
 			broker.wf.run("repeat.work", null, { repeat: { cron: "*/5 * * * * *" } })
 		).rejects.toThrow("Job ID is required for repeatable jobs");
 	});
 
 	it("should throw error if endDate is older", async () => {
-		expect(
+		await expect(
 			broker.wf.run("repeat.work", null, {
 				jobId: "rep1",
 				repeat: { cron: "*/5 * * * * *", endDate: Date.now() - 5000 }

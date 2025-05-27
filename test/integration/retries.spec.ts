@@ -1,7 +1,10 @@
-const { ServiceBroker } = require("moleculer");
-const WorkflowsMiddleware = require("../../src");
-const { MoleculerRetryableError } = require("moleculer").Errors;
-require("../jest.setup.js");
+import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
+
+import { ServiceBroker } from "moleculer";
+import { Errors } from "moleculer";
+import WorkflowsMiddleware from "../../src/middleware.ts";
+
+import "../setup.ts";
 
 describe("Workflows Retries Test", () => {
 	describe("Retry in run", () => {
@@ -26,7 +29,7 @@ describe("Workflows Retries Test", () => {
 						async handler(ctx) {
 							FLOWS.push(ctx.wf.name);
 							if ((ctx.wf.retryAttempts ?? 0) < 3) {
-								throw new MoleculerRetryableError("Simulated failure");
+								throw new Errors.MoleculerRetryableError("Simulated failure");
 							}
 							return `Success on attempt ${ctx.wf.retryAttempts}`;
 						}
@@ -41,7 +44,7 @@ describe("Workflows Retries Test", () => {
 						async handler(ctx) {
 							FLOWS.push(ctx.wf.name);
 							if ((ctx.wf.retryAttempts ?? 0) < 3) {
-								throw new MoleculerRetryableError("Simulated failure");
+								throw new Errors.MoleculerRetryableError("Simulated failure");
 							}
 							return `Success on attempt ${ctx.wf.retryAttempts}`;
 						}
@@ -58,7 +61,9 @@ describe("Workflows Retries Test", () => {
 		});
 
 		afterAll(async () => {
-			await (await broker.wf.getAdapter()).dumpWorkflows("./tmp", ["retry.simple", "retry.policy"]);
+			await (
+				await broker.wf.getAdapter()
+			).dumpWorkflows("./tmp", ["retry.simple", "retry.policy"]);
 			await cleanup();
 			await broker.stop();
 		});

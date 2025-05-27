@@ -1,7 +1,10 @@
-const { ServiceBroker } = require("moleculer");
-const { MoleculerError } = require("moleculer").Errors;
-const WorkflowsMiddleware = require("../../src");
-require("../jest.setup.js");
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+
+import { ServiceBroker } from "moleculer";
+import WorkflowsMiddleware from "../../src/middleware.ts";
+import { Errors } from "moleculer";
+
+import "../setup.ts";
 
 describe("Workflows Serialization Test", () => {
 	let broker;
@@ -38,9 +41,14 @@ describe("Workflows Serialization Test", () => {
 				bad: {
 					async handler(ctx) {
 						await ctx.wf.task("myBadTask", async () => {
-							throw new MoleculerError("Something went wrong", 500, "ERR_BAD", {
-								a: 5
-							});
+							throw new Errors.MoleculerError(
+								"Something went wrong",
+								500,
+								"ERR_BAD",
+								{
+									a: 5
+								}
+							);
 						});
 					}
 				}
@@ -52,7 +60,9 @@ describe("Workflows Serialization Test", () => {
 	});
 
 	afterAll(async () => {
-		await (await broker.wf.getAdapter()).dumpWorkflows("./tmp", ["serialize.good", "serialize.bad"]);
+		await (
+			await broker.wf.getAdapter()
+		).dumpWorkflows("./tmp", ["serialize.good", "serialize.bad"]);
 		await cleanup();
 		await broker.stop();
 	});
@@ -171,7 +181,7 @@ describe("Workflows Serialization Test", () => {
 			await job.promise();
 			expect(true).toBe(false); // Should not reach here
 		} catch (err) {
-			expect(err).toBeInstanceOf(MoleculerError);
+			expect(err).toBeInstanceOf(Errors.MoleculerError);
 			expect(err.code).toBe(500);
 			expect(err.type).toBe("ERR_BAD");
 			expect(err.data).toStrictEqual({ a: 5 });

@@ -1,6 +1,9 @@
-const { ServiceBroker } = require("moleculer");
-const WorkflowsMiddleware = require("../../src");
-require("../jest.setup.js");
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+
+import { ServiceBroker } from "moleculer";
+import WorkflowsMiddleware from "../../src/middleware.ts";
+
+import "../setup.ts";
 
 describe("Workflows Signal Test", () => {
 	let broker, worker;
@@ -51,11 +54,9 @@ describe("Workflows Signal Test", () => {
 	});
 
 	afterAll(async () => {
-		await (await worker.wf.getAdapter()).dumpWorkflows("./tmp", [
-			"signal.good",
-			"signal.time",
-			"signal.bad"
-		]);
+		await (
+			await worker.wf.getAdapter()
+		).dumpWorkflows("./tmp", ["signal.good", "signal.time", "signal.bad"]);
 		await cleanup();
 		await worker.stop();
 		await broker.stop();

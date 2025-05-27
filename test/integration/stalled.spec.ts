@@ -1,8 +1,11 @@
-const { ServiceBroker } = require("moleculer");
-const { MoleculerRetryableError } = require("moleculer").Errors;
-const WorkflowsMiddleware = require("../../src");
-const { delay } = require("../utils");
-require("../jest.setup.js");
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+
+import { ServiceBroker } from "moleculer";
+import { Errors } from "moleculer";
+import WorkflowsMiddleware from "../../src/middleware.ts";
+import { delay } from "../utils";
+
+import "../setup.ts";
 
 describe("Workflows Stalled Job Test", () => {
 	let broker, worker;
@@ -117,7 +120,7 @@ describe("Workflows Stalled Job Test", () => {
 
 							if (errorState == 2) {
 								errorState--;
-								throw new MoleculerRetryableError("HTTP error");
+								throw new Errors.MoleculerRetryableError("HTTP error");
 							}
 
 							await delay(100);
@@ -191,7 +194,7 @@ describe("Workflows Stalled Job Test", () => {
 					FLOWS.push("actionCall - mail.send");
 					if (errorState == 1) {
 						errorState--;
-						throw new MoleculerRetryableError("SMTP error");
+						throw new Errors.MoleculerRetryableError("SMTP error");
 					}
 					return true;
 				}
@@ -204,11 +207,9 @@ describe("Workflows Stalled Job Test", () => {
 	});
 
 	afterAll(async () => {
-		await (await worker.wf.getAdapter()).dumpWorkflows("./tmp", [
-			"stalled.fiveSec",
-			"stalled.tenSec",
-			"stalled.complex"
-		]);
+		await (
+			await worker.wf.getAdapter()
+		).dumpWorkflows("./tmp", ["stalled.fiveSec", "stalled.tenSec", "stalled.complex"]);
 		await cleanup();
 		await broker.stop();
 		await worker.stop();

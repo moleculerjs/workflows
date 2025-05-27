@@ -1,7 +1,10 @@
-const { ServiceBroker } = require("moleculer");
-const WorkflowsMiddleware = require("../../src");
-const _ = require("lodash");
-require("../jest.setup.js");
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+
+import { ServiceBroker } from "moleculer";
+import WorkflowsMiddleware from "../../src/middleware.ts";
+import _ from "lodash";
+
+import "../setup.ts";
 
 describe("Workflows Batch Test (on single node)", () => {
 	let broker;
@@ -71,7 +74,7 @@ describe("Workflows Batch Test (on single node)", () => {
 
 describe("Workflows Batch Test (on multiple nodes)", () => {
 	let broker;
-	let workers = [];
+	const workers = [];
 
 	const cleanup = async () => {
 		await broker.wf.cleanUp("batch.multi");

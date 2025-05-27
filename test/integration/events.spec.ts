@@ -1,7 +1,9 @@
-const { ServiceBroker } = require("moleculer");
-const WorkflowsMiddleware = require("../../src");
-const { delay } = require("../utils.js");
-require("../jest.setup.js");
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+
+import { ServiceBroker } from "moleculer";
+import WorkflowsMiddleware from "../../src/middleware.ts";
+
+import "../setup.ts";
 
 let EVENTS = [];
 

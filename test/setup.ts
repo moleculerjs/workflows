@@ -1,3 +1,5 @@
+import { expect } from "vitest";
+
 const minDate = new Date("2020-01-01T00:00:00Z").getTime();
 const maxDate = new Date("2030-01-01T00:00:00Z").getTime();
 

@@ -1,6 +1,7 @@
-const ServiceBroker = require("moleculer").ServiceBroker;
-const RedisAdapter = require("../../src/adapters/redis");
-const C = require("../../src/constants");
+import { describe, expect, it } from "vitest";
+import { ServiceBroker } from "moleculer";
+import RedisAdapter from "../../src/adapters/redis.ts";
+import * as C from "../../src/constants.ts";
 
 describe("RedisAdapter.getKey without custom prefix", () => {
 	const broker = new ServiceBroker({ logger: false });
