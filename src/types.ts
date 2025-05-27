@@ -1,10 +1,14 @@
-// TypeScript type definitions for the Moleculer Workflow project
+/*
+ * @moleculer/workflows
+ * Copyright (c) 2025 MoleculerJS (https://github.com/moleculerjs/workflows)
+ * MIT Licensed
+ */
 
-import { ServiceBroker, LoggerInstance, Context, PlainMoleculerError } from "moleculer";
+import { Context, PlainMoleculerError } from "moleculer";
 
 import type { ResolvableAdapterType } from "./adapters/index.ts";
 import BaseAdapter from "./adapters/base.ts";
-import RedisAdapter, { RedisAdapterOptions } from "./adapters/redis.ts";
+import RedisAdapter from "./adapters/redis.ts";
 
 /**
  * Options for the Workflows middleware
@@ -14,7 +18,7 @@ export interface WorkflowsMiddlewareOptions {
 	schemaProperty?: string;
 	workflowHandlerTrigger?: string;
 	jobEventType?: string;
-	jobIdCollision: "reject" | "skip" | "rerun";
+	jobIdCollision?: "reject" | "skip" | "rerun";
 
 	signalExpiration?: string;
 	maintenanceTime?: number;
@@ -102,7 +106,7 @@ export interface WorkflowContextProps {
 	task: (name: string, fn: () => Promise<unknown>) => Promise<unknown>;
 }
 
-export interface WorkflowServiceBroker {
+export interface WorkflowServiceBrokerMethods {
 	run: (workflowName: string, payload: unknown, opts?: unknown) => Promise<unknown>;
 	remove: (workflowName: string, jobId: string) => Promise<void>;
 	triggerSignal: (signalName: string, key?: unknown, payload?: unknown) => Promise<void>;

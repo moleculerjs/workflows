@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* eslint-disable @/no-console */
 "use strict";
 
 /**
@@ -6,11 +6,12 @@
  * use the workflow middleware
  */
 
-const { ServiceBroker } = require("moleculer");
-const { MoleculerClientError } = require("moleculer").Errors;
-const ApiGateway = require("moleculer-web");
+import { ServiceBroker } from "moleculer";
+import { Errors } from "moleculer";
+const { MoleculerClientError } = Errors;
+import ApiGateway from "moleculer-web";
 
-const WorkFlowsMiddleware = require("../../dist").Middleware;
+import Middleware from "../../dist";
 
 // Create broker
 const broker = new ServiceBroker({
@@ -31,7 +32,7 @@ const broker = new ServiceBroker({
 		}
 	},
 
-	middlewares: [WorkFlowsMiddleware({})]
+	middlewares: [Middleware({})]
 });
 
 broker.createService({

@@ -4,7 +4,7 @@ import { ServiceBroker } from "moleculer";
 import { Errors } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 
-import "../vitest-exensions.ts";
+import "../vitest-extensions.ts";
 
 describe("Workflows Retries Test", () => {
 	describe("Retry in run", () => {

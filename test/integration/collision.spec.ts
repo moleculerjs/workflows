@@ -2,9 +2,10 @@ import { describe, expect, it, afterEach } from "vitest";
 
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
+import { WorkflowsMiddlewareOptions } from "../../src/types.ts";
 import { delay } from "../utils";
 
-import "../vitest-exensions.ts";
+import "../vitest-extensions.ts";
 
 describe("Workflows Job ID collision Test", () => {
 	let broker;
@@ -14,7 +15,7 @@ describe("Workflows Job ID collision Test", () => {
 		await broker.wf.cleanUp("collision.bad");
 	};
 
-	const createBroker = async jobIdCollision => {
+	const createBroker = async (jobIdCollision?: WorkflowsMiddlewareOptions["jobIdCollision"]) => {
 		broker = new ServiceBroker({
 			logger: false,
 			/*logger: {

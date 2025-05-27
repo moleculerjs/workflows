@@ -3,7 +3,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 
-import "../vitest-exensions.ts";
+import "../vitest-extensions.ts";
 
 let EVENTS = [];
 

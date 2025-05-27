@@ -3,7 +3,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 
-import "../vitest-exensions.ts";
+import "../vitest-extensions.ts";
 
 describe("Workflows Signal Test", () => {
 	let broker, worker;

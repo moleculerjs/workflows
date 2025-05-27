@@ -5,7 +5,7 @@ import { Errors } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 import { delay } from "../utils";
 
-import "../vitest-exensions.ts";
+import "../vitest-extensions.ts";
 
 describe("Workflows Stalled Job Test", () => {
 	let broker, worker;

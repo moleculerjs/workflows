@@ -4,7 +4,7 @@ import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 import { delay } from "../utils";
 
-import "../vitest-exensions.ts";
+import "../vitest-extensions.ts";
 
 describe("Workflows Retention Test", () => {
 	let broker;
