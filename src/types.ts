@@ -2,6 +2,7 @@
 
 import { ServiceBroker, LoggerInstance, Context, PlainMoleculerError } from "moleculer";
 
+import type { ResolvableAdapterType } from "./adapters/index.ts";
 import BaseAdapter from "./adapters/base.ts";
 import RedisAdapter, { RedisAdapterOptions } from "./adapters/redis.ts";
 
@@ -9,7 +10,7 @@ import RedisAdapter, { RedisAdapterOptions } from "./adapters/redis.ts";
  * Options for the Workflows middleware
  */
 export interface WorkflowsMiddlewareOptions {
-	adapter: string | BaseAdapter | RedisAdapterOptions;
+	adapter: ResolvableAdapterType;
 	schemaProperty?: string;
 	workflowHandlerTrigger?: string;
 	jobEventType?: string;

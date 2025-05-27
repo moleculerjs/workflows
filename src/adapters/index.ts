@@ -19,9 +19,10 @@ const Adapters = {
 
 type AdapterTypes = (typeof Adapters)[keyof typeof Adapters];
 
-type ResolvableAdapterType =
+export type ResolvableAdapterType =
 	| keyof typeof Adapters
 	| BaseAdapter
+	| string
 	| { type: keyof typeof Adapters; options: BaseDefaultOptions | RedisAdapterOptions };
 
 function getByName(name: string): AdapterTypes | null {

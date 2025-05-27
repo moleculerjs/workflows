@@ -4,7 +4,7 @@ import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 import { Errors } from "moleculer";
 
-import "../setup.ts";
+import "../vitest-exensions.ts";
 
 describe("Workflows Serialization Test", () => {
 	let broker;

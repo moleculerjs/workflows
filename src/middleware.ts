@@ -11,7 +11,8 @@ import {
 	ServiceBroker,
 	LoggerInstance as Logger,
 	Service,
-	Context
+	Context,
+	Middleware
 } from "moleculer";
 import Workflow from "./workflow.ts";
 import BaseAdapter, {
@@ -29,7 +30,7 @@ import type { WorkflowSchema } from "./workflow.ts";
 /**
  * WorkflowsMiddleware for Moleculer
  */
-export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions) {
+export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions): Middleware {
 	mwOpts = _.defaultsDeep({}, mwOpts, {
 		adapter: "Redis",
 		schemaProperty: "workflows",

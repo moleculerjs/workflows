@@ -4,7 +4,7 @@ import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 import { delay } from "../utils";
 
-import "../setup.ts";
+import "../vitest-exensions.ts";
 
 describe("Workflows Job ID collision Test", () => {
 	let broker;
