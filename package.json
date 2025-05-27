@@ -29,7 +29,7 @@
     "ci:unit": "vitest --watch unit",
     "ci:integration": "vitest --watch integration",
     "test:unit": "vitest --run unit",
-    "test:integration": "vitest --run integration",
+    "test:integration": "vitest --run integration  --coverage",
     "test": "vitest --run --coverage",
     "bench": "node benchmark/index.js",
     "bench:watch": "nodemon benchmark/index.js",
