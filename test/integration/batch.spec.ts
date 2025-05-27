@@ -1,13 +1,14 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
-import { ServiceBroker } from "moleculer";
+import { Middleware, ServiceBroker } from "moleculer";
+import { Job } from "../../src/types.ts";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 import _ from "lodash";
 
 import "../vitest-extensions.ts";
 
 describe("Workflows Batch Test (on single node)", () => {
-	let broker;
+	let broker: ServiceBroker;
 
 	const cleanup = async () => {
 		await broker.wf.cleanUp("batch.serial");
@@ -48,7 +49,7 @@ describe("Workflows Batch Test (on single node)", () => {
 	});
 
 	it("should execute 1000 workflows (serial)", async () => {
-		const promises = [];
+		const promises: Promise<Job>[] = [];
 		for (let i = 0; i < 1000; i++) {
 			promises.push(broker.wf.run("batch.serial", { i }));
 		}
@@ -60,7 +61,7 @@ describe("Workflows Batch Test (on single node)", () => {
 	});
 
 	it("should execute 1000 workflows (parallel)", async () => {
-		const promises = [];
+		const promises: Promise<Job>[] = [];
 		for (let i = 0; i < 1000; i++) {
 			promises.push(broker.wf.run("batch.parallel", { i }));
 		}

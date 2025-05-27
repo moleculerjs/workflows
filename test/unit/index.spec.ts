@@ -33,13 +33,19 @@ describe("Test Adapter resolver", () => {
 		it("should resolve Redis adapter from connection string", () => {
 			const adapter = Adapters.resolve("redis://localhost");
 			expect(adapter).toBeInstanceOf(Adapters.Redis);
-			expect(adapter.opts).toMatchObject({ redis: { url: "redis://localhost" } });
+			expect(adapter.opts).toMatchObject({
+				url: "redis://localhost",
+				redis: { retryStrategy: expect.any(Function) }
+			});
 		});
 
 		it("should resolve Redis adapter from SSL connection string", () => {
 			const adapter = Adapters.resolve("rediss://localhost");
 			expect(adapter).toBeInstanceOf(Adapters.Redis);
-			expect(adapter.opts).toMatchObject({ redis: { url: "rediss://localhost" } });
+			expect(adapter.opts).toMatchObject({
+				url: "rediss://localhost",
+				redis: { retryStrategy: expect.any(Function) }
+			});
 		});
 
 		it("should resolve Redis adapter from string", () => {
