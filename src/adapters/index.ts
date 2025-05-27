@@ -37,7 +37,7 @@ function getByName(name: string): AdapterTypes | null {
  *
  * @param opt
  */
-function resolve(opt: ResolvableAdapterType): BaseAdapter {
+function resolve(opt?: ResolvableAdapterType): BaseAdapter {
 	if (opt instanceof BaseAdapter) {
 		return opt;
 	} else if (_.isString(opt)) {

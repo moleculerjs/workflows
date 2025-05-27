@@ -14,7 +14,7 @@ import RedisAdapter from "./adapters/redis.ts";
  * Options for the Workflows middleware
  */
 export interface WorkflowsMiddlewareOptions {
-	adapter: ResolvableAdapterType;
+	adapter?: ResolvableAdapterType;
 	schemaProperty?: string;
 	workflowHandlerTrigger?: string;
 	jobEventType?: string;
