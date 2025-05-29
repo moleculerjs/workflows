@@ -1,95 +1,97 @@
 {
-  "name": "@moleculer/workflows",
-  "version": "0.0.0",
-  "description": "Advanced Workflow feature for Moleculer microservices framework",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "default": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
-    }
-  },
-  "files": [
-    "README.md",
-    "LICENSE",
-    "dist"
-  ],
-  "scripts": {
-    "dev": "nodemon --inspect examples/index.ts",
-    "dev:noservice": "nodemon --inspect=9228 examples/index.ts simple noservice",
-    "ci:unit": "vitest --watch unit",
-    "ci:integration": "vitest --watch integration",
-    "test:unit": "vitest --run unit",
-    "test:integration": "vitest --run integration  --coverage",
-    "test": "vitest --run --coverage",
-    "bench": "node benchmark/index.js",
-    "bench:watch": "nodemon benchmark/index.js",
-    "deps": "ncu -i && npm audit fix",
-    "ci-update-deps": "ncu -u --target minor",
-    "lint": "eslint --ext=.ts src examples test",
-    "check": "tsc --noEmit true",
-    "prebuild": "rimraf dist",
-    "build": "tsc --build",
-    "build:tsup": "tsup-node",
-    "release": "npm publish --access public && git push --tags",
-    "prepack": "npm run build",
-    "postrelease": "git push origin && git push origin -f --tags",
-    "coverall": "cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js"
-  },
-  "keywords": [
-    "workflow",
-    "moleculer",
-    "microservice"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/moleculerjs/workflows.git"
-  },
-  "author": "MoleculerJS",
-  "license": "MIT",
-  "devDependencies": {
-    "@eslint/js": "^9.27.0",
-    "@types/lodash": "^4.17.17",
-    "@types/node": "^22.15.24",
-    "@vitest/coverage-v8": "^3.1.4",
-    "benchmarkify": "^4.0.0",
-    "eslint": "^9.27.0",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-prettier": "^5.2.3",
-    "eslint-plugin-promise": "^6.6.0",
-    "eslint-plugin-security": "^2.1.1",
-    "kleur": "^4.1.5",
-    "moleculer": "github:moleculerjs/moleculer#next",
-    "moleculer-repl": "^0.7.4",
-    "moleculer-web": "^0.10.8",
-    "msgpack5": "^6.0.2",
-    "nodemon": "^3.1.10",
-    "npm-check-updates": "^18.0.1",
-    "prettier": "^3.5.3",
-    "rimraf": "^6.0.1",
-    "tsup": "^8.5.0",
-    "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.32.1",
-    "vitest": "^3.1.4"
-  },
-  "engines": {
-    "node": ">= 20.x.x"
-  },
-  "dependencies": {
-    "cron-parser": "^5.1.1",
-    "fastest-validator": "^1.19.1",
-    "ioredis": "^5.6.1",
-    "lodash": "^4.17.21"
-  }
+	"name": "@moleculer/workflows",
+	"version": "0.0.0",
+	"description": "Advanced Workflow feature for Moleculer microservices framework",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"require": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			},
+			"default": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		}
+	},
+	"files": [
+		"README.md",
+		"LICENSE",
+		"dist"
+	],
+	"scripts": {
+		"dev": "nodemon --inspect examples/index.ts",
+		"dev:noservice": "nodemon --inspect=9228 examples/index.ts simple noservice",
+		"ci:unit": "vitest --watch unit",
+		"ci:integration": "vitest --watch integration",
+		"test:unit": "vitest --run unit",
+		"test:integration": "vitest --run integration  --coverage",
+		"test": "vitest --run --coverage",
+		"bench": "node benchmark/index.js",
+		"bench:watch": "nodemon benchmark/index.js",
+		"deps": "ncu -i && npm audit fix",
+		"ci-update-deps": "ncu -u --target minor",
+		"lint": "eslint --ext=.ts src examples test",
+		"check": "tsc --noEmit true",
+		"prebuild": "rimraf dist",
+		"build": "tsc --build",
+		"build:tsup": "tsup-node",
+		"release": "npm publish --access public && git push --tags",
+		"prepack": "npm run build",
+		"postrelease": "git push origin && git push origin -f --tags",
+		"coverall": "cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js"
+	},
+	"keywords": [
+		"workflow",
+		"moleculer",
+		"microservice"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/moleculerjs/workflows.git"
+	},
+	"author": "MoleculerJS",
+	"license": "MIT",
+	"peerDependencies": {
+		"moleculer": "^0.14.12 || ^0.15.0-0"
+	},
+	"dependencies": {
+		"cron-parser": "^5.1.1",
+		"ioredis": "^5.6.1",
+		"lodash": "^4.17.21"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.27.0",
+		"@types/lodash": "^4.17.17",
+		"@types/node": "^22.15.24",
+		"@vitest/coverage-v8": "^3.1.4",
+		"benchmarkify": "^4.0.0",
+		"eslint": "^9.27.0",
+		"eslint-config-prettier": "^9.1.0",
+		"eslint-plugin-node": "^11.1.0",
+		"eslint-plugin-prettier": "^5.2.3",
+		"eslint-plugin-promise": "^6.6.0",
+		"eslint-plugin-security": "^2.1.1",
+		"kleur": "^4.1.5",
+		"moleculer": "github:moleculerjs/moleculer#next",
+		"moleculer-repl": "^0.7.4",
+		"moleculer-web": "^0.10.8",
+		"msgpack5": "^6.0.2",
+		"nodemon": "^3.1.10",
+		"npm-check-updates": "^18.0.1",
+		"prettier": "^3.5.3",
+		"rimraf": "^6.0.1",
+		"tsup": "^8.5.0",
+		"tsx": "^4.19.4",
+		"typescript": "^5.8.3",
+		"typescript-eslint": "^8.32.1",
+		"vitest": "^3.1.4"
+	},
+	"engines": {
+		"node": ">= 20.x.x"
+	}
 }
