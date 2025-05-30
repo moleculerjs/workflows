@@ -295,7 +295,7 @@ export default class Workflow {
 				validateEvent(event2, "sleep-end");
 				return;
 			}
-			let span;
+			let span: Span | undefined;
 			if (ctx.tracing) {
 				span = ctx.startSpan(`sleep '${time}'`, {
 					tags: {
