@@ -11,7 +11,7 @@ const { MoleculerError, MoleculerRetryableError } = Errors;
 
 export class WorkflowError extends MoleculerError {
 	constructor(message: string, code?: number, type?: string, data?: object) {
-		super(message, code || 500, type || "WORKFLOW_ERROR", data);
+		super(message, code ?? 500, type ?? "WORKFLOW_ERROR", data);
 	}
 }
 
