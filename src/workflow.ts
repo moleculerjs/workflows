@@ -12,7 +12,7 @@ import * as C from "./constants.ts";
 import { parseDuration, getCronNextTime } from "./utils.ts";
 import Adapters from "./adapters/index.ts";
 
-import type { ServiceBroker, Service, Context, Logger, Errors } from "moleculer";
+import type { ServiceBroker, Service, Context, Logger, Errors, Span } from "moleculer";
 
 import type BaseAdapter from "./adapters/base.ts";
 import type {
@@ -126,7 +126,7 @@ export default class Workflow {
 	 */
 	async start() {
 		this.adapter = Adapters.resolve(this.mwOpts.adapter);
-		await this.adapter.init(this, this.broker, this.logger, this.mwOpts);
+		this.adapter.init(this, this.broker, this.logger, this.mwOpts);
 		await this.adapter.connect();
 		await this.afterAdapterConnected();
 		this.log("info", null, `Workflow '${this.name}' is started.`);
@@ -138,7 +138,7 @@ export default class Workflow {
 	 */
 	async afterAdapterConnected() {
 		this.adapter!.startJobProcessor();
-		this.setNextDelayedMaintenance();
+		await this.setNextDelayedMaintenance();
 		if (!this.maintenanceTimer) {
 			this.setNextMaintenance();
 		}
@@ -350,7 +350,7 @@ export default class Workflow {
 			taskId++;
 			const event2 = getCurrentTaskEvent();
 			if (event2) return validateEvent(event2, "signal-end");
-			let span;
+			let span: Span | undefined;
 			try {
 				if (ctx.tracing) {
 					span = ctx.startSpan(`signal wait '${signalName}'`, {
@@ -466,8 +466,7 @@ export default class Workflow {
 	 */
 	async callHandler(job: Job, events: JobEvent[]): Promise<unknown> {
 		const ctx = this.createWorkflowContext(job, events);
-		const result = await this.handler(ctx);
-		return result;
+		return this.handler(ctx);
 	}
 
 	getRoundedNextTime(time: number) {
@@ -558,7 +557,7 @@ export default class Workflow {
 		if (!this.delayedNextTime || nextTime == null || nextTime < this.delayedNextTime) {
 			clearTimeout(this.delayedTimer!);
 
-			let delay;
+			let delay: number;
 			if (nextTime != null) {
 				delay = Math.max(0, nextTime - now + Math.floor(Math.random() * 50));
 				this.log(

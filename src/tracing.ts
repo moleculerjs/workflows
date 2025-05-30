@@ -4,8 +4,6 @@
  * MIT Licensed
  */
 
-"use strict";
-
 import _ from "lodash";
 import { Utils } from "moleculer";
 const { isFunction, isPlainObject, safetyObject } = Utils;
