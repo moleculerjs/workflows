@@ -1,6 +1,6 @@
-export const SIGNAL_EMPTY_KEY = "null" as const;
+export const SIGNAL_EMPTY_KEY = "null";
 
-export const JOB_FIELDS_JSON = ["payload", "repeat", "result", "error", "state"] as const;
+export const JOB_FIELDS_JSON = ["payload", "repeat", "result", "error", "state"];
 
 export const JOB_FIELDS_NUMERIC: string[] = [
 	"createdAt",
