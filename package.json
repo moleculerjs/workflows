@@ -1,6 +1,6 @@
 {
 	"name": "@moleculer/workflows",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Advanced Workflow feature for Moleculer microservices framework",
 	"type": "module",
 	"main": "./dist/cjs/index.js",
@@ -35,7 +35,7 @@
 		"check": "tsc --noEmit true",
 		"prebuild": "rimraf dist",
 		"build": "tsc -b tsconfig.cjs.json tsconfig.esm.json tsconfig.types.json",
-    "postbuild": "echo {\"type\": \"commonjs\"} > dist/cjs/package.json && echo {\"type\": \"module\"} > dist/esm/package.json",
+		"postbuild": "echo {\"type\": \"commonjs\"} > dist/cjs/package.json && echo {\"type\": \"module\"} > dist/esm/package.json",
 		"prepack": "npm run build",
 		"release": "npm publish --access public && git push --tags",
 		"postrelease": "git push origin && git push origin -f --tags"
