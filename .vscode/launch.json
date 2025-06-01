@@ -8,18 +8,34 @@
 			"type": "node",
 			"request": "launch",
 			"name": "Launch demo",
-			"program": "${workspaceRoot}/examples/index.js",
+			"runtimeExecutable": "tsx",
+			"program": "${workspaceRoot}/examples/index.ts",
 			"cwd": "${workspaceRoot}",
 			"args": [
 				"simple"
-			]
+			],
+			"skipFiles": [
+				// Node.js internal core modules
+				"<node_internals>/**",
+
+				// Ignore all dependencies (optional)
+				"${workspaceFolder}/node_modules/**",
+			],
 		},
 		{
 			"type": "node",
 			"request": "launch",
 			"name": "Launch selected demo",
+			"runtimeExecutable": "tsx",
 			"program": "${file}",
-			"cwd": "${workspaceRoot}"
+			"cwd": "${workspaceRoot}",
+			"skipFiles": [
+				// Node.js internal core modules
+				"<node_internals>/**",
+
+				// Ignore all dependencies (optional)
+				"${workspaceFolder}/node_modules/**",
+			],
 		},
 		{
 			"name": "Attach to demo",
