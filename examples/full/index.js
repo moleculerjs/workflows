@@ -11,7 +11,7 @@ import { Errors } from "moleculer";
 const { MoleculerClientError } = Errors;
 import ApiGateway from "moleculer-web";
 
-import Middleware from "../../dist";
+import { Middleware } from "../../dist/esm/index.js";
 
 // Create broker
 const broker = new ServiceBroker({

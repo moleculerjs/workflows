@@ -9,5 +9,4 @@
 import Middleware from "./middleware.ts";
 import Adapters from "./adapters/index.ts";
 
-export default Middleware;
-export { Adapters };
+export { Middleware, Adapters };

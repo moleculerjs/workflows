@@ -13,7 +13,7 @@ import { inspect } from "node:util";
 import process from "node:process";
 import _ from "lodash";
 
-import Middleware from "../../src/index.ts";
+import { Middleware } from "../../src/index.ts";
 import { CreateJobOptions } from "../../src/types.ts";
 import "../../src/moleculer-types.ts";
 // import { Adapters } from "../../src/index.ts";

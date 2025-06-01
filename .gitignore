@@ -110,6 +110,3 @@ dist
 
 # Temp folder
 tmp/
-
-# Generated types
-types
