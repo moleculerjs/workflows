@@ -17,7 +17,7 @@ export class WorkflowError extends MoleculerError {
 
 export class WorkflowRetryableError extends MoleculerRetryableError {
 	constructor(message: string, code?: number, type?: string, data?: object) {
-		super(message, code || 500, type || "WORKFLOW_ERROR", data);
+		super(message, code ?? 500, type ?? "WORKFLOW_ERROR", data);
 	}
 }
 
