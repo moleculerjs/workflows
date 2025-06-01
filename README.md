@@ -1,8 +1,6 @@
 ****![Moleculer logo](http://moleculer.services/images/banner.png)
 
-![Integration Test](https://github.com/moleculerjs/workflows/workflows/Integration%20Test/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/moleculerjs/workflows/badge.svg?branch=master)](https://coveralls.io/github/moleculerjs/workflows?branch=master)
-[![Known Vulnerabilities](https://snyk.io/test/github/moleculerjs/workflows/badge.svg)](https://snyk.io/test/github/moleculerjs/workflows)
+[![Integration & Unit Test](https://github.com/moleculerjs/workflows/actions/workflows/test.yml/badge.svg)](https://github.com/moleculerjs/workflows/actions/workflows/test.yml)
 [![NPM version](https://badgen.net/npm/v/@moleculer/workflows)](https://www.npmjs.com/package/@moleculer/workflows)
 
 # @moleculer/workflows
