@@ -1,5 +1,6 @@
 name: Publish package to NPM
-on: {}
+on:
+  workflow_dispatch:
   #release:
   #  types: [published]
 jobs:
