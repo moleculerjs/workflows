@@ -10,3 +10,5 @@ import Middleware from "./middleware.ts";
 import Adapters from "./adapters/index.ts";
 
 export { Middleware, Adapters };
+
+import "./moleculer-types.d.ts";
