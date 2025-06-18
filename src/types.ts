@@ -4,7 +4,7 @@
  * MIT Licensed
  */
 
-import { Context, Errors, Service } from "moleculer";
+import { Context, Errors } from "moleculer";
 
 import type { ResolvableAdapterType } from "./adapters/index.ts";
 import BaseAdapter, {
@@ -30,7 +30,8 @@ export interface WorkflowsMiddlewareOptions {
 	tracing?: boolean;
 }
 
-export type WorkflowHandler = (this: Service, ctx: Context<any>) => Promise<unknown | void>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type WorkflowHandler = (ctx: Context<any>) => Promise<unknown | void>;
 
 export interface CreateJobOptions {
 	jobId?: string;
