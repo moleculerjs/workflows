@@ -30,7 +30,7 @@ export interface WorkflowsMiddlewareOptions {
 	tracing?: boolean;
 }
 
-export type WorkflowHandler = (ctx: Context) => Promise<unknown | void>;
+export type WorkflowHandler = (this: Service, ctx: Context<any>) => Promise<unknown | void>;
 
 export interface CreateJobOptions {
 	jobId?: string;
