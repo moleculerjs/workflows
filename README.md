@@ -255,7 +255,7 @@ In case of retry, the workflow job will be restarted from the beginning, skippin
 
 | Name                  | Type                                                      | Description                                                                                 |
 |-----------------------|-----------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `adapter`               | `string` \| `BaseAdapter` \| `RedisAdapterOptions`           | Adapter instance, name, or options for workflow storage. **Default:** `"Redis"`                                    |
+| `adapter`               | `string` \| `BaseAdapter`           | Adapter class, name, or options for workflow storage. **Default:** `"Redis"`                                    |
 | `schemaProperty`        | `string`                                                    | Service schema property name for workflows. **Default:** `"workflows"`                                                 |
 | `workflowHandlerTrigger`| `string`                                                    | Name of the method to trigger workflow handler. **Default:** `emitLocalWorkflowHandler`                                 |
 | `jobEventType`          | `string`                                                    | How job events are emitted (e.g., `broadcast, `emit`).                                 |
@@ -291,6 +291,50 @@ In case of retry, the workflow job will be restarted from the beginning, skippin
 | `retryPolicy.factor`        | `number`  | Exponential backoff factor. **Default:** `1` (fixed)      |
 | `maxStalledCount`        | `number`  | Number of maximum put back the stalled job. `0` or `null` value disables it. **Default:** `null`      |
 | `tracing`        | `boolean`  | Enable tracing feature for workflow jobs. **Default:** `false`      |
+
+## Adapters
+
+### Redis adapter
+The Redis adapter is the default adapter for the workflows middleware. It uses Redis as a storage for workflow jobs and events.
+
+**Using local Redis server:**
+```ts
+WorkflowsMiddleware({ adapter: "Redis" });
+```
+
+**Using Redis server with URI:**
+```ts
+WorkflowsMiddleware({ adapter: "redis://default:password@redis-16689.crce202.eu-west-3-1.ec2.redns.redis-cloud.com:16689" });
+```
+
+**Using Redis server with options:**
+```ts
+WorkflowsMiddleware({ adapter: { 
+    type: "Redis", 
+    options: { 
+        redis: { 
+            host: "localhost", 
+            port: 6379 
+        } 
+    } 
+} });
+```
+
+**Using Redis server with Adapter class:**
+```ts
+import { Middleware as WorkflowsMiddleware, Adapters } from "@moleculer/workflows";
+
+WorkflowsMiddleware({ adapter: { 
+    type: Adapters.Redis, 
+    options: { 
+        redis: { 
+            host: "localhost", 
+            port: 6379 
+        } 
+    } 
+} });
+```
+
 
 ## References
 

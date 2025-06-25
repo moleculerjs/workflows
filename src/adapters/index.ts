@@ -21,9 +21,11 @@ type AdapterTypes = (typeof Adapters)[keyof typeof Adapters];
 
 export type ResolvableAdapterType =
 	| keyof typeof Adapters
-	| BaseAdapter
 	| string
-	| { type: keyof typeof Adapters; options: BaseDefaultOptions | RedisAdapterOptions };
+	| {
+			type: keyof typeof Adapters | typeof BaseAdapter;
+			options: BaseDefaultOptions | RedisAdapterOptions;
+	  };
 
 function getByName(name: string): AdapterTypes | null {
 	if (!name) return null;
@@ -51,9 +53,16 @@ function resolve(opt?: ResolvableAdapterType): BaseAdapter {
 			throw new Errors.ServiceSchemaError(`Invalid Adapter type '${opt}'.`, { type: opt });
 		}
 	} else if (_.isObject(opt)) {
-		const AdapterClass = getByName(opt.type || "Redis");
+		let AdapterClass = null;
+		if (opt.type instanceof BaseAdapter) {
+			AdapterClass = opt.type;
+		} else if (typeof opt.type === "string") {
+			AdapterClass = getByName(opt.type || "Redis");
+		} else {
+			AdapterClass = getByName("Redis");
+		}
+
 		if (AdapterClass) {
-			// @ts-expect-error Solve it later
 			return new AdapterClass(opt.options);
 		} else {
 			throw new Errors.ServiceSchemaError(`Invalid Adapter type '${opt.type}'.`, {
