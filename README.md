@@ -416,10 +416,9 @@ const jobIds = await broker.wf.listWaitingJobs("users.signupWorkflow");
 ```
 
 #### `async broker.wf.cleanUp(workflowName)`
-- **Description:** Retries a failed workflow job.
+- **Description:** Clean up the worfklow. It removed all (waiting, action, completed, failed) jobs of the workflow
 - **Parameters:**
   - `workflowName` (`string`): Full workflow name (e.g., `service.workflowName`).
-  - `jobId` (`string`): The job ID to retry.
 - **Returns:** `void`
 - **Example:**
 ```js
