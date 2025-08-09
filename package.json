@@ -1,6 +1,6 @@
 {
 	"name": "@moleculer/workflows",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Advanced Workflow feature for Moleculer microservices framework",
 	"type": "module",
 	"main": "./dist/cjs/index.js",
@@ -26,7 +26,7 @@
 		"ci:integration": "vitest --watch integration",
 		"test:unit": "vitest --run unit",
 		"test:integration": "vitest --run integration  --coverage",
-    "test:leak": "tsx --expose-gc examples/leak/index.ts",
+		"test:leak": "tsx --expose-gc examples/leak/index.ts",
 		"test": "vitest --run --coverage",
 		"bench": "node benchmark/index.js",
 		"bench:watch": "nodemon benchmark/index.js",
