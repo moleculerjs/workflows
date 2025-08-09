@@ -9,7 +9,6 @@ import { ServiceBroker, Context } from "moleculer";
 import process from "node:process";
 
 import { Middleware } from "../../src/index.ts";
-import "../../src/moleculer-types.ts";
 import kleur from "kleur";
 
 const MAX_COUNT = 10_000_000;

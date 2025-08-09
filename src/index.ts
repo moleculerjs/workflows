@@ -8,7 +8,7 @@
 
 import Middleware from "./middleware.ts";
 import Adapters from "./adapters/index.ts";
+import { WorkflowSchema } from "./moleculer-types.ts";
 
 export { Middleware, Adapters };
-
-import "./moleculer-types.ts";
+export type { WorkflowSchema };
