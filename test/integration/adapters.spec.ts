@@ -46,6 +46,54 @@ describe("Workflows Adapters Test", () => {
 		await broker.stop();
 	});
 
+	it("should work with Fake adapter", async () => {
+		await createBroker("Fake");
+
+		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "ephemeral" },
+			promise: expect.any(Function)
+		});
+
+		const result = await job.promise();
+		expect(result).toBe("Hello, ephemeral");
+	});
+
+	it("should work with Fake adapter object definition", async () => {
+		await createBroker({ type: "Fake" });
+
+		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "ephemeral" },
+			promise: expect.any(Function)
+		});
+
+		const result = await job.promise();
+		expect(result).toBe("Hello, ephemeral");
+	});
+
+	it("should work with Fake adapter with options", async () => {
+		await createBroker({
+			type: "Fake",
+			options: { drainDelay: 2 }
+		});
+
+		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "ephemeral" },
+			promise: expect.any(Function)
+		});
+
+		const result = await job.promise();
+		expect(result).toBe("Hello, ephemeral");
+	});
+
 	it("should work without adapter definition", async () => {
 		await createBroker();
 
