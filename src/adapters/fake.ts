@@ -9,14 +9,9 @@
 import _ from "lodash";
 import { Serializers, ServiceBroker, Logger, Utils } from "moleculer";
 import BaseAdapter, { ListJobResult, ListDelayedJobResult, ListFinishedJobResult } from "./base.ts";
-import {
-	WorkflowError,
-	WorkflowAlreadyLocked,
-	WorkflowTimeoutError,
-	WorkflowMaximumStalled
-} from "../errors.ts";
+import { WorkflowTimeoutError } from "../errors.ts";
 import * as C from "../constants.ts";
-import { parseDuration, humanize } from "../utils.ts";
+import { parseDuration } from "../utils.ts";
 import Workflow from "../workflow.ts";
 import type { BaseDefaultOptions } from "./base.ts";
 import {
@@ -58,9 +53,13 @@ export default class FakeAdapter extends BaseAdapter {
 	private static sharedSignalPromises: Map<string, StoredPromise<unknown>> = new Map();
 	private static sharedJobResultPromises: Map<string, StoredPromise<unknown>> = new Map();
 
-	// Instance accessors for shared promise storage  
-	public get signalPromises() { return FakeAdapter.sharedSignalPromises; }
-	public get jobResultPromises() { return FakeAdapter.sharedJobResultPromises; }
+	// Instance accessors for shared promise storage
+	public get signalPromises() {
+		return FakeAdapter.sharedSignalPromises;
+	}
+	public get jobResultPromises() {
+		return FakeAdapter.sharedJobResultPromises;
+	}
 
 	// Shared in-memory storage across all adapter instances
 	private static sharedJobs: Map<string, Job> = new Map(); // key: workflowName:jobId
@@ -68,17 +67,32 @@ export default class FakeAdapter extends BaseAdapter {
 	private static sharedJobStates: Map<string, unknown> = new Map(); // key: workflowName:jobId
 	private static sharedSignals: Map<string, unknown> = new Map(); // key: signalName:key
 	private static sharedQueues: Map<string, Set<string>> = new Map(); // key: workflowName:queueType, value: Set of jobIds
-	private static sharedDelayedJobs: Map<string, { jobId: string; promoteAt: number }[]> = new Map(); // key: workflowName
+	private static sharedDelayedJobs: Map<string, { jobId: string; promoteAt: number }[]> =
+		new Map(); // key: workflowName
 	private static sharedLocks: Map<string, { lockedAt: number; lockTime: number }> = new Map(); // key: lockName
 
 	// Instance accessors for shared storage
-	private get jobs() { return FakeAdapter.sharedJobs; }
-	private get jobEvents() { return FakeAdapter.sharedJobEvents; }
-	private get jobStates() { return FakeAdapter.sharedJobStates; }
-	private get signals() { return FakeAdapter.sharedSignals; }
-	private get queues() { return FakeAdapter.sharedQueues; }
-	private get delayedJobs() { return FakeAdapter.sharedDelayedJobs; }
-	private get locks() { return FakeAdapter.sharedLocks; }
+	private get jobs() {
+		return FakeAdapter.sharedJobs;
+	}
+	private get jobEvents() {
+		return FakeAdapter.sharedJobEvents;
+	}
+	private get jobStates() {
+		return FakeAdapter.sharedJobStates;
+	}
+	private get signals() {
+		return FakeAdapter.sharedSignals;
+	}
+	private get queues() {
+		return FakeAdapter.sharedQueues;
+	}
+	private get delayedJobs() {
+		return FakeAdapter.sharedDelayedJobs;
+	}
+	private get locks() {
+		return FakeAdapter.sharedLocks;
+	}
 
 	/**
 	 * Constructor of adapter.
@@ -214,7 +228,7 @@ export default class FakeAdapter extends BaseAdapter {
 	 */
 	private async runJobProcessor(): Promise<void> {
 		if (!this.wf) return; // No workflow set, can't process jobs
-		
+
 		while (this.running && this.connected) {
 			try {
 				const waitingKey = this.getKey(this.wf.name, C.QUEUE_WAITING);
@@ -276,7 +290,10 @@ export default class FakeAdapter extends BaseAdapter {
 			this.sendJobEvent(this.wf.name, jobId, "started");
 
 			// Execute the job
-			const result = await this.wf.callHandler(job, await this.getJobEvents(this.wf.name, jobId));
+			const result = await this.wf.callHandler(
+				job,
+				await this.getJobEvents(this.wf.name, jobId)
+			);
 
 			// Job completed successfully
 			await this.moveToCompleted(job, result);
@@ -347,7 +364,10 @@ export default class FakeAdapter extends BaseAdapter {
 	 */
 	async moveToFailed(job: Job | string, err: Error | null): Promise<void> {
 		const jobId = typeof job === "string" ? job : job.id;
-		const jobObj = typeof job === "string" ? this.jobs.get(this.getKey(this.wf.name, C.QUEUE_JOB, jobId)) : job;
+		const jobObj =
+			typeof job === "string"
+				? this.jobs.get(this.getKey(this.wf.name, C.QUEUE_JOB, jobId))
+				: job;
 
 		if (!jobObj) {
 			this.logger.warn(`Job not found for failure: ${jobId}`);
@@ -469,7 +489,7 @@ export default class FakeAdapter extends BaseAdapter {
 		opts?: SignalWaitOptions
 	): Promise<TSignalResult> {
 		const signalKey = this.getSignalKey(signalName, key || C.SIGNAL_EMPTY_KEY);
-		
+
 		// Check if signal already exists
 		if (this.signals.has(signalKey)) {
 			const payload = this.signals.get(signalKey);
@@ -479,14 +499,14 @@ export default class FakeAdapter extends BaseAdapter {
 
 		// Create promise to wait for signal
 		const pKey = signalName + ":" + (key || C.SIGNAL_EMPTY_KEY);
-		
+
 		return new Promise<TSignalResult>((resolve, reject) => {
 			const promise: StoredPromise<TSignalResult> = {
-				promise: null as any,
+				promise: null,
 				resolve,
 				reject
 			};
-			
+
 			this.signalPromises.set(pKey, promise as StoredPromise<unknown>);
 
 			// Set timeout if specified
@@ -494,7 +514,13 @@ export default class FakeAdapter extends BaseAdapter {
 				setTimeout(() => {
 					if (this.signalPromises.has(pKey)) {
 						this.signalPromises.delete(pKey);
-						reject(new WorkflowTimeoutError(signalName, key || "", parseDuration(opts.timeout)));
+						reject(
+							new WorkflowTimeoutError(
+								signalName,
+								key || "",
+								parseDuration(opts.timeout)
+							)
+						);
 					}
 				}, parseDuration(opts.timeout));
 			}
@@ -509,7 +535,7 @@ export default class FakeAdapter extends BaseAdapter {
 	 * @param opts - Additional options for the job.
 	 * @returns Resolves with the created job object.
 	 */
-	async newJob(workflowName: string, job: Job, opts?: CreateJobOptions): Promise<Job> {
+	async newJob(workflowName: string, job: Job, _opts?: CreateJobOptions): Promise<Job> {
 		// Store the job
 		const jobKey = this.getKey(workflowName, C.QUEUE_JOB, job.id);
 		this.jobs.set(jobKey, job);
@@ -522,7 +548,7 @@ export default class FakeAdapter extends BaseAdapter {
 				this.delayedJobs.set(delayedKey, []);
 			}
 			this.delayedJobs.get(delayedKey)!.push({ jobId: job.id, promoteAt: job.promoteAt });
-			
+
 			// Sort by promoteAt
 			this.delayedJobs.get(delayedKey)!.sort((a, b) => a.promoteAt - b.promoteAt);
 		} else {
@@ -596,7 +622,7 @@ export default class FakeAdapter extends BaseAdapter {
 		newJob.id = Utils.generateToken();
 		newJob.parent = job.id;
 		newJob.repeatCounter = (job.repeatCounter || 0) + 1;
-		
+
 		// Reset job state
 		for (const field of C.RERUN_REMOVABLE_FIELDS) {
 			delete newJob[field];
@@ -667,7 +693,7 @@ export default class FakeAdapter extends BaseAdapter {
 		if (!this.jobEvents.has(key)) {
 			this.jobEvents.set(key, []);
 		}
-		
+
 		const fullEvent: JobEvent = {
 			type: event.type || "unknown",
 			ts: event.ts || Date.now(),
@@ -675,7 +701,7 @@ export default class FakeAdapter extends BaseAdapter {
 			taskType: event.taskType || "workflow",
 			...event
 		};
-		
+
 		this.jobEvents.get(key)!.push(fullEvent);
 	}
 
@@ -699,7 +725,7 @@ export default class FakeAdapter extends BaseAdapter {
 	async listCompletedJobs(workflowName: string): Promise<ListFinishedJobResult[]> {
 		const completedKey = this.getKey(workflowName, C.QUEUE_COMPLETED);
 		const jobIds = this.queues.get(completedKey) || new Set();
-		
+
 		return Array.from(jobIds).map(id => {
 			const job = this.jobs.get(this.getKey(workflowName, C.QUEUE_JOB, id));
 			return {
@@ -717,7 +743,7 @@ export default class FakeAdapter extends BaseAdapter {
 	async listFailedJobs(workflowName: string): Promise<ListFinishedJobResult[]> {
 		const failedKey = this.getKey(workflowName, C.QUEUE_FAILED);
 		const jobIds = this.queues.get(failedKey) || new Set();
-		
+
 		return Array.from(jobIds).map(id => {
 			const job = this.jobs.get(this.getKey(workflowName, C.QUEUE_JOB, id));
 			return {
@@ -748,7 +774,7 @@ export default class FakeAdapter extends BaseAdapter {
 	async listActiveJobs(workflowName: string): Promise<ListJobResult[]> {
 		const activeKey = this.getKey(workflowName, C.QUEUE_ACTIVE);
 		const jobIds = this.queues.get(activeKey) || new Set();
-		
+
 		return Array.from(jobIds).map(id => ({ id }));
 	}
 
@@ -760,7 +786,7 @@ export default class FakeAdapter extends BaseAdapter {
 	async listWaitingJobs(workflowName: string): Promise<ListJobResult[]> {
 		const waitingKey = this.getKey(workflowName, C.QUEUE_WAITING);
 		const jobIds = this.queues.get(waitingKey) || new Set();
-		
+
 		return Array.from(jobIds).map(id => ({ id }));
 	}
 
@@ -778,7 +804,7 @@ export default class FakeAdapter extends BaseAdapter {
 			this.jobs.delete(jobKey);
 			this.jobEvents.delete(`${workflowName}:${jobId}`);
 			this.jobStates.delete(`${workflowName}:${jobId}`);
-			
+
 			// Remove from all queues
 			for (const [queueKey, jobSet] of this.queues.entries()) {
 				if (queueKey.includes(workflowName)) {
@@ -788,31 +814,31 @@ export default class FakeAdapter extends BaseAdapter {
 		} else if (workflowName) {
 			// Remove all jobs for workflow
 			const prefix = this.getKey(workflowName);
-			
+
 			for (const [key] of this.jobs.entries()) {
 				if (key.startsWith(prefix)) {
 					this.jobs.delete(key);
 				}
 			}
-			
+
 			for (const [key] of this.jobEvents.entries()) {
 				if (key.startsWith(workflowName + ":")) {
 					this.jobEvents.delete(key);
 				}
 			}
-			
+
 			for (const [key] of this.jobStates.entries()) {
 				if (key.startsWith(workflowName + ":")) {
 					this.jobStates.delete(key);
 				}
 			}
-			
+
 			for (const [queueKey] of this.queues.entries()) {
 				if (queueKey.includes(workflowName)) {
 					this.queues.delete(queueKey);
 				}
 			}
-			
+
 			this.delayedJobs.delete(workflowName);
 		} else {
 			// Clear everything
@@ -836,12 +862,12 @@ export default class FakeAdapter extends BaseAdapter {
 	async lockMaintenance(lockTime: number, lockName?: string): Promise<boolean> {
 		const key = lockName || "default";
 		const now = Date.now();
-		
+
 		const existingLock = this.locks.get(key);
-		if (existingLock && (existingLock.lockedAt + existingLock.lockTime) > now) {
+		if (existingLock && existingLock.lockedAt + existingLock.lockTime > now) {
 			return false; // Lock is still active
 		}
-		
+
 		this.locks.set(key, { lockedAt: now, lockTime });
 		return true;
 	}
@@ -867,30 +893,31 @@ export default class FakeAdapter extends BaseAdapter {
 		const activeKey = this.getKey(this.wf.name, C.QUEUE_ACTIVE);
 		const waitingKey = this.getKey(this.wf.name, C.QUEUE_WAITING);
 		const stalledKey = this.getKey(this.wf.name, C.QUEUE_STALLED);
-		
+
 		const activeJobs = this.queues.get(activeKey);
 		if (!activeJobs) return;
-		
+
 		const now = Date.now();
 		const stalledJobIds: string[] = [];
-		
+
 		for (const jobId of activeJobs) {
 			const job = this.jobs.get(this.getKey(this.wf.name, C.QUEUE_JOB, jobId));
-			if (job && job.startedAt && (now - job.startedAt) > 30000) { // 30 seconds stall timeout
+			if (job && job.startedAt && now - job.startedAt > 30000) {
+				// 30 seconds stall timeout
 				stalledJobIds.push(jobId);
 			}
 		}
-		
+
 		// Move stalled jobs
 		for (const jobId of stalledJobIds) {
 			activeJobs.delete(jobId);
-			
+
 			// Add to stalled queue
 			if (!this.queues.has(stalledKey)) {
 				this.queues.set(stalledKey, new Set());
 			}
 			this.queues.get(stalledKey)!.add(jobId);
-			
+
 			// Add to waiting queue for retry
 			if (!this.queues.has(waitingKey)) {
 				this.queues.set(waitingKey, new Set());
@@ -908,17 +935,17 @@ export default class FakeAdapter extends BaseAdapter {
 		const activeKey = this.getKey(this.wf.name, C.QUEUE_ACTIVE);
 		const activeJobs = this.queues.get(activeKey);
 		if (!activeJobs) return;
-		
+
 		const now = Date.now();
 		const timedOutJobIds: string[] = [];
-		
+
 		for (const jobId of activeJobs) {
 			const job = this.jobs.get(this.getKey(this.wf.name, C.QUEUE_JOB, jobId));
-			if (job && job.timeout && job.startedAt && (now - job.startedAt) > job.timeout) {
+			if (job && job.timeout && job.startedAt && now - job.startedAt > job.timeout) {
 				timedOutJobIds.push(jobId);
 			}
 		}
-		
+
 		// Move timed out jobs to failed
 		for (const jobId of timedOutJobIds) {
 			await this.moveToFailed(jobId, new WorkflowTimeoutError(this.wf.name, jobId, 0));
@@ -936,17 +963,17 @@ export default class FakeAdapter extends BaseAdapter {
 		const queueKey = this.getKey(this.wf.name, queueName);
 		const jobIds = this.queues.get(queueKey);
 		if (!jobIds) return;
-		
+
 		const now = Date.now();
 		const oldJobIds: string[] = [];
-		
+
 		for (const jobId of jobIds) {
 			const job = this.jobs.get(this.getKey(this.wf.name, C.QUEUE_JOB, jobId));
-			if (job && job.finishedAt && (now - job.finishedAt) > retention) {
+			if (job && job.finishedAt && now - job.finishedAt > retention) {
 				oldJobIds.push(jobId);
 			}
 		}
-		
+
 		// Remove old jobs
 		for (const jobId of oldJobIds) {
 			jobIds.delete(jobId);
@@ -964,10 +991,10 @@ export default class FakeAdapter extends BaseAdapter {
 	async maintenanceDelayedJobs(): Promise<void> {
 		const delayedJobs = this.delayedJobs.get(this.wf.name);
 		if (!delayedJobs || delayedJobs.length === 0) return;
-		
+
 		const now = Date.now();
 		const readyJobs: { jobId: string; promoteAt: number }[] = [];
-		
+
 		// Find jobs ready to be promoted
 		for (let i = 0; i < delayedJobs.length; i++) {
 			if (delayedJobs[i].promoteAt <= now) {
@@ -976,16 +1003,16 @@ export default class FakeAdapter extends BaseAdapter {
 				break; // Since array is sorted, no more ready jobs
 			}
 		}
-		
+
 		// Remove ready jobs from delayed queue and add to waiting queue
 		if (readyJobs.length > 0) {
 			this.delayedJobs.set(this.wf.name, delayedJobs.slice(readyJobs.length));
-			
+
 			const waitingKey = this.getKey(this.wf.name, C.QUEUE_WAITING);
 			if (!this.queues.has(waitingKey)) {
 				this.queues.set(waitingKey, new Set());
 			}
-			
+
 			for (const item of readyJobs) {
 				this.queues.get(waitingKey)!.add(item.jobId);
 			}
@@ -998,7 +1025,7 @@ export default class FakeAdapter extends BaseAdapter {
 	async getNextDelayedJobTime(): Promise<number | null> {
 		const delayedJobs = this.delayedJobs.get(this.wf.name);
 		if (!delayedJobs || delayedJobs.length === 0) return null;
-		
+
 		return delayedJobs[0].promoteAt;
 	}
 
@@ -1028,7 +1055,7 @@ export default class FakeAdapter extends BaseAdapter {
 			queues: {} as Record<string, string[]>,
 			delayedJobs: this.delayedJobs.get(workflowName) || []
 		};
-		
+
 		// Collect jobs
 		const prefix = this.getKey(workflowName);
 		for (const [key, job] of this.jobs.entries()) {
@@ -1036,28 +1063,28 @@ export default class FakeAdapter extends BaseAdapter {
 				dump.jobs[key] = job;
 			}
 		}
-		
+
 		// Collect job events
 		for (const [key, events] of this.jobEvents.entries()) {
 			if (key.startsWith(workflowName + ":")) {
 				dump.jobEvents[key] = events;
 			}
 		}
-		
+
 		// Collect job states
 		for (const [key, state] of this.jobStates.entries()) {
 			if (key.startsWith(workflowName + ":")) {
 				dump.jobStates[key] = state;
 			}
 		}
-		
+
 		// Collect queues
 		for (const [key, jobSet] of this.queues.entries()) {
 			if (key.includes(workflowName)) {
 				dump.queues[key] = Array.from(jobSet);
 			}
 		}
-		
+
 		// Write to file
 		const fs = await import("node:fs/promises");
 		const path = await import("node:path");

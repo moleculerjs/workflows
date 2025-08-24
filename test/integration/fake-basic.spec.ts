@@ -35,7 +35,7 @@ describe("Fake Adapter Integration Test", () => {
 
 	it("should execute a simple workflow with Fake adapter", async () => {
 		const job = await broker.wf.run("test.simple", { name: "fake-test" });
-		
+
 		expect(job).toStrictEqual({
 			id: expect.any(String),
 			createdAt: expect.epoch(),
@@ -49,7 +49,7 @@ describe("Fake Adapter Integration Test", () => {
 
 	it("should handle workflow state operations", async () => {
 		const job = await broker.wf.run("test.simple", { name: "state-test" });
-		
+
 		// Get job state
 		const state = await broker.wf.getState("test.simple", job.id);
 		expect(state).toBeDefined();
