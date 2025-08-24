@@ -45,9 +45,6 @@ export type StoredPromise<T = unknown> = {
 export default class FakeAdapter extends BaseAdapter {
 	declare opts: FakeAdapterOptions;
 	public isWorker: boolean;
-	public signalPromises: Map<string, StoredPromise<unknown>>;
-	public jobResultPromises: Map<string, StoredPromise<unknown>>;
-
 	public running: boolean;
 	public disconnecting: boolean;
 	public prefix!: string;
@@ -57,14 +54,31 @@ export default class FakeAdapter extends BaseAdapter {
 	declare logger: Logger;
 	declare mwOpts: WorkflowsMiddlewareOptions;
 
-	// In-memory storage
-	private jobs: Map<string, Job>; // key: workflowName:jobId
-	private jobEvents: Map<string, JobEvent[]>; // key: workflowName:jobId
-	private jobStates: Map<string, unknown>; // key: workflowName:jobId
-	private signals: Map<string, unknown>; // key: signalName:key
-	private queues: Map<string, Set<string>>; // key: workflowName:queueType, value: Set of jobIds
-	private delayedJobs: Map<string, { jobId: string; promoteAt: number }[]>; // key: workflowName
-	private locks: Map<string, { lockedAt: number; lockTime: number }>; // key: lockName
+	// Shared promise storage across all adapter instances
+	private static sharedSignalPromises: Map<string, StoredPromise<unknown>> = new Map();
+	private static sharedJobResultPromises: Map<string, StoredPromise<unknown>> = new Map();
+
+	// Instance accessors for shared promise storage  
+	public get signalPromises() { return FakeAdapter.sharedSignalPromises; }
+	public get jobResultPromises() { return FakeAdapter.sharedJobResultPromises; }
+
+	// Shared in-memory storage across all adapter instances
+	private static sharedJobs: Map<string, Job> = new Map(); // key: workflowName:jobId
+	private static sharedJobEvents: Map<string, JobEvent[]> = new Map(); // key: workflowName:jobId
+	private static sharedJobStates: Map<string, unknown> = new Map(); // key: workflowName:jobId
+	private static sharedSignals: Map<string, unknown> = new Map(); // key: signalName:key
+	private static sharedQueues: Map<string, Set<string>> = new Map(); // key: workflowName:queueType, value: Set of jobIds
+	private static sharedDelayedJobs: Map<string, { jobId: string; promoteAt: number }[]> = new Map(); // key: workflowName
+	private static sharedLocks: Map<string, { lockedAt: number; lockTime: number }> = new Map(); // key: lockName
+
+	// Instance accessors for shared storage
+	private get jobs() { return FakeAdapter.sharedJobs; }
+	private get jobEvents() { return FakeAdapter.sharedJobEvents; }
+	private get jobStates() { return FakeAdapter.sharedJobStates; }
+	private get signals() { return FakeAdapter.sharedSignals; }
+	private get queues() { return FakeAdapter.sharedQueues; }
+	private get delayedJobs() { return FakeAdapter.sharedDelayedJobs; }
+	private get locks() { return FakeAdapter.sharedLocks; }
 
 	/**
 	 * Constructor of adapter.
@@ -78,19 +92,8 @@ export default class FakeAdapter extends BaseAdapter {
 		});
 
 		this.isWorker = false;
-		this.signalPromises = new Map();
-		this.jobResultPromises = new Map();
 		this.running = false;
 		this.disconnecting = false;
-
-		// Initialize in-memory storage
-		this.jobs = new Map();
-		this.jobEvents = new Map();
-		this.jobStates = new Map();
-		this.signals = new Map();
-		this.queues = new Map();
-		this.delayedJobs = new Map();
-		this.locks = new Map();
 	}
 
 	/**
@@ -150,14 +153,15 @@ export default class FakeAdapter extends BaseAdapter {
 		this.disconnecting = true;
 		this.connected = false;
 
-		// Clear all in-memory data
-		this.jobs.clear();
-		this.jobEvents.clear();
-		this.jobStates.clear();
-		this.signals.clear();
-		this.queues.clear();
-		this.delayedJobs.clear();
-		this.locks.clear();
+		// Clear shared storage only if this is the last instance
+		// For simplicity, we'll just clear it every time for now
+		FakeAdapter.sharedJobs.clear();
+		FakeAdapter.sharedJobEvents.clear();
+		FakeAdapter.sharedJobStates.clear();
+		FakeAdapter.sharedSignals.clear();
+		FakeAdapter.sharedQueues.clear();
+		FakeAdapter.sharedDelayedJobs.clear();
+		FakeAdapter.sharedLocks.clear();
 
 		this.disconnecting = false;
 		this.log("info", this.wf?.name ?? "", null, "Fake adapter disconnected.");
@@ -193,7 +197,7 @@ export default class FakeAdapter extends BaseAdapter {
 	 * Start the job processor for the given workflow.
 	 */
 	startJobProcessor(): void {
-		if (this.running || !this.wf) return;
+		if (this.running) return;
 		this.running = true;
 		this.runJobProcessor();
 	}
@@ -507,7 +511,8 @@ export default class FakeAdapter extends BaseAdapter {
 	 */
 	async newJob(workflowName: string, job: Job, opts?: CreateJobOptions): Promise<Job> {
 		// Store the job
-		this.jobs.set(this.getKey(workflowName, C.QUEUE_JOB, job.id), job);
+		const jobKey = this.getKey(workflowName, C.QUEUE_JOB, job.id);
+		this.jobs.set(jobKey, job);
 
 		// Add to appropriate queue
 		if (job.promoteAt && job.promoteAt > Date.now()) {
@@ -539,6 +544,41 @@ export default class FakeAdapter extends BaseAdapter {
 
 		// Send job event
 		this.sendJobEvent(workflowName, job.id, "created");
+
+		// Add promise function to the job
+		job.promise = async () => {
+			// Get the Job to check the status
+			const job2 = await this.getJob(workflowName, job.id, [
+				"success",
+				"finishedAt",
+				"error",
+				"result"
+			]);
+
+			if (job2 && job2.finishedAt) {
+				if (job2.success) {
+					return job2.result;
+				} else {
+					throw this.broker.errorRegenerator.restore(job2.error, {});
+				}
+			}
+
+			// Check that Job promise is stored
+			if (this.jobResultPromises.has(job.id)) {
+				return this.jobResultPromises.get(job.id)!.promise;
+			}
+
+			// Store Job finished promise
+			const storePromise = {} as StoredPromise;
+			storePromise.promise = new Promise((resolve, reject) => {
+				storePromise.resolve = resolve;
+				storePromise.reject = reject;
+			});
+
+			this.jobResultPromises.set(job.id, storePromise);
+
+			return storePromise.promise;
+		};
 
 		return job;
 	}
@@ -776,13 +816,13 @@ export default class FakeAdapter extends BaseAdapter {
 			this.delayedJobs.delete(workflowName);
 		} else {
 			// Clear everything
-			this.jobs.clear();
-			this.jobEvents.clear();
-			this.jobStates.clear();
-			this.signals.clear();
-			this.queues.clear();
-			this.delayedJobs.clear();
-			this.locks.clear();
+			FakeAdapter.sharedJobs.clear();
+			FakeAdapter.sharedJobEvents.clear();
+			FakeAdapter.sharedJobStates.clear();
+			FakeAdapter.sharedSignals.clear();
+			FakeAdapter.sharedQueues.clear();
+			FakeAdapter.sharedDelayedJobs.clear();
+			FakeAdapter.sharedLocks.clear();
 		}
 	}
 
