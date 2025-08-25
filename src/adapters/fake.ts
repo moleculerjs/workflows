@@ -7,7 +7,7 @@
 "use strict";
 
 import _ from "lodash";
-import { Serializers, ServiceBroker, Logger, Utils } from "moleculer";
+import { ServiceBroker, Logger, Utils } from "moleculer";
 import BaseAdapter, { ListJobResult, ListDelayedJobResult, ListFinishedJobResult } from "./base.ts";
 import { WorkflowTimeoutError } from "../errors.ts";
 import * as C from "../constants.ts";
@@ -24,7 +24,6 @@ import {
 
 export interface FakeAdapterOptions extends BaseDefaultOptions {
 	prefix?: string;
-	serializer?: string;
 }
 
 export type StoredPromise<T = unknown> = {
@@ -42,7 +41,6 @@ export default class FakeAdapter extends BaseAdapter {
 	public running: boolean;
 	public disconnecting: boolean;
 	public prefix!: string;
-	public serializer!: Serializers.Base;
 	declare wf: Workflow;
 	declare broker: ServiceBroker;
 	declare logger: Logger;
@@ -99,9 +97,7 @@ export default class FakeAdapter extends BaseAdapter {
 	constructor(opts?: FakeAdapterOptions) {
 		super(opts);
 
-		this.opts = _.defaultsDeep(this.opts, {
-			serializer: "JSON"
-		});
+		this.opts = _.defaultsDeep(this.opts, {});
 
 		this.isWorker = false;
 		this.running = false;
@@ -135,11 +131,6 @@ export default class FakeAdapter extends BaseAdapter {
 		}
 
 		this.logger.debug("Workflows Fake adapter prefix:", this.prefix);
-
-		// create an instance of serializer (default to JSON)
-		this.serializer = Serializers.resolve(this.opts.serializer);
-		this.serializer.init(this.broker);
-		this.logger.info("Workflows serializer:", this.broker.getConstructorName(this.serializer));
 	}
 
 	/**
