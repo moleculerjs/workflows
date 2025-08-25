@@ -63,6 +63,8 @@ describe("Workflows Adapters Test", () => {
 
 	it("should work with Fake adapter object definition", async () => {
 		await createBroker({ type: "Fake" });
+		// Wait for stopping previous jobProcessor
+		await new Promise(resolve => setTimeout(resolve, 500));
 
 		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
 		expect(job).toStrictEqual({
@@ -81,6 +83,8 @@ describe("Workflows Adapters Test", () => {
 			type: "Fake",
 			options: { drainDelay: 2 }
 		});
+		// Wait for stopping previous jobProcessor
+		await new Promise(resolve => setTimeout(resolve, 500));
 
 		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
 		expect(job).toStrictEqual({
