@@ -25,7 +25,6 @@ import {
 export interface FakeAdapterOptions extends BaseDefaultOptions {
 	prefix?: string;
 	serializer?: string;
-	drainDelay?: number;
 }
 
 export type StoredPromise<T = unknown> = {
@@ -101,8 +100,7 @@ export default class FakeAdapter extends BaseAdapter {
 		super(opts);
 
 		this.opts = _.defaultsDeep(this.opts, {
-			serializer: "JSON",
-			drainDelay: 5
+			serializer: "JSON"
 		});
 
 		this.isWorker = false;
