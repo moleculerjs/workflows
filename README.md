@@ -348,8 +348,7 @@ WorkflowsMiddleware({ adapter: "Fake" });
 WorkflowsMiddleware({ adapter: { 
     type: "Fake", 
     options: { 
-        prefix: "test",
-        serializer: "JSON"
+        prefix: "test"
     } 
 } });
 ```
