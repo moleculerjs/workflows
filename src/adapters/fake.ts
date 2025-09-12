@@ -271,8 +271,7 @@ export default class FakeAdapter extends BaseAdapter {
 			await this.addJobEvent(this.wf.name, jobId, {
 				type: "started",
 				ts: Date.now(),
-				nodeID: this.broker.nodeID,
-				taskType: "workflow"
+				nodeID: this.broker.nodeID
 			});
 
 			// Send job event
@@ -318,7 +317,9 @@ export default class FakeAdapter extends BaseAdapter {
 		// Update job
 		job.finishedAt = Date.now();
 		job.success = true;
-		job.result = result;
+		if (result !== undefined) {
+			job.result = result;
+		}
 		if (job.startedAt) {
 			job.duration = job.finishedAt - job.startedAt;
 		}
@@ -327,15 +328,13 @@ export default class FakeAdapter extends BaseAdapter {
 		this.jobs.set(this.getKey(this.wf.name, C.QUEUE_JOB, jobId), job);
 
 		// Add completed event
-		await this.addJobEvent(this.wf.name, jobId, {
-			type: "completed",
-			ts: Date.now(),
-			nodeID: this.broker.nodeID,
-			taskType: "workflow"
+		await this.addJobEvent(this.wf.name, job.id, {
+			type: "finished"
 		});
 
 		// Send job event
-		this.sendJobEvent(this.wf.name, jobId, "completed");
+		this.sendJobEvent(this.wf.name, job.id, "finished");
+		this.sendJobEvent(this.wf.name, job.id, "completed");
 
 		// Notify if someone is waiting for the result
 		if (this.jobResultPromises.has(jobId)) {
@@ -386,16 +385,12 @@ export default class FakeAdapter extends BaseAdapter {
 		// Save updated job
 		this.jobs.set(this.getKey(this.wf.name, C.QUEUE_JOB, jobId), jobObj);
 
-		// Add failed event
 		await this.addJobEvent(this.wf.name, jobId, {
 			type: "failed",
-			ts: Date.now(),
-			nodeID: this.broker.nodeID,
-			taskType: "workflow",
-			error: err ? this.broker.errorRegenerator.extractPlainError(err) : undefined
+			error: this.broker.errorRegenerator.extractPlainError(err)
 		});
 
-		// Send job event
+		this.sendJobEvent(this.wf.name, jobId, "finished");
 		this.sendJobEvent(this.wf.name, jobId, "failed");
 
 		// Notify if someone is waiting for the result
@@ -549,14 +544,6 @@ export default class FakeAdapter extends BaseAdapter {
 			this.queues.get(waitingKey)!.add(job.id);
 		}
 
-		// Add created event
-		await this.addJobEvent(workflowName, job.id, {
-			type: "created",
-			ts: Date.now(),
-			nodeID: this.broker.nodeID,
-			taskType: "workflow"
-		});
-
 		// Send job event
 		this.sendJobEvent(workflowName, job.id, "created");
 
@@ -633,8 +620,10 @@ export default class FakeAdapter extends BaseAdapter {
 		jobId: string,
 		fields?: string[] | true
 	): Promise<Job | null> {
-		const job = this.jobs.get(this.getKey(workflowName, C.QUEUE_JOB, jobId));
+		let job = this.jobs.get(this.getKey(workflowName, C.QUEUE_JOB, jobId));
 		if (!job) return null;
+
+		job = _.omit(job, ["promise"]); // Remove promise function to be compatible with Redis adapter response
 
 		if (fields === true || !fields) {
 			return _.cloneDeep(job);
@@ -687,7 +676,6 @@ export default class FakeAdapter extends BaseAdapter {
 			type: event.type || "unknown",
 			ts: event.ts || Date.now(),
 			nodeID: event.nodeID || this.broker.nodeID,
-			taskType: event.taskType || "workflow",
 			...event
 		};
 
