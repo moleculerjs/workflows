@@ -136,6 +136,7 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions):
 
 			/**
 			 * Execute a workflow
+			 *
 			 * @param workflowName
 			 * @param payload
 			 * @param opts
