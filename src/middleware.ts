@@ -466,7 +466,7 @@ export default function WorkflowsMiddleware(mwOpts: WorkflowsMiddlewareOptions):
 
 				/**
 				 * Call a local channel event handler. Useful for unit tests.
-				 * TODO:
+				 * TODO: need to implement
 				 *
 				 * @param {String} workflowName
 				 * @param {Object} payload
