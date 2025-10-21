@@ -58,7 +58,7 @@ export interface JobEvent {
 	ts: number;
 	nodeID: string;
 	taskId?: number;
-	taskType: string;
+	taskType?: string;
 	duration?: number;
 	result?: unknown;
 	error?: Errors.PlainMoleculerError;

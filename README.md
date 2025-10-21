@@ -335,6 +335,43 @@ WorkflowsMiddleware({ adapter: {
 } });
 ```
 
+### Fake adapter
+The Fake adapter stores all workflow data in memory instead of using external storage like Redis. It's ideal for testing, development, and CI/CD environments where you don't want to set up external dependencies.
+
+**Using Fake adapter:**
+```ts
+WorkflowsMiddleware({ adapter: "Fake" });
+```
+
+**Using Fake adapter with options:**
+```ts
+WorkflowsMiddleware({ adapter: { 
+    type: "Fake", 
+    options: { 
+        prefix: "test"
+    } 
+} });
+```
+
+**Using Fake adapter with Adapter class:**
+```ts
+import { Middleware as WorkflowsMiddleware, Adapters } from "@moleculer/workflows";
+
+WorkflowsMiddleware({ adapter: { 
+    type: Adapters.Fake, 
+    options: { 
+        prefix: "test"
+    } 
+} });
+```
+
+**Features:**
+- **In-memory storage** - No external dependencies required
+- **Full compatibility** - Implements all workflow features (jobs, signals, states, events)
+- **Shared storage** - Multiple adapter instances share the same in-memory data
+- **Perfect for testing** - Lightweight and fast for unit/integration tests
+- **Development friendly** - No setup required for local development
+
 
 ## References
 

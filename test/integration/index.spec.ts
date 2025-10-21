@@ -7,6 +7,8 @@ import { delay } from "../utils";
 import "../vitest-extensions.ts";
 import { Job } from "../../src/types.ts";
 
+const ADAPTER = process.env.ADAPTER || "Fake";
+
 describe("Workflows Common Test", () => {
 	let broker;
 	let FLOWS: string[] = [];
@@ -29,7 +31,7 @@ describe("Workflows Common Test", () => {
 	beforeAll(async () => {
 		broker = new ServiceBroker({
 			logger: false,
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: ADAPTER })]
 		});
 
 		broker.createService({
@@ -601,14 +603,14 @@ describe("Workflows Remote worker Test", () => {
 			logger: false,
 			nodeID: "broker",
 			transporter: "Redis",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: ADAPTER })]
 		});
 
 		worker = new ServiceBroker({
 			logger: false,
 			nodeID: "worker",
 			transporter: "Redis",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: ADAPTER })]
 		});
 
 		worker.createService({
