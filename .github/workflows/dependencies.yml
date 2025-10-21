@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        # It's necessary to fetch with other token otherwise the push doesn't trigger other Github Action workflows
+        # https://github.com/orgs/community/discussions/37103
+        token: ${{ secrets.PAT }}
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
