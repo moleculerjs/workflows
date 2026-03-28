@@ -2,8 +2,10 @@
 
 # v0.1.3 (2026-03-28)
 
+## Breaking changes
+- **Minimum Node.js version changed from 20 to 22.**
+
 ## Changes
-- Minimum Node.js version changed from 20 to 22.
 - Updated Moleculer peer dependency to include released `^0.15.0`.
 - Updated `moleculer-repl` to `^0.8.0` and `moleculer-web` to `^0.11.0`.
 - Upgraded ESLint to v10 and TypeScript to v6.
