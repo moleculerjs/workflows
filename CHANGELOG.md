@@ -1,6 +1,14 @@
-<a name="v0.1.3"></a>
+<a name="v0.2.1"></a>
 
-# v0.1.3 (2026-03-28)
+# v0.2.1 (2026-03-29)
+
+## Bug fixes
+- Fixed invalid JSON in postbuild-generated `dist/cjs/package.json` and `dist/esm/package.json` (unquoted keys broke CJS imports).
+
+---
+<a name="v0.2.0"></a>
+
+# v0.2.0 (2026-03-28)
 
 ## Breaking changes
 - **Minimum Node.js version changed from 20 to 22.**
