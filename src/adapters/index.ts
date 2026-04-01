@@ -10,10 +10,11 @@ import _ from "lodash";
 import { Errors } from "moleculer";
 import BaseAdapter, { BaseDefaultOptions } from "./base.ts";
 import RedisAdapter, { RedisAdapterOptions } from "./redis.ts";
+import FakeAdapter, { FakeAdapterOptions } from "./fake.ts";
 
 const Adapters = {
 	Base: BaseAdapter,
-	// Fake: require("./fake"),
+	Fake: FakeAdapter,
 	Redis: RedisAdapter
 };
 
@@ -24,7 +25,7 @@ export type ResolvableAdapterType =
 	| string
 	| {
 			type: keyof typeof Adapters | typeof BaseAdapter;
-			options: BaseDefaultOptions | RedisAdapterOptions;
+			options: BaseDefaultOptions | RedisAdapterOptions | FakeAdapterOptions;
 	  };
 
 function getByName(name: string): AdapterTypes | null {
