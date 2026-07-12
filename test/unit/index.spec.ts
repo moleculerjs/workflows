@@ -25,6 +25,13 @@ describe("Test Adapter resolver", () => {
 			expect(adapter).toBeInstanceOf(Adapters.Fake);
 			expect(adapter.opts).toMatchObject({ drainDelay: 10 });
 		});
+
+		it("should resolve Fake adapter from class", () => {
+			const options = { drainDelay: 10 };
+			const adapter = Adapters.resolve({ type: Adapters.Fake, options });
+			expect(adapter).toBeInstanceOf(Adapters.Fake);
+			expect(adapter.opts).toMatchObject({ drainDelay: 10 });
+		});
 	});
 
 	describe("Resolve Redis adapter", () => {

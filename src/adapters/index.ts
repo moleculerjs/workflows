@@ -55,7 +55,8 @@ function resolve(opt?: ResolvableAdapterType): BaseAdapter {
 		}
 	} else if (_.isObject(opt)) {
 		let AdapterClass;
-		if (opt.type instanceof BaseAdapter) {
+		if (typeof opt.type === "function") {
+			// Adapter class (e.g. Adapters.Fake)
 			AdapterClass = opt.type;
 		} else if (typeof opt.type === "string") {
 			AdapterClass = getByName(opt.type || "Redis");
