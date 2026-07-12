@@ -1024,7 +1024,11 @@ export default class FakeAdapter extends BaseAdapter {
 			const retryAttempts = parseInt(String(retryFields[1] ?? "0"));
 
 			if (retries > 0 && retryAttempts < retries) {
-				this.storage.hincrby(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), "retryAttempts", 1);
+				this.storage.hincrby(
+					this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
+					"retryAttempts",
+					1
+				);
 				const backoffTime = this.getBackoffTime(retryAttempts);
 				this.log(
 					"debug",
@@ -1034,7 +1038,11 @@ export default class FakeAdapter extends BaseAdapter {
 				);
 
 				const promoteAt = Date.now() + backoffTime;
-				this.storage.hset(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), "promoteAt", promoteAt);
+				this.storage.hset(
+					this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
+					"promoteAt",
+					promoteAt
+				);
 				this.storage.zadd(this.getKey(this.wf.name, C.QUEUE_DELAYED), promoteAt, job.id);
 
 				// Publish promoteAt time to all workers
@@ -1596,9 +1604,7 @@ export default class FakeAdapter extends BaseAdapter {
 		this.log("debug", this.wf.name, null, "Maintenance stalled jobs...");
 
 		try {
-			const stalledJobIds = this.storage.smembers(
-				this.getKey(this.wf.name, C.QUEUE_STALLED)
-			);
+			const stalledJobIds = this.storage.smembers(this.getKey(this.wf.name, C.QUEUE_STALLED));
 			if (stalledJobIds.length > 0) {
 				for (const jobId of stalledJobIds) {
 					try {

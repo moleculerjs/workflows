@@ -54,7 +54,7 @@ function resolve(opt?: ResolvableAdapterType): BaseAdapter {
 			throw new Errors.ServiceSchemaError(`Invalid Adapter type '${opt}'.`, { type: opt });
 		}
 	} else if (_.isObject(opt)) {
-		let AdapterClass = null;
+		let AdapterClass;
 		if (opt.type instanceof BaseAdapter) {
 			AdapterClass = opt.type;
 		} else if (typeof opt.type === "string") {

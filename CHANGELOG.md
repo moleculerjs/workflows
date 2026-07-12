@@ -1,3 +1,13 @@
+<a name="Unreleased"></a>
+
+# Unreleased
+
+## Changes
+- Added new `Fake` (in-memory) adapter for testing & development. It covers the same functionality as the Redis adapter, but stores the jobs only in the memory, so no Redis server is needed. The storage is shared between adapter instances with the same prefix, so multiple brokers within the same process can communicate with each other.
+- Moved the common `serializeJob`, `deserializeJob`, `getBackoffTime` and `formatZrangeResultToObject` methods from `RedisAdapter` to `BaseAdapter`.
+- Integration tests can be executed with the Fake adapter using the `WF_TEST_ADAPTER=Fake` environment variable (`npm run test:integration:fake`). CI runs the test suite with both adapters.
+
+---
 <a name="v0.2.1"></a>
 
 # v0.2.1 (2026-03-29)

@@ -28,7 +28,7 @@ jobs:
     strategy:
       matrix:
         node-version: [22.x, 24.x]
-        adapter: ["Redis"]
+        adapter: ["Redis", "Fake"]
       fail-fast: false
     steps:
     - uses: actions/checkout@v4
@@ -48,10 +48,12 @@ jobs:
 
     - name: Check containers
       run: docker compose ps
+      if: ${{ matrix.adapter == 'Redis' }}
       working-directory: ./test
 
     - name: Check logs
       run: docker compose logs
+      if: ${{ matrix.adapter == 'Redis' }}
       working-directory: ./test
 
     - name: Run integration tests
@@ -59,7 +61,7 @@ jobs:
       timeout-minutes: 15
       env:
         GITHUB_ACTIONS_CI: true
-        ADAPTER: ${{ matrix.adapter }}
+        WF_TEST_ADAPTER: ${{ matrix.adapter }}
 
     # - name: Run leak detection tests
     #   run: npm run test:leak
@@ -68,9 +70,10 @@ jobs:
 
     - name: Show container logs (in case of failure)
       run: docker compose logs
-      if: failure()
+      if: ${{ failure() && matrix.adapter == 'Redis' }}
       working-directory: ./test
 
     - name: Stop containers
       run: docker compose down -v
+      if: ${{ matrix.adapter == 'Redis' }}
       working-directory: ./test

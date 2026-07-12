@@ -335,6 +335,34 @@ WorkflowsMiddleware({ adapter: {
 } });
 ```
 
+### Fake adapter
+The Fake adapter covers the same functionality as the Redis adapter, but it stores the jobs only in the memory. It's designed for testing and development, so you don't need a running Redis server. 
+
+>The storage is shared between adapter instances with the same prefix, so multiple brokers within the same process can communicate with each other. But it doesn't work between multiple processes and the stored jobs are lost when the process exits. **Do not use it in production!**
+
+**Using Fake adapter:**
+```ts
+WorkflowsMiddleware({ adapter: "Fake" });
+```
+
+**Using Fake adapter with options:**
+```ts
+WorkflowsMiddleware({ adapter: { 
+    type: "Fake", 
+    options: { 
+        prefix: "test" 
+    } 
+} });
+```
+
+#### FakeAdapter Options
+
+| Name         | Type                                                      | Description                                                                                 |
+|--------------|-----------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `prefix`       | `string`                                                    | Prefix for storage keys. **Default:** `"molwf"` or the broker namespace                                                                     |
+| `serializer`   | `string`                                                    | Serializer to use for job data. **Default:** `JSON`                                                            |
+| `drainDelay`   | `number`                                                    | Blocking delay time (sec). **Default:** `5`                                                          |
+
 
 ## References
 
