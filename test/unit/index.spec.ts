@@ -13,7 +13,6 @@ describe("Test Adapter resolver", () => {
 		});
 	});
 
-	/*
 	describe("Resolve Fake adapter", () => {
 		it("should resolve Fake adapter from string", () => {
 			const adapter = Adapters.resolve("Fake");
@@ -27,7 +26,6 @@ describe("Test Adapter resolver", () => {
 			expect(adapter.opts).toMatchObject({ drainDelay: 10 });
 		});
 	});
-	*/
 
 	describe("Resolve Redis adapter", () => {
 		it("should resolve Redis adapter from connection string", () => {
