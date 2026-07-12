@@ -5,6 +5,11 @@ import WorkflowsMiddleware from "../../src/middleware.ts";
 
 import "../vitest-extensions.ts";
 import { Adapters } from "../../src";
+import { adapterType } from "../utils";
+
+// The Redis-based cases need a running Redis server, skip them
+// when the test suite runs with the Fake adapter (no Redis available).
+const itRedis = it.skipIf(adapterType === "Fake");
 
 describe("Workflows Adapters Test", () => {
 	let broker;
@@ -46,7 +51,7 @@ describe("Workflows Adapters Test", () => {
 		await broker.stop();
 	});
 
-	it("should work without adapter definition", async () => {
+	itRedis("should work without adapter definition", async () => {
 		await createBroker();
 
 		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
@@ -61,7 +66,7 @@ describe("Workflows Adapters Test", () => {
 		expect(result).toBe("Hello, ephemeral");
 	});
 
-	it("should work with URI definition", async () => {
+	itRedis("should work with URI definition", async () => {
 		await createBroker("redis://localhost:6379");
 
 		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
@@ -76,7 +81,7 @@ describe("Workflows Adapters Test", () => {
 		expect(result).toBe("Hello, ephemeral");
 	});
 
-	it("should work with object definition", async () => {
+	itRedis("should work with object definition", async () => {
 		await createBroker({ type: "Redis" });
 
 		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
@@ -91,7 +96,7 @@ describe("Workflows Adapters Test", () => {
 		expect(result).toBe("Hello, ephemeral");
 	});
 
-	it("should work with object definition (with options)", async () => {
+	itRedis("should work with object definition (with options)", async () => {
 		await createBroker({
 			type: "Redis",
 			options: { redis: { host: "localhost", port: 6379 } }
@@ -109,7 +114,7 @@ describe("Workflows Adapters Test", () => {
 		expect(result).toBe("Hello, ephemeral");
 	});
 
-	it("should work with adapter instance", async () => {
+	itRedis("should work with adapter instance", async () => {
 		await createBroker({ type: Adapters.Redis });
 
 		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
@@ -124,7 +129,7 @@ describe("Workflows Adapters Test", () => {
 		expect(result).toBe("Hello, ephemeral");
 	});
 
-	it("should work with adapter instance (with options)", async () => {
+	itRedis("should work with adapter instance (with options)", async () => {
 		await createBroker({
 			type: Adapters.Redis,
 			options: { redis: { host: "localhost", port: 6379 } }
