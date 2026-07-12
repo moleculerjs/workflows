@@ -8,6 +8,7 @@
 - Integration tests can be executed with the Fake adapter using the `WF_TEST_ADAPTER=Fake` environment variable (`npm run test:integration:fake`). CI runs the test suite with both adapters.
 - Fixed adapter class resolution in `Adapters.resolve()` (the `{ type: Adapters.Redis }` form silently fell back to the default Redis adapter). The `options` property is optional now and the given class is validated.
 - Fixed job locking: the adapters throw `WorkflowAlreadyLocked` error on lock contention, so the job processor skips the locked job instead of moving it to the failed queue.
+- Updated dependencies. TypeScript stays on 6.x: TypeScript 7.0 ships without the Compiler API which `typescript-eslint` relies on (a new API is expected in TypeScript 7.1).
 
 ---
 <a name="v0.2.1"></a>
