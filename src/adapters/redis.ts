@@ -72,7 +72,7 @@ export default class RedisAdapter extends BaseAdapter {
 	public running: boolean;
 	public disconnecting: boolean;
 	public prefix!: string;
-	public serializer!: Serializers.Base;
+	declare serializer: Serializers.Base;
 	declare wf: Workflow;
 	declare broker: ServiceBroker;
 	declare logger: Logger;
@@ -713,22 +713,6 @@ export default class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Calculate the backoff time for a job.
-	 *
-	 * @param retryAttempts
-	 * @returns The backoff time in milliseconds.
-	 */
-	getBackoffTime(retryAttempts: number): number {
-		const opts = this.wf.opts.retryPolicy || {};
-		const delay = parseDuration(opts.delay) ?? 100;
-
-		return Math.min(
-			delay * Math.pow(opts.factor || 1, retryAttempts),
-			opts.maxDelay ?? Number.POSITIVE_INFINITY
-		);
-	}
-
-	/**
 	 * Move a job to the failed queue.
 	 *
 	 * @param job - The job object.
@@ -1138,56 +1122,6 @@ export default class RedisAdapter extends BaseAdapter {
 		}
 
 		return null;
-	}
-
-	/**
-	 * Serialize a job object for storage in Redis.
-	 *
-	 * @param job - The job object to serialize.
-	 * @returns The serialized job object.
-	 */
-	serializeJob(job: Job): Job {
-		const res = { ...job };
-
-		for (const field of C.JOB_FIELDS_JSON) {
-			if (job[field] != null) {
-				res[field] = this.serializer.serialize(job[field]);
-			}
-		}
-
-		return res;
-	}
-
-	/**
-	 * Deserialize a job object retrieved from Redis.
-	 *
-	 * @param {Job} job - The serialized job object.
-	 * @returns {Job} The deserialized job object.
-	 */
-	deserializeJob(job: Job): Job {
-		const res = {};
-
-		for (const [key, value] of Object.entries(job)) {
-			if (C.JOB_FIELDS_JSON.includes(key)) {
-				if (value != null) {
-					res[key] = value !== "" ? this.serializer.deserialize(value) : null;
-				}
-			} else if (C.JOB_FIELDS_NUMERIC.includes(key)) {
-				if (value != null) {
-					res[key] = value !== "" ? Number(value) : null;
-				}
-			} else if (C.JOB_FIELDS_BOOLEAN.includes(key)) {
-				if (value != null) {
-					res[key] = String(value) === "true";
-				}
-			} else {
-				if (value != null) {
-					res[key] = value !== "" ? String(value) : null;
-				}
-			}
-		}
-
-		return res as Job;
 	}
 
 	/**
@@ -1653,28 +1587,6 @@ export default class RedisAdapter extends BaseAdapter {
 	 */
 	getSignalKey(signalName: string, key?: string): string {
 		return `${this.prefix}${C.QUEUE_CATEGORY_SIGNAL}:${signalName}:${key}`;
-	}
-
-	/**
-	 * Format the result of zrange command to an array of objects.
-	 *
-	 * @param list
-	 * @param timeField
-	 * @returns
-	 */
-	formatZrangeResultToObject<TResult>(
-		list: string[],
-		timeField: string = "finishedAt"
-	): TResult[] {
-		const arr = [];
-		for (let i = 0; i < list.length; i += 2) {
-			arr.push({
-				id: list[i],
-				[timeField]: Number(list[i + 1])
-			});
-		}
-
-		return arr;
 	}
 
 	/**
