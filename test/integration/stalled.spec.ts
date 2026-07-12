@@ -3,7 +3,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { ServiceBroker } from "moleculer";
 import { Errors } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
-import { delay } from "../utils";
+import { delay, adapterType } from "../utils";
 
 import "../vitest-extensions.ts";
 
@@ -23,7 +23,7 @@ describe("Workflows Stalled Job Test", () => {
 		broker = new ServiceBroker({
 			nodeID: "master",
 			logger: false,
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType })]
 		});
 
 		worker = new ServiceBroker({
@@ -32,7 +32,7 @@ describe("Workflows Stalled Job Test", () => {
 
 			middlewares: [
 				WorkflowsMiddleware({
-					adapter: "Redis",
+					adapter: adapterType,
 					maintenanceTime: 4,
 					lockExpiration: 5
 				})

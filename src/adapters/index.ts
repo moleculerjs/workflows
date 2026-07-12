@@ -9,11 +9,12 @@
 import _ from "lodash";
 import { Errors } from "moleculer";
 import BaseAdapter, { BaseDefaultOptions } from "./base.ts";
+import FakeAdapter, { FakeAdapterOptions } from "./fake.ts";
 import RedisAdapter, { RedisAdapterOptions } from "./redis.ts";
 
 const Adapters = {
 	Base: BaseAdapter,
-	// Fake: require("./fake"),
+	Fake: FakeAdapter,
 	Redis: RedisAdapter
 };
 
@@ -24,7 +25,7 @@ export type ResolvableAdapterType =
 	| string
 	| {
 			type: keyof typeof Adapters | typeof BaseAdapter;
-			options: BaseDefaultOptions | RedisAdapterOptions;
+			options?: BaseDefaultOptions | FakeAdapterOptions | RedisAdapterOptions;
 	  };
 
 function getByName(name: string): AdapterTypes | null {
@@ -53,8 +54,15 @@ function resolve(opt?: ResolvableAdapterType): BaseAdapter {
 			throw new Errors.ServiceSchemaError(`Invalid Adapter type '${opt}'.`, { type: opt });
 		}
 	} else if (_.isObject(opt)) {
-		let AdapterClass = null;
-		if (opt.type instanceof BaseAdapter) {
+		let AdapterClass;
+		if (typeof opt.type === "function") {
+			// Adapter class (e.g. Adapters.Fake)
+			if (!(opt.type.prototype instanceof BaseAdapter)) {
+				throw new Errors.ServiceSchemaError(
+					`Invalid Adapter class. It should extend the 'BaseAdapter' class.`,
+					{ type: opt.type }
+				);
+			}
 			AdapterClass = opt.type;
 		} else if (typeof opt.type === "string") {
 			AdapterClass = getByName(opt.type || "Redis");

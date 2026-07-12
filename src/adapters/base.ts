@@ -6,7 +6,9 @@
 
 import _ from "lodash";
 import { WorkflowError } from "../errors.ts";
-import type { ServiceBroker, Logger } from "moleculer";
+import * as C from "../constants.ts";
+import { parseDuration } from "../utils.ts";
+import type { ServiceBroker, Logger, Serializers } from "moleculer";
 import type {
 	Job,
 	JobEvent,
@@ -33,6 +35,7 @@ export default abstract class BaseAdapter {
 	broker?: ServiceBroker;
 	logger?: Logger;
 	mwOpts?: WorkflowsMiddlewareOptions;
+	serializer?: Serializers.Base;
 
 	/**
 	 * Constructor of adapter
@@ -343,6 +346,94 @@ export default abstract class BaseAdapter {
 
 			this.broker![this.mwOpts.jobEventType](eventName, payload);
 		}
+	}
+
+	/**
+	 * Serialize a job object for storage.
+	 *
+	 * @param job - The job object to serialize.
+	 * @returns The serialized job object.
+	 */
+	serializeJob(job: Job): Job {
+		const res = { ...job };
+
+		for (const field of C.JOB_FIELDS_JSON) {
+			if (job[field] != null) {
+				res[field] = this.serializer.serialize(job[field]);
+			}
+		}
+
+		return res;
+	}
+
+	/**
+	 * Deserialize a job object retrieved from the store.
+	 *
+	 * @param {Job} job - The serialized job object.
+	 * @returns {Job} The deserialized job object.
+	 */
+	deserializeJob(job: Job): Job {
+		const res = {};
+
+		for (const [key, value] of Object.entries(job)) {
+			if (C.JOB_FIELDS_JSON.includes(key)) {
+				if (value != null) {
+					res[key] = value !== "" ? this.serializer.deserialize(value) : null;
+				}
+			} else if (C.JOB_FIELDS_NUMERIC.includes(key)) {
+				if (value != null) {
+					res[key] = value !== "" ? Number(value) : null;
+				}
+			} else if (C.JOB_FIELDS_BOOLEAN.includes(key)) {
+				if (value != null) {
+					res[key] = String(value) === "true";
+				}
+			} else {
+				if (value != null) {
+					res[key] = value !== "" ? String(value) : null;
+				}
+			}
+		}
+
+		return res as Job;
+	}
+
+	/**
+	 * Calculate the backoff time for a job.
+	 *
+	 * @param retryAttempts
+	 * @returns The backoff time in milliseconds.
+	 */
+	getBackoffTime(retryAttempts: number): number {
+		const opts = this.wf.opts.retryPolicy || {};
+		const delay = parseDuration(opts.delay) ?? 100;
+
+		return Math.min(
+			delay * Math.pow(opts.factor || 1, retryAttempts),
+			opts.maxDelay ?? Number.POSITIVE_INFINITY
+		);
+	}
+
+	/**
+	 * Format the result of zrange command to an array of objects.
+	 *
+	 * @param list
+	 * @param timeField
+	 * @returns
+	 */
+	formatZrangeResultToObject<TResult>(
+		list: string[],
+		timeField: string = "finishedAt"
+	): TResult[] {
+		const arr = [];
+		for (let i = 0; i < list.length; i += 2) {
+			arr.push({
+				id: list[i],
+				[timeField]: Number(list[i + 1])
+			});
+		}
+
+		return arr;
 	}
 
 	/**

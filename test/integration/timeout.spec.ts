@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
-import { delay } from "../utils";
+import { delay, adapterType } from "../utils";
 
 import "../vitest-extensions.ts";
 
@@ -18,7 +18,7 @@ describe("Workflows Timeout Test", () => {
 		broker = new ServiceBroker({
 			logger: false,
 			logLevel: "error",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis", maintenanceTime: 3 })]
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType, maintenanceTime: 3 })]
 		});
 
 		broker.createService({

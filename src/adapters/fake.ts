@@ -7,8 +7,8 @@
 "use strict";
 
 import _ from "lodash";
-import { Cluster, ClusterOptions, Redis as RedisClient, RedisOptions } from "ioredis";
-import { Serializers, ServiceBroker, Logger, Errors } from "moleculer";
+import { EventEmitter } from "node:events";
+import { Serializers, ServiceBroker, Logger } from "moleculer";
 import { Utils } from "moleculer";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -32,10 +32,7 @@ import {
 	SignalWaitOptions
 } from "../types.ts";
 
-export interface RedisAdapterOptions extends BaseDefaultOptions {
-	url?: string;
-	redis?: RedisOptions;
-	cluster?: { nodes: string[]; clusterOptions?: ClusterOptions };
+export interface FakeAdapterOptions extends BaseDefaultOptions {
 	prefix?: string;
 	serializer?: string;
 	drainDelay?: number;
@@ -47,29 +44,357 @@ export type StoredPromise<T = unknown> = {
 	reject: (e: Error) => void;
 };
 
-declare module "ioredis" {
-	interface Redis {
-		blocked?: boolean; // Custom property to track if the client is blocked
+type StoredString = { value: unknown; expiresAt: number | null };
+
+/**
+ * In-memory storage engine shared between adapter instances with the same prefix.
+ * It mimics the Redis data structures (hash, list, set, sorted set, string with
+ * expiration) and provides an EventEmitter as the Pub/Sub replacement.
+ */
+export class FakeStorage {
+	public hashes: Map<string, Map<string, unknown>>;
+	public lists: Map<string, unknown[]>;
+	public sets: Map<string, Set<string>>;
+	public zsets: Map<string, Map<string, number>>;
+	public strings: Map<string, StoredString>;
+	public emitter: EventEmitter;
+	public waiters: Map<string, Array<() => void>>;
+
+	constructor() {
+		this.hashes = new Map();
+		this.lists = new Map();
+		this.sets = new Map();
+		this.zsets = new Map();
+		this.strings = new Map();
+		this.emitter = new EventEmitter();
+		this.emitter.setMaxListeners(0);
+		this.waiters = new Map();
 	}
 
-	interface Cluster {
-		blocked?: boolean; // Custom property to track if the client is blocked
+	// --- Blocked waiters (like Redis blocked BRPOPLPUSH clients) ---
+
+	addWaiter(key: string, waiter: () => void): void {
+		let arr = this.waiters.get(key);
+		if (!arr) {
+			arr = [];
+			this.waiters.set(key, arr);
+		}
+		arr.push(waiter);
+	}
+
+	removeWaiter(key: string, waiter: () => void): void {
+		const arr = this.waiters.get(key);
+		if (!arr) return;
+		const index = arr.indexOf(waiter);
+		if (index > -1) arr.splice(index, 1);
+		if (arr.length === 0) this.waiters.delete(key);
+	}
+
+	/**
+	 * Wake up the first blocked waiter of the key (FIFO, like Redis serves
+	 * blocked clients).
+	 */
+	wakeOneWaiter(key: string): void {
+		const arr = this.waiters.get(key);
+		if (!arr || arr.length === 0) return;
+		const waiter = arr.shift();
+		if (arr.length === 0) this.waiters.delete(key);
+		waiter();
+	}
+
+	/**
+	 * Wake up all blocked waiters of the key (e.g. on disconnecting).
+	 */
+	wakeAllWaiters(key: string): void {
+		const arr = this.waiters.get(key);
+		if (!arr) return;
+		this.waiters.delete(key);
+		for (const waiter of arr) waiter();
+	}
+
+	/**
+	 * Normalize a value the same way as Redis stores hash field values:
+	 * everything is stored as string, except Buffers (serialized content).
+	 */
+	private normalizeValue(value: unknown): unknown {
+		if (Buffer.isBuffer(value)) return value;
+		return String(value);
+	}
+
+	// --- HASH commands ---
+
+	hmset(key: string, obj: object): void {
+		let hash = this.hashes.get(key);
+		if (!hash) {
+			hash = new Map();
+			this.hashes.set(key, hash);
+		}
+		for (const [field, value] of Object.entries(obj)) {
+			if (value === undefined) continue;
+			hash.set(field, this.normalizeValue(value));
+		}
+	}
+
+	hset(key: string, field: string, value: unknown): void {
+		this.hmset(key, { [field]: value });
+	}
+
+	hsetnx(key: string, field: string, value: unknown): number {
+		const hash = this.hashes.get(key);
+		if (hash && hash.has(field)) return 0;
+		this.hmset(key, { [field]: value });
+		return 1;
+	}
+
+	hget(key: string, field: string): unknown {
+		const hash = this.hashes.get(key);
+		if (!hash) return null;
+		return hash.has(field) ? hash.get(field) : null;
+	}
+
+	hmget(key: string, fields: string[]): unknown[] {
+		return fields.map(field => this.hget(key, field));
+	}
+
+	hgetall(key: string): Record<string, unknown> {
+		const hash = this.hashes.get(key);
+		if (!hash) return {};
+		return Object.fromEntries(hash.entries());
+	}
+
+	hincrby(key: string, field: string, increment: number): number {
+		const current = this.hget(key, field);
+		const value = (current != null ? parseInt(String(current)) : 0) + increment;
+		this.hset(key, field, value);
+		return value;
+	}
+
+	hdel(key: string, fields: string[]): void {
+		const hash = this.hashes.get(key);
+		if (!hash) return;
+		for (const field of fields) hash.delete(field);
+		if (hash.size === 0) this.hashes.delete(key);
+	}
+
+	// --- LIST commands ---
+
+	lpush(key: string, value: unknown): void {
+		let list = this.lists.get(key);
+		if (!list) {
+			list = [];
+			this.lists.set(key, list);
+		}
+		list.unshift(value);
+	}
+
+	rpush(key: string, value: unknown): void {
+		let list = this.lists.get(key);
+		if (!list) {
+			list = [];
+			this.lists.set(key, list);
+		}
+		list.push(value);
+	}
+
+	rpoplpush(source: string, destination: string): unknown {
+		const list = this.lists.get(source);
+		if (!list || list.length === 0) return null;
+		const value = list.pop();
+		if (list.length === 0) this.lists.delete(source);
+		this.lpush(destination, value);
+		return value;
+	}
+
+	lrange(key: string, start: number, stop: number): unknown[] {
+		const list = this.lists.get(key);
+		if (!list) return [];
+		return list.slice(start, stop === -1 ? undefined : stop + 1);
+	}
+
+	lrem(key: string, count: number, value: unknown): number {
+		const list = this.lists.get(key);
+		if (!list) return 0;
+		let removed = 0;
+		const max = count === 0 ? Number.POSITIVE_INFINITY : Math.abs(count);
+		// count >= 0: head to tail (count < 0 is not used by the adapter)
+		for (let i = 0; i < list.length && removed < max; i++) {
+			if (String(list[i]) === String(value)) {
+				list.splice(i, 1);
+				removed++;
+				i--;
+			}
+		}
+		if (list.length === 0) this.lists.delete(key);
+		return removed;
+	}
+
+	// --- SET commands ---
+
+	sadd(key: string, members: string[]): void {
+		let set = this.sets.get(key);
+		if (!set) {
+			set = new Set();
+			this.sets.set(key, set);
+		}
+		for (const member of members) set.add(member);
+	}
+
+	srem(key: string, member: string): void {
+		const set = this.sets.get(key);
+		if (!set) return;
+		set.delete(member);
+		if (set.size === 0) this.sets.delete(key);
+	}
+
+	smembers(key: string): string[] {
+		const set = this.sets.get(key);
+		return set ? Array.from(set) : [];
+	}
+
+	// --- SORTED SET commands ---
+
+	zadd(key: string, score: number, member: string): void {
+		let zset = this.zsets.get(key);
+		if (!zset) {
+			zset = new Map();
+			this.zsets.set(key, zset);
+		}
+		zset.set(member, score);
+	}
+
+	zrem(key: string, member: string): void {
+		const zset = this.zsets.get(key);
+		if (!zset) return;
+		zset.delete(member);
+		if (zset.size === 0) this.zsets.delete(key);
+	}
+
+	/**
+	 * Get all entries of a sorted set ordered by score (ties by member), like Redis.
+	 */
+	zentries(key: string): Array<[string, number]> {
+		const zset = this.zsets.get(key);
+		if (!zset) return [];
+		return Array.from(zset.entries()).sort(
+			(a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)
+		);
+	}
+
+	zrange(key: string, start: number, stop: number): string[] {
+		const entries = this.zentries(key).slice(start, stop === -1 ? undefined : stop + 1);
+		return entries.map(([member]) => member);
+	}
+
+	zrangeWithScores(key: string, start: number, stop: number): string[] {
+		const entries = this.zentries(key).slice(start, stop === -1 ? undefined : stop + 1);
+		const res = [];
+		for (const [member, score] of entries) {
+			res.push(member, String(score));
+		}
+		return res;
+	}
+
+	zrangebyscore(key: string, min: number, max: number): string[] {
+		return this.zentries(key)
+			.filter(([, score]) => score >= min && score <= max)
+			.map(([member]) => member);
+	}
+
+	zremrangebyscore(key: string, min: number, max: number): void {
+		const zset = this.zsets.get(key);
+		if (!zset) return;
+		for (const [member, score] of Array.from(zset.entries())) {
+			if (score >= min && score <= max) zset.delete(member);
+		}
+		if (zset.size === 0) this.zsets.delete(key);
+	}
+
+	// --- STRING commands (with lazy expiration) ---
+
+	private isExpired(item: StoredString): boolean {
+		return item.expiresAt != null && item.expiresAt <= Date.now();
+	}
+
+	/**
+	 * Set a string value with optional expiration and NX/XX conditions,
+	 * like the Redis SET command. Returns "OK" or null.
+	 */
+	setString(
+		key: string,
+		value: unknown,
+		opts?: { px?: number; nx?: boolean; xx?: boolean }
+	): string | null {
+		const current = this.strings.get(key);
+		const exists = current != null && !this.isExpired(current);
+
+		if (opts?.nx && exists) return null;
+		if (opts?.xx && !exists) return null;
+
+		this.strings.set(key, {
+			value,
+			expiresAt: opts?.px != null ? Date.now() + opts.px : null
+		});
+		return "OK";
+	}
+
+	getString(key: string): unknown {
+		const item = this.strings.get(key);
+		if (!item) return null;
+		if (this.isExpired(item)) {
+			this.strings.delete(key);
+			return null;
+		}
+		return item.value;
+	}
+
+	// --- Generic commands ---
+
+	exists(key: string): boolean {
+		if (this.hashes.has(key)) return true;
+		if (this.lists.has(key)) return true;
+		if (this.sets.has(key)) return true;
+		if (this.zsets.has(key)) return true;
+		if (this.strings.has(key)) return this.getString(key) != null;
+		return false;
+	}
+
+	del(key: string): void {
+		this.hashes.delete(key);
+		this.lists.delete(key);
+		this.sets.delete(key);
+		this.zsets.delete(key);
+		this.strings.delete(key);
+	}
+
+	keys(): string[] {
+		return [
+			...this.hashes.keys(),
+			...this.lists.keys(),
+			...this.sets.keys(),
+			...this.zsets.keys(),
+			...this.strings.keys()
+		];
 	}
 }
 
 /**
- * Redis Adapter for Workflows
+ * Fake (in-memory) Adapter for Workflows.
+ *
+ * It covers the same functionality as the Redis adapter but stores everything
+ * in the process memory. Intended for testing & development. The storage is
+ * shared between adapter instances with the same prefix, so multiple brokers
+ * within the same process can communicate with each other.
  */
-export default class RedisAdapter extends BaseAdapter {
-	declare opts: RedisAdapterOptions;
+export default class FakeAdapter extends BaseAdapter {
+	declare opts: FakeAdapterOptions;
 	public isWorker: boolean;
-	public commandClient: RedisClient | Cluster;
-	public blockerClient: RedisClient | Cluster;
-	public subClient: RedisClient | Cluster;
+	public storage: FakeStorage;
 	public signalPromises: Map<string, StoredPromise<unknown>>;
 	public jobResultPromises: Map<string, StoredPromise<unknown>>;
+	public subscriptions: Map<string, (message: unknown) => void>;
 
 	public running: boolean;
+	public popping: boolean;
 	public disconnecting: boolean;
 	public prefix!: string;
 	declare serializer: Serializers.Base;
@@ -79,44 +404,53 @@ export default class RedisAdapter extends BaseAdapter {
 	declare mwOpts: WorkflowsMiddlewareOptions;
 
 	/**
+	 * Shared storages by prefix. All adapter instances (worker & client) with the
+	 * same prefix use the same storage, similar to a common Redis server.
+	 */
+	static storages: Map<string, FakeStorage> = new Map();
+
+	/**
+	 * Get or create the shared storage for the given prefix.
+	 *
+	 * @param prefix
+	 */
+	static getStorage(prefix: string): FakeStorage {
+		let storage = FakeAdapter.storages.get(prefix);
+		if (!storage) {
+			storage = new FakeStorage();
+			FakeAdapter.storages.set(prefix, storage);
+		}
+		return storage;
+	}
+
+	/**
+	 * Remove all shared storages. Useful in tests.
+	 */
+	static clearAll(): void {
+		FakeAdapter.storages.clear();
+	}
+
+	/**
 	 * Constructor of adapter.
 	 */
-	constructor(opts?: string | RedisAdapterOptions) {
-		if (typeof opts == "string")
-			opts = {
-				url: opts
-			};
-
-		if (opts && typeof opts.redis == "string") {
-			opts = {
-				...opts,
-				url: opts.redis
-			};
-		}
-
+	constructor(opts?: FakeAdapterOptions) {
 		super(opts);
 
 		this.opts = _.defaultsDeep(this.opts, {
 			serializer: "JSON",
-			drainDelay: 5,
-			redis: {
-				retryStrategy: times => Math.min(times * 500, 5000)
-			}
+			drainDelay: 5
 		});
 
 		this.isWorker = false;
-
-		this.commandClient = null;
-		this.blockerClient = null;
-		this.subClient = null;
+		this.storage = null;
 
 		this.signalPromises = new Map();
 		this.jobResultPromises = new Map();
+		this.subscriptions = new Map();
 
 		this.running = false;
+		this.popping = false;
 		this.disconnecting = false;
-
-		// Workflow = require("../workflow");
 	}
 
 	/**
@@ -145,135 +479,34 @@ export default class RedisAdapter extends BaseAdapter {
 			this.prefix = "molwf:";
 		}
 
-		this.logger.debug("Workflows Redis adapter prefix:", this.prefix);
+		this.logger.debug("Workflows Fake adapter prefix:", this.prefix);
 
 		// create an instance of serializer (default to JSON)
-		/** @type {Serializer} */
 		this.serializer = Serializers.resolve(this.opts.serializer);
 		this.serializer.init(this.broker);
 		this.logger.info("Workflows serializer:", this.broker.getConstructorName(this.serializer));
 	}
 
 	/**
-	 * Connect to Redis.
+	 * Connect to the shared in-memory storage.
 	 *
 	 * @returns Resolves when the connection is established.
 	 */
 	async connect(): Promise<void> {
 		if (this.connected) return;
 
-		await this.createCommandClient();
-		await this.createSubscriptionClient();
+		this.storage = FakeAdapter.getStorage(this.prefix);
+
 		if (this.isWorker) {
-			await this.createBlockerClient();
+			this.subscribe(this.getKey(this.wf.name, C.QUEUE_DELAYED));
 		}
+
+		this.connected = true;
+		this.log("info", this.wf?.name ?? "", null, "Fake adapter connected.");
 	}
 
 	/**
-	 * Create a Redis client.
-	 *
-	 * @param name Connection name
-	 * @returns
-	 */
-	async createRedisClient(name: string): Promise<RedisClient> {
-		return new Promise(resolve => {
-			let client;
-
-			if (this.opts.cluster) {
-				if (!this.opts.cluster.nodes || this.opts.cluster.nodes.length === 0) {
-					throw new Errors.BrokerOptionsError(
-						"No nodes defined for Redis cluster in Workflow adapter.",
-						"ERR_NO_REDIS_CLUSTER_NODES"
-					);
-				}
-				client = new Cluster(this.opts.cluster.nodes, this.opts.cluster.clusterOptions);
-			} else if (this.opts.url) {
-				client = new RedisClient(this.opts.url);
-			} else {
-				client = new RedisClient(this.opts.redis);
-			}
-
-			client.on("ready", () => {
-				this.connected = true;
-				resolve(client);
-				this.log("info", this.wf?.name ?? "", null, `Redis adapter (${name}) connected.`);
-			});
-			client.on("error", err => {
-				this.connected = false;
-				this.log(
-					"info",
-					this.wf?.name ?? "",
-					null,
-					`Redis adapter (${name}) error`,
-					err.message
-				);
-			});
-			client.on("end", () => {
-				this.connected = false;
-				this.log(
-					"info",
-					this.wf?.name ?? "",
-					null,
-					`Redis adapter (${name}) disconnected.`
-				);
-			});
-		});
-	}
-
-	async createCommandClient(): Promise<void> {
-		this.commandClient = await this.createRedisClient("command");
-	}
-
-	async createBlockerClient() {
-		this.blockerClient = await this.createRedisClient("blocker");
-	}
-
-	async createSubscriptionClient() {
-		this.subClient = await this.createRedisClient("subscription");
-		this.subClient.on("messageBuffer", (channelBuf, message) => {
-			const channel = channelBuf.toString();
-			if (channel.startsWith(this.getKey(C.QUEUE_CATEGORY_SIGNAL + ":"))) {
-				const json = this.serializer.deserialize(message);
-				this.logger.debug("Signal received on Pub/Sub", json);
-				const pKey = json.signal + ":" + json.key;
-				const found = this.signalPromises.get(pKey);
-				if (found) {
-					this.signalPromises.delete(pKey);
-					found.resolve(json.payload);
-				}
-			} else if (
-				channel.startsWith(this.prefix) &&
-				channel.endsWith(C.FINISHED) &&
-				this.jobResultPromises.size > 0
-			) {
-				const json = this.serializer.deserialize(message);
-				this.logger.debug("Job finished message received.", json);
-				const jobId = json.jobId;
-				if (this.jobResultPromises.has(jobId)) {
-					const storePromise = this.jobResultPromises.get(jobId);
-					this.jobResultPromises.delete(jobId);
-					if (json.error) {
-						storePromise.reject(this.broker.errorRegenerator.restore(json.error, {}));
-					} else {
-						storePromise.resolve(json.result);
-					}
-				}
-			}
-			if (this.isWorker) {
-				if (channel == this.getKey(this.wf.name, C.QUEUE_DELAYED)) {
-					const json = this.serializer.deserialize(message);
-					this.wf.setNextDelayedMaintenance(json.promoteAt);
-				}
-			}
-		});
-
-		if (this.isWorker) {
-			await this.subClient.subscribe(this.getKey(this.wf.name, C.QUEUE_DELAYED));
-		}
-	}
-
-	/**
-	 * Close the adapter connection
+	 * Close the adapter connection.
 	 *
 	 * @returns Resolves when the disconnection is complete.
 	 */
@@ -283,84 +516,87 @@ export default class RedisAdapter extends BaseAdapter {
 		this.disconnecting = true;
 		this.connected = false;
 
-		// await super.disconnect();
+		if (this.storage) {
+			for (const [channel, listener] of this.subscriptions.entries()) {
+				this.storage.emitter.off(channel, listener);
+			}
+			this.subscriptions.clear();
 
-		if (this.commandClient) {
-			await this.closeClient(this.commandClient);
-			this.commandClient = null;
-		}
-
-		if (this.subClient) {
-			await this.closeClient(this.subClient);
-			this.subClient = null;
-		}
-
-		if (this.blockerClient) {
-			await this.closeClient(this.blockerClient);
-			this.blockerClient = null;
+			// Release the possibly blocked job processors
+			if (this.isWorker && this.wf) {
+				this.storage.wakeAllWaiters(this.getKey(this.wf.name, C.QUEUE_WAITING));
+			}
 		}
 
 		this.disconnecting = false;
+		this.log("info", this.wf?.name ?? "", null, "Fake adapter disconnected.");
 	}
 
 	/**
-	 * Wait for Redis client to be ready. If it does not exist, it will create a new one.
+	 * Subscribe this instance to a Pub/Sub channel on the shared emitter.
 	 *
-	 * @param {string} workflowName - The name of the workflow.
-	 * @returns {Promise<Redis>} Resolves with the Redis client instance.
-	 *
-	async isClientReady(workflowName) {
-		return new Promise((resolve, reject) => {
-			let client = this.jobClients.get(workflowName);
-			if (client && client.status === "ready") {
-				resolve(client);
-			} else {
-				if (!client) {
-					client = this.createRedisClient();
-					this.jobClients.set(workflowName, client);
-				}
+	 * @param channel
+	 */
+	subscribe(channel: string): void {
+		if (this.subscriptions.has(channel)) return;
 
-				const handleReady = () => {
-					client.removeListener("end", handleEnd);
-					client.removeListener("error", handleError);
-					resolve(client);
-				};
-
-				let lastError;
-				const handleError = err => {
-					lastError = err;
-				};
-
-				const handleEnd = () => {
-					client.removeListener("ready", handleReady);
-					client.removeListener("error", handleError);
-					reject(lastError);
-				};
-
-				client.once("ready", handleReady);
-				client.on("error", handleError);
-				client.once("end", handleEnd);
-			}
-		});
-	}*/
+		const listener = (message: unknown) =>
+			this.onChannelMessage(channel, message as Buffer | string);
+		this.subscriptions.set(channel, listener);
+		this.storage.emitter.on(channel, listener);
+	}
 
 	/**
-	 * Close a Redis client.
+	 * Publish a serialized message to a Pub/Sub channel. The delivery is
+	 * asynchronous, similar to Redis Pub/Sub.
 	 *
-	 * @param client
+	 * @param channel
+	 * @param content - Serialized message content.
 	 */
-	async closeClient(client: RedisClient | Cluster): Promise<void> {
-		if (client) {
-			try {
-				if (client.blocked) {
-					await client.disconnect();
+	publish(channel: string, content: Buffer | string): void {
+		const storage = this.storage;
+		if (!storage) return;
+		setImmediate(() => storage.emitter.emit(channel, content));
+	}
+
+	/**
+	 * Handle an incoming Pub/Sub message on a subscribed channel.
+	 *
+	 * @param channel
+	 * @param message
+	 */
+	onChannelMessage(channel: string, message: Buffer | string): void {
+		if (channel.startsWith(this.getKey(C.QUEUE_CATEGORY_SIGNAL + ":"))) {
+			const json = this.serializer.deserialize(message as Buffer);
+			this.logger.debug("Signal received on Pub/Sub", json);
+			const pKey = json.signal + ":" + json.key;
+			const found = this.signalPromises.get(pKey);
+			if (found) {
+				this.signalPromises.delete(pKey);
+				found.resolve(json.payload);
+			}
+		} else if (
+			channel.startsWith(this.prefix) &&
+			channel.endsWith(C.FINISHED) &&
+			this.jobResultPromises.size > 0
+		) {
+			const json = this.serializer.deserialize(message as Buffer);
+			this.logger.debug("Job finished message received.", json);
+			const jobId = json.jobId;
+			if (this.jobResultPromises.has(jobId)) {
+				const storePromise = this.jobResultPromises.get(jobId);
+				this.jobResultPromises.delete(jobId);
+				if (json.error) {
+					storePromise.reject(this.broker.errorRegenerator.restore(json.error, {}));
 				} else {
-					await client.quit();
+					storePromise.resolve(json.result);
 				}
-			} catch (err) {
-				if (err.message !== "Connection is closed.") {
-					this.log("warn", null, null, "Error while closing Redis client", err.message);
-				}
+			}
+		}
+		if (this.isWorker) {
+			if (channel == this.getKey(this.wf.name, C.QUEUE_DELAYED)) {
+				const json = this.serializer.deserialize(message as Buffer);
+				this.wf.setNextDelayedMaintenance(json.promoteAt);
 			}
 		}
 	}
@@ -378,39 +614,67 @@ export default class RedisAdapter extends BaseAdapter {
 	 */
 	stopJobProcessor() {
 		this.running = false;
+
+		// Release the possibly blocked job processors
+		if (this.storage && this.wf) {
+			this.storage.wakeAllWaiters(this.getKey(this.wf.name, C.QUEUE_WAITING));
+		}
 	}
 
 	/**
-	 * Job processor for the given workflow. Waits for a job in the waiting queue, moves it to the active queue, and processes it.
+	 * Pop a job from the waiting queue and move it to the active queue.
+	 * If the waiting queue is empty, it waits for a new job or until the
+	 * timeout elapses (like Redis BRPOPLPUSH).
+	 *
+	 * @param timeout - Maximum wait time in seconds.
+	 * @returns Resolves with the job ID or null on timeout.
+	 */
+	async popWaitingJob(timeout: number): Promise<string | null> {
+		const waitingKey = this.getKey(this.wf.name, C.QUEUE_WAITING);
+		const activeKey = this.getKey(this.wf.name, C.QUEUE_ACTIVE);
+
+		let jobId = this.storage.rpoplpush(waitingKey, activeKey);
+		if (jobId != null) return jobId as string;
+
+		// Wait for a new waiting job or the drain delay
+		await new Promise<void>(resolve => {
+			const waiter = () => {
+				clearTimeout(timer);
+				resolve();
+			};
+			const timer = setTimeout(() => {
+				this.storage.removeWaiter(waitingKey, waiter);
+				resolve();
+			}, timeout * 1000);
+			this.storage.addWaiter(waitingKey, waiter);
+		});
+
+		if (!this.running || !this.connected) return null;
+
+		jobId = this.storage.rpoplpush(waitingKey, activeKey);
+		return jobId != null ? (jobId as string) : null;
+	}
+
+	/**
+	 * Job processor for the given workflow. Waits for a job in the waiting queue,
+	 * moves it to the active queue, and processes it.
 	 *
 	 * @returns Resolves when the job is processed.
 	 */
 	async runJobProcessor(): Promise<void> {
-		if (!this.running || this.blockerClient.blocked) return;
-
-		// if (this.disconnecting || !this.connected) {
-		// 	this.log("debug", workflow.name, null, "Adapter is not connected or disconnecting.");
-		// 	return;
-		// }
+		if (!this.running || this.popping) return;
 
 		const concurrency = this.wf.opts.concurrency;
 		const activeJobCount = this.wf.getNumberOfActiveJobs();
 
 		if (activeJobCount >= concurrency) {
-			// this.log("debug", workflow.name, null, "Max concurrency reached. Waiting...");
 			return;
 		}
 
 		try {
-			// console.log(" >>> BLOCK START >>>", activeJobCount);
-			this.blockerClient.blocked = true;
-			const jobId = await this.blockerClient.brpoplpush(
-				this.getKey(this.wf.name, C.QUEUE_WAITING),
-				this.getKey(this.wf.name, C.QUEUE_ACTIVE),
-				this.opts.drainDelay
-			);
-			this.blockerClient.blocked = false;
-			// console.log(" >>> BLOCK END >>>", this.wf.getNumberOfActiveJobs());
+			this.popping = true;
+			const jobId = await this.popWaitingJob(this.opts.drainDelay);
+			this.popping = false;
 
 			if (jobId) {
 				this.wf.addRunningJob(jobId);
@@ -419,10 +683,11 @@ export default class RedisAdapter extends BaseAdapter {
 			}
 		} catch (err) {
 			// Swallow error if disconnecting
-			if (!this.disconnecting && err.message != "Connection is closed.") {
+			if (!this.disconnecting) {
 				this.log("error", this.wf.name, null, "Unable to watch job", err);
 			}
 		} finally {
+			this.popping = false;
 			setImmediate(() => this.runJobProcessor());
 		}
 	}
@@ -434,19 +699,17 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns Resolves when the job is processed.
 	 */
 	async processJob(jobId: string): Promise<void> {
-		/** @type {Job} */
 		const job = await this.getJob(this.wf.name, jobId);
 		if (!job) {
 			this.log("warn", this.wf.name, jobId, "Job not found");
 			// Remove from active queue
-			await this.commandClient.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, jobId);
+			this.storage.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, jobId);
 
 			this.wf.removeRunningJob(jobId);
 
 			return;
 		}
 
-		/** @type {JobEvent[]} */
 		const jobEvents = await this.getJobEvents(this.wf.name, jobId);
 
 		if (!job.startedAt) {
@@ -457,11 +720,14 @@ export default class RedisAdapter extends BaseAdapter {
 		try {
 			unlock = await this.lock(jobId);
 
-			await this.commandClient.hsetnx(
-				this.getKey(this.wf.name, C.QUEUE_JOB, jobId),
-				"startedAt",
-				job.startedAt
-			);
+			// Don't re-create the job hash if the job has been removed meanwhile
+			if (this.storage.exists(this.getKey(this.wf.name, C.QUEUE_JOB, jobId))) {
+				this.storage.hsetnx(
+					this.getKey(this.wf.name, C.QUEUE_JOB, jobId),
+					"startedAt",
+					job.startedAt
+				);
+			}
 
 			await this.addJobEvent(this.wf.name, job.id, {
 				type: "started"
@@ -502,17 +768,15 @@ export default class RedisAdapter extends BaseAdapter {
 	/**
 	 * Set a lock for the job.
 	 *
-	 * @param {string} jobId - The ID of the job to lock.
-	 * @returns {Promise<Function>} Resolves with a function to unlock the job.
+	 * @param jobId - The ID of the job to lock.
+	 * @returns Resolves with a function to unlock the job.
 	 */
 	async lock(jobId: string): Promise<() => Promise<void>> {
 		// Set lock
-		const lockRes = await this.commandClient.set(
+		const lockRes = this.storage.setString(
 			this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId),
 			this.broker.instanceID,
-			"EX",
-			this.mwOpts.lockExpiration,
-			"NX"
+			{ px: this.mwOpts.lockExpiration * 1000, nx: true }
 		);
 		this.log("debug", this.wf.name, jobId, "Lock result", lockRes);
 
@@ -525,7 +789,7 @@ export default class RedisAdapter extends BaseAdapter {
 			}
 
 			// Check if the job is not finished (e.g timeout maintainer process is closed)
-			const finishedAt = await this.commandClient.hget(
+			const finishedAt = this.storage.hget(
 				this.getKey(this.wf.name, C.QUEUE_JOB, jobId),
 				"finishedAt"
 			);
@@ -533,18 +797,16 @@ export default class RedisAdapter extends BaseAdapter {
 			if (Number(finishedAt) > 0) {
 				this.log("debug", this.wf.name, jobId, "Job is finished. Unlocking...");
 				clearInterval(timer);
-				await this.commandClient.del(this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId));
+				this.storage.del(this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId));
 				return;
 			}
 
 			// Extend the lock
 			this.log("debug", this.wf.name, jobId, "Extending lock");
-			const lockRes = await this.commandClient.set(
+			const lockRes = this.storage.setString(
 				this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId),
 				this.broker.instanceID,
-				"EX",
-				this.mwOpts.lockExpiration,
-				"XX"
+				{ px: this.mwOpts.lockExpiration * 1000, xx: true }
 			);
 			if (!lockRes) {
 				this.log("debug", this.wf.name, jobId, "Job lock is expired");
@@ -559,15 +821,13 @@ export default class RedisAdapter extends BaseAdapter {
 			clearInterval(timer);
 			if (this.disconnecting || !this.connected) return;
 
-			const unlockRes = await this.commandClient.del(
-				this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId)
-			);
-			this.log("debug", this.wf.name, jobId, "Unlock result", unlockRes);
+			this.storage.del(this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId));
+			this.log("debug", this.wf.name, jobId, "Unlocked");
 		};
 	}
 
 	/**
-	 * Get a job from Redis.
+	 * Get a job from the storage.
 	 *
 	 * @param workflowName - Workflow name
 	 * @param jobId - The ID of the job.
@@ -583,21 +843,17 @@ export default class RedisAdapter extends BaseAdapter {
 			fields = ["payload", "parent", "startedAt", "retries", "retryAttempts", "timeout"];
 		}
 
-		const exists = await this.commandClient.exists(
-			this.getKey(workflowName, C.QUEUE_JOB, jobId)
-		);
+		const exists = this.storage.exists(this.getKey(workflowName, C.QUEUE_JOB, jobId));
 		if (!exists) return null;
 
 		let job;
 
 		if (fields === true) {
-			job = await this.commandClient.hgetallBuffer(
-				this.getKey(workflowName, C.QUEUE_JOB, jobId)
-			);
+			job = this.storage.hgetall(this.getKey(workflowName, C.QUEUE_JOB, jobId));
 		} else {
-			const values = await this.commandClient.hmgetBuffer(
+			const values = this.storage.hmget(
 				this.getKey(workflowName, C.QUEUE_JOB, jobId),
-				...fields
+				fields
 			);
 
 			job = fields.reduce((acc, field, i) => {
@@ -613,24 +869,24 @@ export default class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Get job events from Redis.
+	 * Get job events from the storage.
 	 *
 	 * @param workflowName - The name of the workflow.
 	 * @param jobId - The ID of the job.
 	 * @returns Resolves with an array of job events.
 	 */
 	async getJobEvents(workflowName: string, jobId: string): Promise<JobEvent[]> {
-		const jobEvents = await this.commandClient.lrangeBuffer(
+		const jobEvents = this.storage.lrange(
 			this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId),
 			0,
 			-1
 		);
 
-		return jobEvents.map(e => this.serializer.deserialize(e) as JobEvent);
+		return jobEvents.map(e => this.serializer.deserialize(e as Buffer) as JobEvent);
 	}
 
 	/**
-	 * Add a job event to Redis.
+	 * Add a job event to the storage.
 	 *
 	 * @param workflowName - The name of the workflow.
 	 * @param jobId - The ID of the job.
@@ -644,7 +900,7 @@ export default class RedisAdapter extends BaseAdapter {
 	): Promise<void> {
 		if (!this.connected || this.disconnecting) return;
 
-		await this.commandClient.rpush(
+		this.storage.rpush(
 			this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId),
 			this.serializer.serialize({
 				...event,
@@ -652,6 +908,15 @@ export default class RedisAdapter extends BaseAdapter {
 				nodeID: this.broker.nodeID
 			})
 		);
+	}
+
+	/**
+	 * Notify a blocked worker that a new job is available in the waiting queue.
+	 *
+	 * @param workflowName
+	 */
+	wakeUpWorkers(workflowName: string): void {
+		this.storage.wakeOneWaiter(this.getKey(workflowName, C.QUEUE_WAITING));
 	}
 
 	/**
@@ -671,13 +936,16 @@ export default class RedisAdapter extends BaseAdapter {
 		this.sendJobEvent(this.wf.name, job.id, "finished");
 		this.sendJobEvent(this.wf.name, job.id, "completed");
 
-		const pipeline = this.commandClient.pipeline();
-		pipeline.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
-		pipeline.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
+		this.storage.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
+		this.storage.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
+
+		// If the job hash is missing, the job has been removed meanwhile,
+		// so the result should not be persisted.
+		const jobExists = this.storage.exists(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
 
 		if (this.wf.opts.removeOnCompleted) {
-			pipeline.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
-		} else {
+			this.storage.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
+		} else if (jobExists) {
 			const fields: Partial<Job> = {
 				success: true,
 				finishedAt: Date.now(),
@@ -687,18 +955,20 @@ export default class RedisAdapter extends BaseAdapter {
 			if (result != null) {
 				fields.result = this.serializer.serialize(result);
 			}
-			pipeline.hmset(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), fields);
-			pipeline.zadd(this.getKey(this.wf.name, C.QUEUE_COMPLETED), fields.finishedAt, job.id);
+			this.storage.hmset(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), fields);
+			this.storage.zadd(
+				this.getKey(this.wf.name, C.QUEUE_COMPLETED),
+				fields.finishedAt,
+				job.id
+			);
 		}
-
-		await pipeline.exec();
 
 		if (this.jobResultPromises.has(job.id)) {
 			const storePromise = this.jobResultPromises.get(job.id);
 			this.jobResultPromises.delete(job.id);
 			storePromise.resolve(result);
 		} else {
-			await this.commandClient.publish(
+			this.publish(
 				this.getKey(this.wf.name, C.FINISHED),
 				this.serializer.serialize({
 					jobId: job.id,
@@ -734,27 +1004,27 @@ export default class RedisAdapter extends BaseAdapter {
 		this.sendJobEvent(this.wf.name, job.id, "finished");
 		this.sendJobEvent(this.wf.name, job.id, "failed");
 
-		const pipeline = this.commandClient.pipeline();
-		pipeline.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
-		pipeline.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
-		await pipeline.exec();
+		this.storage.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
+		this.storage.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
+
+		// If the job hash is missing, the job has been removed meanwhile,
+		// so it should not be retried and the error should not be persisted.
+		const jobExists = this.storage.exists(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
 
 		// @ts-expect-error retryable property is not exist on Error but on MoleculerError
-		if (err?.retryable) {
-			const retryFields = await this.commandClient.hmget(
-				this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
+		if (jobExists && err?.retryable) {
+			const retryFields = this.storage.hmget(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), [
 				"retries",
 				"retryAttempts"
-			);
+			]);
 			const retries =
 				(retryFields[0] != null
-					? parseInt(retryFields[0])
+					? parseInt(String(retryFields[0]))
 					: this.wf.opts.retryPolicy?.retries) ?? 0;
-			const retryAttempts = parseInt(retryFields[1] ?? "0");
+			const retryAttempts = parseInt(String(retryFields[1] ?? "0"));
 
 			if (retries > 0 && retryAttempts < retries) {
-				const pipeline = this.commandClient.pipeline();
-				pipeline.hincrby(
+				this.storage.hincrby(
 					this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
 					"retryAttempts",
 					1
@@ -768,14 +1038,12 @@ export default class RedisAdapter extends BaseAdapter {
 				);
 
 				const promoteAt = Date.now() + backoffTime;
-				pipeline.hset(
+				this.storage.hset(
 					this.getKey(this.wf.name, C.QUEUE_JOB, job.id),
 					"promoteAt",
 					promoteAt
 				);
-				pipeline.zadd(this.getKey(this.wf.name, C.QUEUE_DELAYED), promoteAt, job.id);
-
-				await pipeline.exec();
+				this.storage.zadd(this.getKey(this.wf.name, C.QUEUE_DELAYED), promoteAt, job.id);
 
 				// Publish promoteAt time to all workers
 				await this.sendDelayedJobPromoteAt(this.wf.name, job.id, promoteAt);
@@ -785,8 +1053,8 @@ export default class RedisAdapter extends BaseAdapter {
 		}
 
 		if (this.wf.opts.removeOnFailed) {
-			await this.commandClient.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
-		} else {
+			this.storage.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
+		} else if (jobExists) {
 			const fields: Partial<Job> = {
 				success: false,
 				finishedAt: Date.now(),
@@ -802,10 +1070,8 @@ export default class RedisAdapter extends BaseAdapter {
 
 			this.log("debug", this.wf.name, job.id, `Job move to failed queue.`);
 
-			const pipeline = this.commandClient.pipeline();
-			pipeline.hmset(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), fields);
-			pipeline.zadd(this.getKey(this.wf.name, C.QUEUE_FAILED), fields.finishedAt, job.id);
-			await pipeline.exec();
+			this.storage.hmset(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), fields);
+			this.storage.zadd(this.getKey(this.wf.name, C.QUEUE_FAILED), fields.finishedAt, job.id);
 		}
 
 		if (this.jobResultPromises.has(job.id)) {
@@ -813,7 +1079,7 @@ export default class RedisAdapter extends BaseAdapter {
 			this.jobResultPromises.delete(job.id);
 			storePromise.reject(err);
 		} else {
-			await this.commandClient.publish(
+			this.publish(
 				this.getKey(this.wf.name, C.FINISHED),
 				this.serializer.serialize({
 					jobId: job.id,
@@ -836,7 +1102,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns Resolves when the state is saved.
 	 */
 	async saveJobState(workflowName: string, jobId: string, state: unknown): Promise<void> {
-		await this.commandClient.hset(
+		this.storage.hset(
 			this.getKey(workflowName, C.QUEUE_JOB, jobId),
 			"state",
 			this.serializer.serialize(state)
@@ -852,12 +1118,9 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns Resolves with the state object or null if not found.
 	 */
 	async getState(workflowName: string, jobId: string): Promise<unknown> {
-		const state = await this.commandClient.hgetBuffer(
-			this.getKey(workflowName, C.QUEUE_JOB, jobId),
-			"state"
-		);
+		const state = this.storage.hget(this.getKey(workflowName, C.QUEUE_JOB, jobId), "state");
 
-		return state != null ? this.serializer.deserialize(state) : null;
+		return state != null ? this.serializer.deserialize(state as Buffer) : null;
 	}
 
 	/**
@@ -880,12 +1143,12 @@ export default class RedisAdapter extends BaseAdapter {
 
 		const exp = parseDuration(this.mwOpts.signalExpiration);
 		if (exp != null && exp > 0) {
-			await this.commandClient.set(this.getSignalKey(signalName, key), content, "PX", exp);
+			this.storage.setString(this.getSignalKey(signalName, key), content, { px: exp });
 		} else {
-			await this.commandClient.set(this.getSignalKey(signalName, key), content);
+			this.storage.setString(this.getSignalKey(signalName, key), content);
 		}
 
-		await this.commandClient.publish(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName), content);
+		this.publish(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName), content);
 	}
 
 	/**
@@ -899,7 +1162,7 @@ export default class RedisAdapter extends BaseAdapter {
 		if (key == null) key = C.SIGNAL_EMPTY_KEY;
 		this.log("debug", signalName, key, "Remove signal", signalName, key);
 
-		await this.commandClient.del(this.getSignalKey(signalName, key));
+		this.storage.del(this.getSignalKey(signalName, key));
 	}
 
 	/**
@@ -913,12 +1176,13 @@ export default class RedisAdapter extends BaseAdapter {
 	async waitForSignal<TSignalResult = unknown>(
 		signalName: string,
 		key?: string,
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		opts?: SignalWaitOptions
 	): Promise<TSignalResult> {
 		if (key == null) key = C.SIGNAL_EMPTY_KEY;
-		const content = await this.commandClient.getBuffer(this.getSignalKey(signalName, key));
+		const content = this.storage.getString(this.getSignalKey(signalName, key));
 		if (content) {
-			const json = this.serializer.deserialize(content);
+			const json = this.serializer.deserialize(content as Buffer);
 			if (key === json.key) {
 				this.logger.debug("Signal received", signalName, key, json);
 				return json.payload;
@@ -931,7 +1195,7 @@ export default class RedisAdapter extends BaseAdapter {
 			return found.promise as Promise<TSignalResult>;
 		}
 
-		await this.subClient.subscribe(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName));
+		this.subscribe(this.getKey(C.QUEUE_CATEGORY_SIGNAL, signalName));
 
 		const item = { promise: null, resolve: null } as StoredPromise<TSignalResult>;
 		item.promise = new Promise<TSignalResult>(resolve => (item.resolve = resolve));
@@ -944,10 +1208,10 @@ export default class RedisAdapter extends BaseAdapter {
 	/**
 	 * Create a new job and push it to the waiting or delayed queue.
 	 *
-	 * @param {string} workflowName - The name of the workflow.
-	 * @param {Job} job - The job.
-	 * @param {Record<string, any>} opts - Additional options for the job.
-	 * @returns {Promise<Job>} Resolves with the created job object.
+	 * @param workflowName - The name of the workflow.
+	 * @param job - The job.
+	 * @param opts - Additional options for the job.
+	 * @returns Resolves with the created job object.
 	 */
 	async newJob(workflowName: string, job: Job, opts: Partial<CreateJobOptions>) {
 		opts = opts || {};
@@ -956,9 +1220,7 @@ export default class RedisAdapter extends BaseAdapter {
 
 		if (opts.isCustomJobId) {
 			// Job ID collision check
-			const exists = await this.commandClient.exists(
-				this.getKey(workflowName, C.QUEUE_JOB, job.id)
-			);
+			const exists = this.storage.exists(this.getKey(workflowName, C.QUEUE_JOB, job.id));
 			if (exists) {
 				if (this.mwOpts.jobIdCollision == "reject") {
 					throw new WorkflowError(
@@ -975,9 +1237,9 @@ export default class RedisAdapter extends BaseAdapter {
 						job.createdAt = foundJob.createdAt;
 
 						// Remove previous job data
-						await this.commandClient.hdel(
+						this.storage.hdel(
 							this.getKey(workflowName, C.QUEUE_JOB, job.id),
-							...C.RERUN_REMOVABLE_FIELDS
+							C.RERUN_REMOVABLE_FIELDS
 						);
 					} else {
 						isLoadedJob = true;
@@ -988,8 +1250,8 @@ export default class RedisAdapter extends BaseAdapter {
 		}
 
 		if (!isLoadedJob) {
-			// Save the Job to Redis
-			await this.commandClient.hmset(
+			// Save the Job to the storage
+			this.storage.hmset(
 				this.getKey(workflowName, C.QUEUE_JOB, job.id),
 				this.serializeJob(job)
 			);
@@ -1008,7 +1270,7 @@ export default class RedisAdapter extends BaseAdapter {
 					`Delayed job created. Next run: ${new Date(job.promoteAt).toISOString()}`,
 					job
 				);
-				await this.commandClient.zadd(
+				this.storage.zadd(
 					this.getKey(workflowName, C.QUEUE_DELAYED),
 					job.promoteAt,
 					job.id
@@ -1019,7 +1281,8 @@ export default class RedisAdapter extends BaseAdapter {
 			} else {
 				// Normal job
 				this.log("debug", workflowName, job.id, "Job created.", job);
-				await this.commandClient.lpush(this.getKey(workflowName, C.QUEUE_WAITING), job.id);
+				this.storage.lpush(this.getKey(workflowName, C.QUEUE_WAITING), job.id);
+				this.wakeUpWorkers(workflowName);
 			}
 
 			this.sendJobEvent(workflowName, job.id, "created");
@@ -1027,7 +1290,7 @@ export default class RedisAdapter extends BaseAdapter {
 
 		job.promise = async () => {
 			// Subscribe to the job finished event
-			await this.subClient.subscribe(this.getKey(workflowName, C.FINISHED));
+			this.subscribe(this.getKey(workflowName, C.FINISHED));
 
 			// Get the Job to check the status
 			const job2 = await this.getJob(workflowName, job.id, [
@@ -1080,11 +1343,7 @@ export default class RedisAdapter extends BaseAdapter {
 		promoteAt: number
 	): Promise<void> {
 		// Check if this job is at the head of the delayed queue
-		const head = await this.commandClient.zrange(
-			this.getKey(workflowName, C.QUEUE_DELAYED),
-			0,
-			0
-		);
+		const head = this.storage.zrange(this.getKey(workflowName, C.QUEUE_DELAYED), 0, 0);
 		if (head && head[0] === jobId) {
 			this.log(
 				"debug",
@@ -1097,7 +1356,7 @@ export default class RedisAdapter extends BaseAdapter {
 				workflow: workflowName,
 				promoteAt
 			});
-			await this.commandClient.publish(this.getKey(workflowName, C.QUEUE_DELAYED), msg);
+			this.publish(this.getKey(workflowName, C.QUEUE_DELAYED), msg);
 		}
 	}
 
@@ -1107,15 +1366,10 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns
 	 */
 	async getNextDelayedJobTime(): Promise<number | null> {
-		const first = await this.commandClient?.zrange(
-			this.getKey(this.wf.name, C.QUEUE_DELAYED),
-			0,
-			0,
-			"WITHSCORES"
-		);
+		const first = this.storage?.zentries(this.getKey(this.wf.name, C.QUEUE_DELAYED));
 
 		if (first?.length > 0) {
-			const promoteAt = parseInt(first[1]);
+			const promoteAt = first[0][1];
 			if (promoteAt > Date.now()) {
 				return promoteAt;
 			}
@@ -1131,7 +1385,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @param jobId
 	 */
 	async finishParentJob(workflowName: string, jobId: string): Promise<void> {
-		await this.commandClient.hmset(this.getKey(workflowName, C.QUEUE_JOB, jobId), {
+		this.storage.hmset(this.getKey(workflowName, C.QUEUE_JOB, jobId), {
 			finishedAt: Date.now(),
 			nodeID: this.broker.nodeID
 		});
@@ -1145,24 +1399,17 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns Resolves when the job is rescheduled.
 	 */
 	async newRepeatChildJob(workflowName: string, job: Job): Promise<void> {
-		job.repeatCounter = await this.commandClient.hincrby(
+		job.repeatCounter = this.storage.hincrby(
 			this.getKey(workflowName, C.QUEUE_JOB, job.parent),
 			"repeatCounter",
 			1
 		);
 
-		// Save the next scheduled Job to Redis
-		await this.commandClient.hmset(
-			this.getKey(workflowName, C.QUEUE_JOB, job.id),
-			this.serializeJob(job)
-		);
+		// Save the next scheduled Job to the storage
+		this.storage.hmset(this.getKey(workflowName, C.QUEUE_JOB, job.id), this.serializeJob(job));
 
 		// Push to delayed queue
-		await this.commandClient.zadd(
-			this.getKey(workflowName, C.QUEUE_DELAYED),
-			job.promoteAt,
-			job.id
-		);
+		this.storage.zadd(this.getKey(workflowName, C.QUEUE_DELAYED), job.promoteAt, job.id);
 
 		await this.sendDelayedJobPromoteAt(workflowName, job.id, job.promoteAt);
 	}
@@ -1180,89 +1427,33 @@ export default class RedisAdapter extends BaseAdapter {
 	 */
 	async cleanUp(workflowName?: string, jobId?: string): Promise<void> {
 		if (workflowName && jobId) {
-			const pipeline = this.commandClient.pipeline();
-			pipeline.del(this.getKey(workflowName, C.QUEUE_JOB, jobId));
-			pipeline.del(this.getKey(workflowName, C.QUEUE_JOB_LOCK, jobId));
-			pipeline.del(this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId));
-			pipeline.lrem(this.getKey(workflowName, C.QUEUE_WAITING), 1, jobId);
-			await pipeline.exec();
+			this.storage.del(this.getKey(workflowName, C.QUEUE_JOB, jobId));
+			this.storage.del(this.getKey(workflowName, C.QUEUE_JOB_LOCK, jobId));
+			this.storage.del(this.getKey(workflowName, C.QUEUE_JOB_EVENTS, jobId));
+			this.storage.lrem(this.getKey(workflowName, C.QUEUE_WAITING), 1, jobId);
 			this.log("info", workflowName, jobId, "Cleaned up job store.");
 		} else if (workflowName) {
-			await this.deleteKeys(this.getKey(workflowName) + ":*");
+			this.deleteKeys(this.getKey(workflowName) + ":*");
 			this.log("info", workflowName, null, "Cleaned up workflow store.");
 		} else {
-			await this.deleteKeys(this.prefix + ":*");
+			this.deleteKeys(this.prefix + "*");
 			this.logger.info(`Cleaned up entire store.`);
 		}
 	}
 
 	/**
-	 * Delete keys from Redis based on a pattern.
+	 * Delete keys from the storage based on a pattern (prefix match).
 	 *
 	 * @param pattern
 	 * @returns
 	 */
-	async deleteKeys(pattern: string): Promise<void> {
-		if (this.commandClient instanceof Cluster) {
-			await this.deleteKeysOnCluster(pattern);
-		} else {
-			await this.deleteKeysOnNode(this.commandClient, pattern);
+	deleteKeys(pattern: string): void {
+		const prefix = pattern.endsWith("*") ? pattern.slice(0, -1) : pattern;
+		for (const key of this.storage.keys()) {
+			if (key.startsWith(prefix)) {
+				this.storage.del(key);
+			}
 		}
-	}
-
-	/**
-	 * Delete keys on a Redis cluster.
-	 *
-	 * @param pattern
-	 * @returns
-	 */
-	async deleteKeysOnCluster(pattern: string): Promise<void> {
-		// get only master nodes to scan for deletion,
-		// if we get slave nodes, it would be failed for deletion.
-		await Promise.all(
-			(this.commandClient as Cluster)
-				.nodes("master")
-				.map(async node => this.deleteKeysOnNode(node, pattern))
-		);
-	}
-
-	/**
-	 * Delete keys on a Redis node.
-	 *
-	 * @param node
-	 * @param pattern
-	 * @returns
-	 */
-	async deleteKeysOnNode(node: RedisClient, pattern: string): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const stream = node.scanStream({
-				match: pattern,
-				count: 100
-			});
-
-			stream.on("data", async (keys = []) => {
-				if (!keys.length) return;
-
-				stream.pause();
-				try {
-					await node.del(keys);
-					stream.resume();
-				} catch (err) {
-					err.pattern = pattern;
-					return reject(err);
-				}
-			});
-
-			stream.on("error", err => {
-				this.logger.error(
-					`Error occured while deleting keys '${pattern}' on Redis node.`,
-					err
-				);
-				reject(err);
-			});
-
-			stream.on("end", () => resolve());
-		});
 	}
 
 	/**
@@ -1277,34 +1468,42 @@ export default class RedisAdapter extends BaseAdapter {
 		lockName: string = C.QUEUE_MAINTENANCE_LOCK
 	): Promise<boolean> {
 		// Set lock
-		const lockRes = await this.commandClient?.set(
+		const lockRes = this.storage?.setString(
 			this.getKey(this.wf.name, lockName),
 			this.broker.instanceID,
-			"PX",
-			lockTime / 2,
-			"NX"
+			{ px: lockTime / 2, nx: true }
 		);
 
 		return lockRes != null;
 	}
 
 	/**
+	 * Release the maintenance lock for a workflow.
+	 *
+	 * @param lockName - The name of the lock to release.
+	 * @returns Resolves when the lock is released.
+	 */
+	async unlockMaintenance(lockName: string = C.QUEUE_MAINTENANCE_LOCK): Promise<void> {
+		this.storage?.del(this.getKey(this.wf.name, lockName));
+		this.log("debug", this.wf.name, null, "Unlock maintenance", lockName);
+	}
+
+	/**
 	 * Process delayed jobs for a workflow and move them to the waiting queue if ready.
 	 *
-	 * @returns {Promise<void>} Resolves when delayed jobs are processed.
+	 * @returns Resolves when delayed jobs are processed.
 	 */
 	async maintenanceDelayedJobs() {
 		this.log("debug", this.wf.name, null, "Maintenance delayed jobs...");
 		try {
 			const now = Date.now();
-			const jobIds = await this.commandClient.zrangebyscore(
+			const jobIds = this.storage.zrangebyscore(
 				this.getKey(this.wf.name, C.QUEUE_DELAYED),
 				0,
 				now
 			);
 			if (jobIds.length > 0) {
 				try {
-					const pipeline = this.commandClient.pipeline();
 					for (const jobId of jobIds) {
 						const job = await this.getJob(this.wf.name, jobId, ["id"]);
 						if (job) {
@@ -1314,11 +1513,11 @@ export default class RedisAdapter extends BaseAdapter {
 								jobId,
 								"Moving delayed job to waiting queue."
 							);
-							pipeline.lpush(this.getKey(this.wf.name, C.QUEUE_WAITING), jobId);
+							this.storage.lpush(this.getKey(this.wf.name, C.QUEUE_WAITING), jobId);
+							this.wakeUpWorkers(this.wf.name);
 						}
-						pipeline.zrem(this.getKey(this.wf.name, C.QUEUE_DELAYED), jobId);
+						this.storage.zrem(this.getKey(this.wf.name, C.QUEUE_DELAYED), jobId);
 					}
-					await pipeline.exec();
 				} catch (err) {
 					this.log(
 						"error",
@@ -1343,13 +1542,13 @@ export default class RedisAdapter extends BaseAdapter {
 		this.log("debug", this.wf.name, null, "Maintenance active jobs...");
 		try {
 			const now = Date.now();
-			const activeJobIds = await this.commandClient.lrange(
+			const activeJobIds = this.storage.lrange(
 				this.getKey(this.wf.name, C.QUEUE_ACTIVE),
 				0,
 				-1
 			);
 			if (activeJobIds.length > 0) {
-				for (const jobId of activeJobIds) {
+				for (const jobId of activeJobIds as string[]) {
 					try {
 						const job = await this.getJob(this.wf.name, jobId, [
 							"startedAt",
@@ -1372,7 +1571,7 @@ export default class RedisAdapter extends BaseAdapter {
 										new WorkflowTimeoutError(this.wf.name, jobId, timeout)
 									);
 									// Unlock manually
-									await this.commandClient.del(
+									this.storage.del(
 										this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId)
 									);
 
@@ -1405,19 +1604,17 @@ export default class RedisAdapter extends BaseAdapter {
 		this.log("debug", this.wf.name, null, "Maintenance stalled jobs...");
 
 		try {
-			const stalledJobIds = await this.commandClient.smembers(
-				this.getKey(this.wf.name, C.QUEUE_STALLED)
-			);
+			const stalledJobIds = this.storage.smembers(this.getKey(this.wf.name, C.QUEUE_STALLED));
 			if (stalledJobIds.length > 0) {
 				for (const jobId of stalledJobIds) {
 					try {
 						// Check the job lock is exists
-						const exists = await this.commandClient.exists(
+						const exists = this.storage.exists(
 							this.getKey(this.wf.name, C.QUEUE_JOB_LOCK, jobId)
 						);
-						if (exists == 0) {
+						if (!exists) {
 							// Check the job is in the active queue
-							const removed = await this.commandClient.lrem(
+							const removed = this.storage.lrem(
 								this.getKey(this.wf.name, C.QUEUE_ACTIVE),
 								1,
 								jobId
@@ -1429,10 +1626,7 @@ export default class RedisAdapter extends BaseAdapter {
 						}
 
 						// Remove from stalled queue
-						await this.commandClient.srem(
-							this.getKey(this.wf.name, C.QUEUE_STALLED),
-							jobId
-						);
+						this.storage.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), jobId);
 					} catch (err) {
 						this.log(
 							"error",
@@ -1446,15 +1640,15 @@ export default class RedisAdapter extends BaseAdapter {
 			}
 
 			// Copy active jobIds to stalled queue
-			const activeJobIds = await this.commandClient.lrange(
+			const activeJobIds = this.storage.lrange(
 				this.getKey(this.wf.name, C.QUEUE_ACTIVE),
 				0,
 				-1
 			);
 			if (activeJobIds.length > 0) {
-				await this.commandClient.sadd(
+				this.storage.sadd(
 					this.getKey(this.wf.name, C.QUEUE_STALLED),
-					activeJobIds
+					activeJobIds as string[]
 				);
 			}
 		} catch (err) {
@@ -1469,7 +1663,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 * @returns Resolves when the job is moved to the failed queue.
 	 */
 	async moveStalledJobsToWaiting(jobId: string): Promise<void> {
-		const stalledCounter = await this.commandClient.hincrby(
+		const stalledCounter = this.storage.hincrby(
 			this.getKey(this.wf.name, C.QUEUE_JOB, jobId),
 			"stalledCounter",
 			1
@@ -1494,7 +1688,8 @@ export default class RedisAdapter extends BaseAdapter {
 		}
 
 		this.log("debug", this.wf.name, jobId, `Job is stalled. Moved back to waiting queue.`);
-		await this.commandClient.lpush(this.getKey(this.wf.name, C.QUEUE_WAITING), jobId);
+		this.storage.lpush(this.getKey(this.wf.name, C.QUEUE_WAITING), jobId);
+		this.wakeUpWorkers(this.wf.name);
 	}
 
 	/**
@@ -1514,21 +1709,17 @@ export default class RedisAdapter extends BaseAdapter {
 
 		try {
 			const minDate = Date.now() - retention;
-			const jobIds = await this.commandClient.zrangebyscore(
+			const jobIds = this.storage.zrangebyscore(
 				this.getKey(this.wf.name, queueName),
 				0,
 				minDate
 			);
 			if (jobIds.length > 0) {
-				const jobKeys = jobIds.map(jobId => this.getKey(this.wf.name, C.QUEUE_JOB, jobId));
-				const jobEventsKeys = jobIds.map(jobId =>
-					this.getKey(this.wf.name, C.QUEUE_JOB_EVENTS, jobId)
-				);
-				const pipeline = this.commandClient.pipeline();
-				pipeline.del(jobKeys);
-				pipeline.del(jobEventsKeys);
-				pipeline.zremrangebyscore(this.getKey(this.wf.name, queueName), 0, minDate);
-				await pipeline.exec();
+				for (const jobId of jobIds) {
+					this.storage.del(this.getKey(this.wf.name, C.QUEUE_JOB, jobId));
+					this.storage.del(this.getKey(this.wf.name, C.QUEUE_JOB_EVENTS, jobId));
+				}
+				this.storage.zremrangebyscore(this.getKey(this.wf.name, queueName), 0, minDate);
 
 				this.log(
 					"debug",
@@ -1550,23 +1741,12 @@ export default class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Release the maintenance lock for a workflow.
-	 *
-	 * @param lockName - The name of the lock to release.
-	 * @returns Resolves when the lock is released.
-	 */
-	async unlockMaintenance(lockName: string = C.QUEUE_MAINTENANCE_LOCK): Promise<void> {
-		const unlockRes = await this.commandClient?.del(this.getKey(this.wf.name, lockName));
-		this.log("debug", this.wf.name, null, "Unlock maintenance", lockName, unlockRes);
-	}
-
-	/**
-	 * Get Redis key (for Workflow) for the given name and type.
+	 * Get storage key (for Workflow) for the given name and type.
 	 *
 	 * @param name - The name of the workflow or entity.
 	 * @param type - The type of the key (e.g., job, lock, events).
 	 * @param id - Optional ID to append to the key.
-	 * @returns The constructed Redis key.
+	 * @returns The constructed key.
 	 */
 	getKey(name: string, type?: string, id?: string): string {
 		if (id) {
@@ -1579,11 +1759,11 @@ export default class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Get Redis key for a signal.
+	 * Get storage key for a signal.
 	 *
 	 * @param signalName The name of the signal
 	 * @param key The key of the signal
-	 * @returns The constructed Redis key for the signal.
+	 * @returns The constructed key for the signal.
 	 */
 	getSignalKey(signalName: string, key?: string): string {
 		return `${this.prefix}${C.QUEUE_CATEGORY_SIGNAL}:${signalName}:${key}`;
@@ -1596,12 +1776,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 */
 	async listCompletedJobs(workflowName: string): Promise<ListFinishedJobResult[]> {
 		return this.formatZrangeResultToObject<ListFinishedJobResult>(
-			await this.commandClient.zrange(
-				this.getKey(workflowName, C.QUEUE_COMPLETED),
-				0,
-				-1,
-				"WITHSCORES"
-			)
+			this.storage.zrangeWithScores(this.getKey(workflowName, C.QUEUE_COMPLETED), 0, -1)
 		);
 	}
 
@@ -1612,12 +1787,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 */
 	async listFailedJobs(workflowName: string): Promise<ListFinishedJobResult[]> {
 		return this.formatZrangeResultToObject<ListFinishedJobResult>(
-			await this.commandClient.zrange(
-				this.getKey(workflowName, C.QUEUE_FAILED),
-				0,
-				-1,
-				"WITHSCORES"
-			)
+			this.storage.zrangeWithScores(this.getKey(workflowName, C.QUEUE_FAILED), 0, -1)
 		);
 	}
 
@@ -1628,12 +1798,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 */
 	async listDelayedJobs(workflowName): Promise<ListDelayedJobResult[]> {
 		return this.formatZrangeResultToObject<ListDelayedJobResult>(
-			await this.commandClient.zrange(
-				this.getKey(workflowName, C.QUEUE_DELAYED),
-				0,
-				-1,
-				"WITHSCORES"
-			),
+			this.storage.zrangeWithScores(this.getKey(workflowName, C.QUEUE_DELAYED), 0, -1),
 			"promoteAt"
 		);
 	}
@@ -1645,7 +1810,7 @@ export default class RedisAdapter extends BaseAdapter {
 	 */
 	async listActiveJobs(workflowName): Promise<ListJobResult[]> {
 		return (
-			await this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_ACTIVE), 0, -1)
+			this.storage.lrange(this.getKey(workflowName, C.QUEUE_ACTIVE), 0, -1) as string[]
 		).map(jobId => {
 			return { id: jobId };
 		});
@@ -1658,14 +1823,14 @@ export default class RedisAdapter extends BaseAdapter {
 	 */
 	async listWaitingJobs(workflowName): Promise<ListJobResult[]> {
 		return (
-			await this.commandClient.lrange(this.getKey(workflowName, C.QUEUE_WAITING), 0, -1)
+			this.storage.lrange(this.getKey(workflowName, C.QUEUE_WAITING), 0, -1) as string[]
 		).map(jobId => {
 			return { id: jobId };
 		});
 	}
 
 	/**
-	 * Dump all Redis data for all workflows to JSON files.
+	 * Dump all data for all workflows to JSON files.
 	 *
 	 * @param folder - The folder to save the dump files.
 	 * @param wfNames - The names of the workflows to dump.
@@ -1678,23 +1843,14 @@ export default class RedisAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Dump all Redis data for a workflow to a JSON file.
+	 * Dump all data for a workflow to a JSON file.
 	 *
 	 * @param workflowName - The name of the workflow.
 	 * @param folder - The folder to save the dump files.
 	 * @returns Path to the dump file.
 	 */
 	async dumpWorkflow(workflowName: string, folder: string = ".") {
-		const pattern = this.getKey(workflowName) + ":*";
-		const client = this.commandClient;
-		let cursor = "0";
-		const keys = [];
-		// Scan all keys matching the workflow pattern
-		do {
-			const res = await client.scan(cursor, "MATCH", pattern, "COUNT", 100);
-			cursor = res[0];
-			keys.push(...res[1]);
-		} while (cursor !== "0");
+		const keyPrefix = this.getKey(workflowName) + ":";
 
 		const deserializeData = value => {
 			if (_.isString(value) || Buffer.isBuffer(value)) {
@@ -1717,30 +1873,32 @@ export default class RedisAdapter extends BaseAdapter {
 		};
 
 		const dump = {};
-		for (const key of keys) {
-			const type = await client.type(key);
-			if (type === "list") {
-				const list = await client.lrangeBuffer(key, 0, -1);
-				dump[key] = key.includes(":" + C.QUEUE_JOB_EVENTS + ":")
-					? list.map(item => deserializeData(item))
-					: list.map(item => item.toString());
-			} else if (type === "set") {
-				dump[key] = await client.smembers(key);
-			} else if (type === "hash") {
-				dump[key] = deserializeData(await client.hgetallBuffer(key));
-			} else if (type === "zset") {
-				const members = await client.zrange(key, 0, -1, "WITHSCORES");
-				// Convert flat array to [{member, score}]
-				const arr = [];
-				for (let i = 0; i < members.length; i += 2) {
-					arr.push({ member: members[i], score: Number(members[i + 1]) });
-				}
-				dump[key] = arr;
-			} else if (type === "string") {
-				dump[key] = deserializeData(await client.getBuffer(key));
-			} else {
-				dump[key] = null;
-			}
+
+		for (const [key, list] of this.storage.lists.entries()) {
+			if (!key.startsWith(keyPrefix)) continue;
+			dump[key] = key.includes(":" + C.QUEUE_JOB_EVENTS + ":")
+				? list.map(item => deserializeData(item))
+				: list.map(item => String(item));
+		}
+
+		for (const [key, set] of this.storage.sets.entries()) {
+			if (!key.startsWith(keyPrefix)) continue;
+			dump[key] = Array.from(set);
+		}
+
+		for (const key of this.storage.hashes.keys()) {
+			if (!key.startsWith(keyPrefix)) continue;
+			dump[key] = deserializeData(this.storage.hgetall(key));
+		}
+
+		for (const key of this.storage.zsets.keys()) {
+			if (!key.startsWith(keyPrefix)) continue;
+			dump[key] = this.storage.zentries(key).map(([member, score]) => ({ member, score }));
+		}
+
+		for (const key of this.storage.strings.keys()) {
+			if (!key.startsWith(keyPrefix)) continue;
+			dump[key] = deserializeData(this.storage.getString(key));
 		}
 
 		const fileName = path.join(folder, `dump-${workflowName}.json`);

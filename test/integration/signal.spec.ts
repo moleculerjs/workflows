@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
+import { adapterType } from "../utils";
 
 import "../vitest-extensions.ts";
 
@@ -20,14 +21,14 @@ describe("Workflows Signal Test", () => {
 			nodeID: "master",
 			logger: false,
 			logLevel: "error",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType })]
 		});
 
 		worker = new ServiceBroker({
 			nodeID: "worker",
 			logger: false,
 			logLevel: "error",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType })]
 		});
 
 		worker.createService({

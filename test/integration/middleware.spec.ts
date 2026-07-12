@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
+import { adapterType } from "../utils";
 
 import "../vitest-extensions.ts";
 describe("Workflows Middleware Test", () => {
@@ -16,13 +17,13 @@ describe("Workflows Middleware Test", () => {
 	beforeAll(async () => {
 		broker = new ServiceBroker({
 			logger: false,
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType })]
 		});
 
 		worker = new ServiceBroker({
 			logger: false,
 			middlewares: [
-				WorkflowsMiddleware({ adapter: "Redis" }),
+				WorkflowsMiddleware({ adapter: adapterType }),
 				{
 					name: "test",
 					localWorkflow(next) {

@@ -1,3 +1,15 @@
+<a name="Unreleased"></a>
+
+# Unreleased
+
+## Changes
+- Added new `Fake` (in-memory) adapter for testing & development. It covers the same functionality as the Redis adapter, but stores the jobs only in the memory, so no Redis server is needed. The storage is shared between adapter instances with the same prefix, so multiple brokers within the same process can communicate with each other.
+- Moved the common `serializeJob`, `deserializeJob`, `getBackoffTime` and `formatZrangeResultToObject` methods from `RedisAdapter` to `BaseAdapter`.
+- Integration tests can be executed with the Fake adapter using the `WF_TEST_ADAPTER=Fake` environment variable (`npm run test:integration:fake`). CI runs the test suite with both adapters.
+- Fixed adapter class resolution in `Adapters.resolve()` (the `{ type: Adapters.Redis }` form silently fell back to the default Redis adapter). The `options` property is optional now and the given class is validated.
+- Fixed job locking: the adapters throw `WorkflowAlreadyLocked` error on lock contention, so the job processor skips the locked job instead of moving it to the failed queue.
+
+---
 <a name="v0.2.1"></a>
 
 # v0.2.1 (2026-03-29)

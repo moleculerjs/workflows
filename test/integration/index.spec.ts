@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
-import { delay } from "../utils";
+import { delay, adapterType, transporterType } from "../utils";
 
 import "../vitest-extensions.ts";
 import { Job } from "../../src/types.ts";
@@ -29,7 +29,7 @@ describe("Workflows Common Test", () => {
 	beforeAll(async () => {
 		broker = new ServiceBroker({
 			logger: false,
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType })]
 		});
 
 		broker.createService({
@@ -600,15 +600,15 @@ describe("Workflows Remote worker Test", () => {
 		broker = new ServiceBroker({
 			logger: false,
 			nodeID: "broker",
-			transporter: "Redis",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			transporter: transporterType,
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType })]
 		});
 
 		worker = new ServiceBroker({
 			logger: false,
 			nodeID: "worker",
-			transporter: "Redis",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			transporter: transporterType,
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType })]
 		});
 
 		worker.createService({

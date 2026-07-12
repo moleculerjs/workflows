@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
+import { adapterType, transporterType, delay } from "../utils";
 
 import "../vitest-extensions.ts";
 
@@ -39,8 +40,8 @@ describe("Workflows Events Test with 'emit'", () => {
 		broker = new ServiceBroker({
 			logger: false,
 			nodeID: "broker",
-			transporter: "Redis",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis", jobEventType: "emit" })]
+			transporter: transporterType,
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType, jobEventType: "emit" })]
 		});
 
 		broker.createService({
@@ -55,8 +56,8 @@ describe("Workflows Events Test with 'emit'", () => {
 		worker = new ServiceBroker({
 			logger: false,
 			nodeID: "worker",
-			transporter: "Redis",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis", jobEventType: "emit" })]
+			transporter: transporterType,
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType, jobEventType: "emit" })]
 		});
 
 		worker.createService(svc);
@@ -78,6 +79,9 @@ describe("Workflows Events Test with 'emit'", () => {
 		expect(job.id).toEqual(expect.any(String));
 		const result = await job.promise();
 		expect(result).toBe("OK");
+
+		// Wait for all job events to be delivered
+		await delay(200);
 
 		expect(EVENTS).toEqual([
 			[
@@ -127,6 +131,9 @@ describe("Workflows Events Test with 'emit'", () => {
 		const job = await broker.wf.run("events.bad", { name: "John" });
 		expect(job.id).toEqual(expect.any(String));
 		await expect(job.promise()).rejects.toThrow("Some error");
+
+		// Wait for all job events to be delivered
+		await delay(200);
 
 		expect(EVENTS).toEqual([
 			[
@@ -189,8 +196,8 @@ describe("Workflows Events Test with 'broadcast'", () => {
 		broker = new ServiceBroker({
 			logger: false,
 			nodeID: "broker",
-			transporter: "Redis",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis", jobEventType: "broadcast" })]
+			transporter: transporterType,
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType, jobEventType: "broadcast" })]
 		});
 
 		broker.createService({
@@ -205,8 +212,8 @@ describe("Workflows Events Test with 'broadcast'", () => {
 		worker = new ServiceBroker({
 			logger: false,
 			nodeID: "worker",
-			transporter: "Redis",
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis", jobEventType: "broadcast" })]
+			transporter: transporterType,
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType, jobEventType: "broadcast" })]
 		});
 
 		worker.createService(svc);
@@ -228,6 +235,9 @@ describe("Workflows Events Test with 'broadcast'", () => {
 		expect(job.id).toEqual(expect.any(String));
 		const result = await job.promise();
 		expect(result).toBe("OK");
+
+		// Wait for all job events to be delivered
+		await delay(200);
 
 		expect(EVENTS).toEqual([
 			[
@@ -277,6 +287,9 @@ describe("Workflows Events Test with 'broadcast'", () => {
 		const job = await broker.wf.run("events.bad", { name: "John" });
 		expect(job.id).toEqual(expect.any(String));
 		await expect(job.promise()).rejects.toThrow("Some error");
+
+		// Wait for all job events to be delivered
+		await delay(200);
 
 		expect(EVENTS).toEqual([
 			[

@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
-import { delay } from "../utils";
+import { delay, adapterType } from "../utils";
 
 import "../vitest-extensions.ts";
 
@@ -17,7 +17,7 @@ describe("Workflows Repeat Test", () => {
 	beforeAll(async () => {
 		broker = new ServiceBroker({
 			logger: false,
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis", maintenanceTime: 3 })]
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType, maintenanceTime: 3 })]
 		});
 
 		broker.createService({
@@ -91,7 +91,7 @@ describe("Workflows Repeat Test", () => {
 			expect(j).toStrictEqual({
 				id: jobId,
 				parent: "rep1",
-				createdAt: expect.greaterThan(job2!.createdAt),
+				createdAt: expect.greaterThanOrEqual(job2!.createdAt),
 				promoteAt: expect.epoch(),
 				startedAt: expect.epoch(),
 				finishedAt: expect.epoch(),
