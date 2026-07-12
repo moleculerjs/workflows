@@ -25,7 +25,7 @@ export type ResolvableAdapterType =
 	| string
 	| {
 			type: keyof typeof Adapters | typeof BaseAdapter;
-			options: BaseDefaultOptions | FakeAdapterOptions | RedisAdapterOptions;
+			options?: BaseDefaultOptions | FakeAdapterOptions | RedisAdapterOptions;
 	  };
 
 function getByName(name: string): AdapterTypes | null {
@@ -57,6 +57,12 @@ function resolve(opt?: ResolvableAdapterType): BaseAdapter {
 		let AdapterClass;
 		if (typeof opt.type === "function") {
 			// Adapter class (e.g. Adapters.Fake)
+			if (!(opt.type.prototype instanceof BaseAdapter)) {
+				throw new Errors.ServiceSchemaError(
+					`Invalid Adapter class. It should extend the 'BaseAdapter' class.`,
+					{ type: opt.type }
+				);
+			}
 			AdapterClass = opt.type;
 		} else if (typeof opt.type === "string") {
 			AdapterClass = getByName(opt.type || "Redis");

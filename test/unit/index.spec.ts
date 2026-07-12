@@ -32,6 +32,12 @@ describe("Test Adapter resolver", () => {
 			expect(adapter).toBeInstanceOf(Adapters.Fake);
 			expect(adapter.opts).toMatchObject({ drainDelay: 10 });
 		});
+
+		it("should resolve Fake adapter from obj without options", () => {
+			const adapter = Adapters.resolve({ type: "Fake" });
+			expect(adapter).toBeInstanceOf(Adapters.Fake);
+			expect(adapter.opts).toMatchObject({ drainDelay: 5 });
+		});
 	});
 
 	describe("Resolve Redis adapter", () => {
@@ -81,6 +87,19 @@ describe("Test Adapter resolver", () => {
 		expect(() => {
 			// @ts-expect-error Invalid type
 			Adapters.resolve({ type: "xyz" });
+		}).toThrowError(Errors.ServiceSchemaError);
+	});
+
+	it("should throw error if the class does not extend BaseAdapter", () => {
+		expect(() => {
+			class NotAnAdapter {}
+			// @ts-expect-error Invalid class type
+			Adapters.resolve({ type: NotAnAdapter });
+		}).toThrowError(Errors.ServiceSchemaError);
+
+		expect(() => {
+			// @ts-expect-error Invalid function type
+			Adapters.resolve({ type: () => {} });
 		}).toThrowError(Errors.ServiceSchemaError);
 	});
 });
