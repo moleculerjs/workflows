@@ -58,6 +58,7 @@ export class FakeStorage {
 	public zsets: Map<string, Map<string, number>>;
 	public strings: Map<string, StoredString>;
 	public emitter: EventEmitter;
+	public waiters: Map<string, Array<() => void>>;
 
 	constructor() {
 		this.hashes = new Map();
@@ -67,6 +68,48 @@ export class FakeStorage {
 		this.strings = new Map();
 		this.emitter = new EventEmitter();
 		this.emitter.setMaxListeners(0);
+		this.waiters = new Map();
+	}
+
+	// --- Blocked waiters (like Redis blocked BRPOPLPUSH clients) ---
+
+	addWaiter(key: string, waiter: () => void): void {
+		let arr = this.waiters.get(key);
+		if (!arr) {
+			arr = [];
+			this.waiters.set(key, arr);
+		}
+		arr.push(waiter);
+	}
+
+	removeWaiter(key: string, waiter: () => void): void {
+		const arr = this.waiters.get(key);
+		if (!arr) return;
+		const index = arr.indexOf(waiter);
+		if (index > -1) arr.splice(index, 1);
+		if (arr.length === 0) this.waiters.delete(key);
+	}
+
+	/**
+	 * Wake up the first blocked waiter of the key (FIFO, like Redis serves
+	 * blocked clients).
+	 */
+	wakeOneWaiter(key: string): void {
+		const arr = this.waiters.get(key);
+		if (!arr || arr.length === 0) return;
+		const waiter = arr.shift();
+		if (arr.length === 0) this.waiters.delete(key);
+		waiter();
+	}
+
+	/**
+	 * Wake up all blocked waiters of the key (e.g. on disconnecting).
+	 */
+	wakeAllWaiters(key: string): void {
+		const arr = this.waiters.get(key);
+		if (!arr) return;
+		this.waiters.delete(key);
+		for (const waiter of arr) waiter();
 	}
 
 	/**
@@ -479,9 +522,9 @@ export default class FakeAdapter extends BaseAdapter {
 			}
 			this.subscriptions.clear();
 
-			// Release a possibly blocked job processor
+			// Release the possibly blocked job processors
 			if (this.isWorker && this.wf) {
-				this.storage.emitter.emit("wake:" + this.getKey(this.wf.name, C.QUEUE_WAITING));
+				this.storage.wakeAllWaiters(this.getKey(this.wf.name, C.QUEUE_WAITING));
 			}
 		}
 
@@ -572,9 +615,9 @@ export default class FakeAdapter extends BaseAdapter {
 	stopJobProcessor() {
 		this.running = false;
 
-		// Release a possibly blocked job processor
+		// Release the possibly blocked job processors
 		if (this.storage && this.wf) {
-			this.storage.emitter.emit("wake:" + this.getKey(this.wf.name, C.QUEUE_WAITING));
+			this.storage.wakeAllWaiters(this.getKey(this.wf.name, C.QUEUE_WAITING));
 		}
 	}
 
@@ -595,16 +638,15 @@ export default class FakeAdapter extends BaseAdapter {
 
 		// Wait for a new waiting job or the drain delay
 		await new Promise<void>(resolve => {
-			const wakeEvent = "wake:" + waitingKey;
-			const onWake = () => {
+			const waiter = () => {
 				clearTimeout(timer);
 				resolve();
 			};
 			const timer = setTimeout(() => {
-				this.storage.emitter.off(wakeEvent, onWake);
+				this.storage.removeWaiter(waitingKey, waiter);
 				resolve();
 			}, timeout * 1000);
-			this.storage.emitter.once(wakeEvent, onWake);
+			this.storage.addWaiter(waitingKey, waiter);
 		});
 
 		if (!this.running || !this.connected) return null;
@@ -678,11 +720,14 @@ export default class FakeAdapter extends BaseAdapter {
 		try {
 			unlock = await this.lock(jobId);
 
-			this.storage.hsetnx(
-				this.getKey(this.wf.name, C.QUEUE_JOB, jobId),
-				"startedAt",
-				job.startedAt
-			);
+			// Don't re-create the job hash if the job has been removed meanwhile
+			if (this.storage.exists(this.getKey(this.wf.name, C.QUEUE_JOB, jobId))) {
+				this.storage.hsetnx(
+					this.getKey(this.wf.name, C.QUEUE_JOB, jobId),
+					"startedAt",
+					job.startedAt
+				);
+			}
 
 			await this.addJobEvent(this.wf.name, job.id, {
 				type: "started"
@@ -866,12 +911,12 @@ export default class FakeAdapter extends BaseAdapter {
 	}
 
 	/**
-	 * Notify the workers that a new job is available in the waiting queue.
+	 * Notify a blocked worker that a new job is available in the waiting queue.
 	 *
 	 * @param workflowName
 	 */
 	wakeUpWorkers(workflowName: string): void {
-		this.storage.emitter.emit("wake:" + this.getKey(workflowName, C.QUEUE_WAITING));
+		this.storage.wakeOneWaiter(this.getKey(workflowName, C.QUEUE_WAITING));
 	}
 
 	/**
@@ -894,9 +939,13 @@ export default class FakeAdapter extends BaseAdapter {
 		this.storage.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
 		this.storage.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
 
+		// If the job hash is missing, the job has been removed meanwhile,
+		// so the result should not be persisted.
+		const jobExists = this.storage.exists(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
+
 		if (this.wf.opts.removeOnCompleted) {
 			this.storage.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
-		} else {
+		} else if (jobExists) {
 			const fields: Partial<Job> = {
 				success: true,
 				finishedAt: Date.now(),
@@ -958,8 +1007,12 @@ export default class FakeAdapter extends BaseAdapter {
 		this.storage.lrem(this.getKey(this.wf.name, C.QUEUE_ACTIVE), 1, job.id);
 		this.storage.srem(this.getKey(this.wf.name, C.QUEUE_STALLED), job.id);
 
+		// If the job hash is missing, the job has been removed meanwhile,
+		// so it should not be retried and the error should not be persisted.
+		const jobExists = this.storage.exists(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
+
 		// @ts-expect-error retryable property is not exist on Error but on MoleculerError
-		if (err?.retryable) {
+		if (jobExists && err?.retryable) {
 			const retryFields = this.storage.hmget(this.getKey(this.wf.name, C.QUEUE_JOB, job.id), [
 				"retries",
 				"retryAttempts"
@@ -993,7 +1046,7 @@ export default class FakeAdapter extends BaseAdapter {
 
 		if (this.wf.opts.removeOnFailed) {
 			this.storage.del(this.getKey(this.wf.name, C.QUEUE_JOB, job.id));
-		} else {
+		} else if (jobExists) {
 			const fields: Partial<Job> = {
 				success: false,
 				finishedAt: Date.now(),
@@ -1443,7 +1496,6 @@ export default class FakeAdapter extends BaseAdapter {
 			);
 			if (jobIds.length > 0) {
 				try {
-					let pushed = false;
 					for (const jobId of jobIds) {
 						const job = await this.getJob(this.wf.name, jobId, ["id"]);
 						if (job) {
@@ -1454,12 +1506,9 @@ export default class FakeAdapter extends BaseAdapter {
 								"Moving delayed job to waiting queue."
 							);
 							this.storage.lpush(this.getKey(this.wf.name, C.QUEUE_WAITING), jobId);
-							pushed = true;
+							this.wakeUpWorkers(this.wf.name);
 						}
 						this.storage.zrem(this.getKey(this.wf.name, C.QUEUE_DELAYED), jobId);
-					}
-					if (pushed) {
-						this.wakeUpWorkers(this.wf.name);
 					}
 				} catch (err) {
 					this.log(

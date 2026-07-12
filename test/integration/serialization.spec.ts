@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
+import { adapterType } from "../utils";
 import { Errors } from "moleculer";
 
 import "../vitest-extensions.ts";
@@ -20,7 +21,7 @@ describe("Workflows Serialization Test", () => {
 			logger: false,
 			middlewares: [
 				WorkflowsMiddleware({
-					adapter: { type: "Redis", options: { serializer: "MsgPack" } }
+					adapter: { type: adapterType, options: { serializer: "MsgPack" } }
 				})
 			]
 		});

@@ -10,14 +10,14 @@ describe("Workflows Adapters Test", () => {
 	let broker;
 
 	const cleanup = async () => {
-		await broker.wf.cleanUp("adapters.simple");
+		await broker.wf.cleanUp("test.simple");
 	};
 
 	async function createBroker(adapter?) {
 		if (broker) {
-			cleanup();
+			await cleanup();
 
-			broker.stop();
+			await broker.stop();
 			broker = null;
 		}
 
@@ -128,6 +128,54 @@ describe("Workflows Adapters Test", () => {
 		await createBroker({
 			type: Adapters.Redis,
 			options: { redis: { host: "localhost", port: 6379 } }
+		});
+
+		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "ephemeral" },
+			promise: expect.any(Function)
+		});
+
+		const result = await job.promise();
+		expect(result).toBe("Hello, ephemeral");
+	});
+
+	it("should work with Fake adapter string definition", async () => {
+		await createBroker("Fake");
+
+		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "ephemeral" },
+			promise: expect.any(Function)
+		});
+
+		const result = await job.promise();
+		expect(result).toBe("Hello, ephemeral");
+	});
+
+	it("should work with Fake adapter object definition", async () => {
+		await createBroker({ type: "Fake" });
+
+		const job = await broker.wf.run("test.simple", { name: "ephemeral" });
+		expect(job).toStrictEqual({
+			id: expect.any(String),
+			createdAt: expect.epoch(),
+			payload: { name: "ephemeral" },
+			promise: expect.any(Function)
+		});
+
+		const result = await job.promise();
+		expect(result).toBe("Hello, ephemeral");
+	});
+
+	it("should work with Fake adapter instance (with options)", async () => {
+		await createBroker({
+			type: Adapters.Fake,
+			options: { prefix: "fake-test" }
 		});
 
 		const job = await broker.wf.run("test.simple", { name: "ephemeral" });

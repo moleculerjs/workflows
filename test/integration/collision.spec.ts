@@ -3,7 +3,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import { ServiceBroker } from "moleculer";
 import WorkflowsMiddleware from "../../src/middleware.ts";
 import { WorkflowsMiddlewareOptions } from "../../src/types.ts";
-import { delay } from "../utils";
+import { delay, adapterType } from "../utils";
 
 import "../vitest-extensions.ts";
 
@@ -29,7 +29,7 @@ describe("Workflows Job ID collision Test", () => {
 				}
 			},*/
 			middlewares: [
-				WorkflowsMiddleware({ adapter: "Redis", maintenanceTime: 5, jobIdCollision })
+				WorkflowsMiddleware({ adapter: adapterType, maintenanceTime: 5, jobIdCollision })
 			]
 		});
 

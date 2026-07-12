@@ -3,6 +3,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { ServiceBroker } from "moleculer";
 import { Job } from "../../src/types.ts";
 import WorkflowsMiddleware from "../../src/middleware.ts";
+import { adapterType } from "../utils";
 import _ from "lodash";
 
 import "../vitest-extensions.ts";
@@ -18,7 +19,7 @@ describe("Workflows Batch Test (on single node)", () => {
 	beforeAll(async () => {
 		broker = new ServiceBroker({
 			logger: false,
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis", schemaProperty: "WF" })]
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType, schemaProperty: "WF" })]
 		});
 
 		broker.createService({
@@ -85,14 +86,14 @@ describe("Workflows Batch Test (on multiple nodes)", () => {
 	beforeAll(async () => {
 		broker = new ServiceBroker({
 			logger: false,
-			middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+			middlewares: [WorkflowsMiddleware({ adapter: adapterType })]
 		});
 
 		for (let i = 0; i < 5; i++) {
 			const worker = new ServiceBroker({
 				logger: false,
 				nodeID: "worker-" + i,
-				middlewares: [WorkflowsMiddleware({ adapter: "Redis" })]
+				middlewares: [WorkflowsMiddleware({ adapter: adapterType })]
 			});
 
 			worker.createService({
@@ -139,8 +140,11 @@ describe("Workflows Batch Test (on multiple nodes)", () => {
 
 		// console.log("Results by worker:", countByWorkers);
 
+		// The in-memory Fake adapter runs on a single thread, so the job
+		// distribution is less even than with the Redis adapter.
+		const minCount = adapterType == "Fake" ? 850 : 980;
 		Object.keys(countByWorkers).forEach(worker => {
-			expect(countByWorkers[worker]).withinRange(980, 1200);
+			expect(countByWorkers[worker]).withinRange(minCount, 1200);
 		});
 	}, 10_000);
 });
