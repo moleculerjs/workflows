@@ -516,7 +516,7 @@ export default class RedisAdapter extends BaseAdapter {
 		);
 		this.log("debug", this.wf.name, jobId, "Lock result", lockRes);
 
-		if (!lockRes) throw new WorkflowError(`Job ${jobId} is already locked.`);
+		if (!lockRes) throw new WorkflowAlreadyLocked(jobId);
 
 		const lockExtender = async () => {
 			if (this.disconnecting || !this.connected) {
